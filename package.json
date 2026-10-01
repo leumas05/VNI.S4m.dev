@@ -1,6 +1,6 @@
 {
   "name": "vni-engine",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Visual Network Intelligence Desktop App",
   "main": "main.js",
   "scripts": {
@@ -47,8 +47,7 @@
       "artifactName": "S4m's.VNI.Engine.Setup.${version}.${ext}",
       "installerSidebar": "build/installerSidebar.bmp",
       "uninstallerSidebar": "build/uninstallerSidebar.bmp",
-      "installerHeader": "build/installerHeader.bmp",
-      "uninstallerHeader": "build/installerHeader.bmp"
+      "installerHeader": "build/installerHeader.bmp"
     }
   },
   "devDependencies": {
