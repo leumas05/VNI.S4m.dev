@@ -302,7 +302,7 @@ function App() {
 
                    <div className="w-full pt-6 border-t border-gray-800/50 flex flex-col items-center gap-2">
                        <p className="text-xs text-gray-500">
-                           By downloading the VNI Engine, you agree to our <button onClick={openPrivacy} className="text-emerald-500 hover:text-emerald-400 hover:underline transition">Privacy Policy</button>.
+                           <button onClick={openPrivacy} className="text-emerald-500 hover:text-emerald-400 hover:underline transition">Privacy Policy</button>
                        </p>
                        <p className="text-xs text-gray-600">
                            &copy; {new Date().getFullYear()} <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">S4M.dev</a>. All rights reserved.
