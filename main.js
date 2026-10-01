@@ -20,7 +20,7 @@ function createWindow() {
       contextIsolation: true
     },
     autoHideMenuBar: true,
-    icon: path.join(__dirname, 'frontend', 'public', 'favicon.svg')
+    icon: path.join(__dirname, 'frontend', 'public', 'icon.png')
   });
 
   if (app.isPackaged) {

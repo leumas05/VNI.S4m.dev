@@ -271,7 +271,7 @@ function App() {
 
                    <div className="w-full pt-6 border-t border-gray-800/50 flex flex-col items-center gap-2">
                        <p className="text-xs text-gray-500">
-                           <button onClick={openPrivacy} className="text-emerald-500 hover:text-emerald-400 hover:underline transition">Privacy Policy</button>
+                           <button onClick={openPrivacy} className="text-emerald-500 hover:text-emerald-400 hover:underline transition cursor-pointer">Privacy Policy</button>
                        </p>
                        <p className="text-xs text-gray-600">
                            &copy; {new Date().getFullYear()} <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">S4M.dev</a>. All rights reserved.
@@ -328,7 +328,7 @@ function App() {
 
                    <div className="w-full pt-6 border-t border-gray-800/50 flex flex-col items-center gap-2">
                        <p className="text-xs text-gray-500">
-                           <button onClick={openPrivacy} className="text-emerald-500 hover:text-emerald-400 hover:underline transition">Privacy Policy</button>
+                           <button onClick={openPrivacy} className="text-emerald-500 hover:text-emerald-400 hover:underline transition cursor-pointer">Privacy Policy</button>
                        </p>
                        <p className="text-xs text-gray-600">
                            &copy; {new Date().getFullYear()} <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">S4M.dev</a>. All rights reserved.
@@ -343,7 +343,7 @@ function App() {
               <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95">
                   <div className="flex justify-between items-center mb-4 border-b border-gray-800 pb-3">
                       <h2 className="text-lg font-bold text-emerald-400">Privacy Policy</h2>
-                      <button onClick={() => setShowPrivacy(false)} className="text-gray-500 hover:text-white transition">
+                      <button onClick={() => setShowPrivacy(false)} className="text-gray-500 hover:text-white transition cursor-pointer">
                          <X size={20} />
                       </button>
                   </div>
