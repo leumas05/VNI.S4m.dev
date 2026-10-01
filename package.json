@@ -1,6 +1,6 @@
 {
   "name": "vni-engine",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Visual Network Intelligence Desktop App",
   "main": "main.js",
   "scripts": {
@@ -42,6 +42,10 @@
         "AppImage"
       ],
       "artifactName": "S4m's.VNI.Engine.${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
   },
   "devDependencies": {
@@ -54,6 +58,8 @@
   },
   "dependencies": {
     "axios": "^1.20.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.49.0",
     "puppeteer": "^25.12.0",

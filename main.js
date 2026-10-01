@@ -1,6 +1,6 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { fork } = require('child_process');
 
 let mainWindow;
 let backendProcess;
@@ -41,9 +41,9 @@ app.whenReady().then(() => {
   console.log('Starting VNI Backend engine...');
   const backendPath = path.join(__dirname, 'backend', 'server.js');
   
-  backendProcess = spawn(process.execPath, [backendPath], {
+  backendProcess = fork(backendPath, [], {
     stdio: 'inherit',
-    windowsHide: true
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
   });
 
   setTimeout(() => {

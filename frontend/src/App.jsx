@@ -291,7 +291,7 @@ function App() {
        {!isMobile && backendStatus === 'disconnected' && (
            <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-gray-950/90 backdrop-blur-md p-6 text-center">
                <div className="bg-gray-900 border border-emerald-500/30 rounded-2xl p-8 max-w-lg shadow-2xl shadow-emerald-900/20">
-                   <Activity className="w-16 h-16 text-emerald-500 mx-auto mb-6 animate-pulse" />
+                   <Activity className="w-16 h-16 text-emerald-500 mx-auto mb-6 " />
                    <h1 className="text-2xl font-bold text-white mb-4">VNI Engine is Not Running</h1>
                    <p className="text-gray-400 mb-6 leading-relaxed">
                        {isElectron 
@@ -337,7 +337,7 @@ function App() {
                    )}
                    
                    <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-3 border border-gray-800 inline-block mb-6">
-                       <span className="animate-pulse inline-block w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>
+                       <span className=" inline-block w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>
                        Waiting for connection on <strong>localhost:3001</strong>...
                    </p>
 
