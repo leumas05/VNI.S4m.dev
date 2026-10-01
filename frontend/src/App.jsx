@@ -304,9 +304,9 @@ function App() {
                            <div className="mb-6">
                                <a 
                                    href={
-                                       userOs === 'Mac' ? "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.2/S4m.s.VNI.Engine.1.0.2.dmg" :
-                                       userOs === 'Linux' ? "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.2/S4m.s.VNI.Engine.1.0.2.AppImage" :
-                                       "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.2/S4m.s.VNI.Engine.Setup.1.0.2.exe"
+                                       userOs === 'Mac' ? "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.3/S4m.s.VNI.Engine.1.0.3.dmg" :
+                                       userOs === 'Linux' ? "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.3/S4m.s.VNI.Engine.1.0.3.AppImage" :
+                                       "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.3/S4m.s.VNI.Engine.Setup.1.0.3.exe"
                                    }
                                    download 
                                    className="inline-block w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-8 rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:shadow-[0_0_30px_rgba(16,185,129,0.6)] hover:scale-[1.02]"
