@@ -225,13 +225,16 @@ function App() {
                        This allows the map to trace routes directly from your current location!
                    </p>
                    
-                   <div className="flex gap-4 justify-center mb-8">
-                       <button className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 px-6 rounded-lg transition shadow-lg shadow-emerald-900/50">
+                   <div className="flex gap-4 justify-center mb-8 flex-wrap">
+                       <a href="/VNI-Engine-win.exe" download className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 px-6 rounded-lg transition shadow-lg shadow-emerald-900/50">
                            Download for Windows
-                       </button>
-                       <button className="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg border border-gray-700 transition">
+                       </a>
+                       <a href="/VNI-Engine-macos" download className="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg border border-gray-700 transition">
                            Download for Mac
-                       </button>
+                       </a>
+                       <a href="/VNI-Engine-linux" download className="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg border border-gray-700 transition">
+                           Download for Linux
+                       </a>
                    </div>
                    
                    <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-3 border border-gray-800 inline-block">
