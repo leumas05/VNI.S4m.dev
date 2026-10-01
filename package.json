@@ -1,6 +1,49 @@
 {
+  "name": "vni-engine",
+  "version": "1.0.0",
+  "description": "Visual Network Intelligence Desktop App",
+  "main": "main.js",
+  "scripts": {
+    "start": "concurrently \"npm run start:frontend\" \"electron .\"",
+    "start:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "build:app": "npm run build:frontend && electron-builder",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "dev.s4m.vni",
+    "productName": "VNI Engine",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "backend/**/*",
+      "frontend/dist/**/*"
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    }
+  },
   "devDependencies": {
     "autoprefixer": "^10.6.1",
+    "concurrently": "^10.0.5",
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3",
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3"
   },
@@ -9,6 +52,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^1.49.0",
     "puppeteer": "^25.12.0",
+    "rcedit": "^3.0.1",
     "react-leaflet": "^5.0.0"
   }
 }

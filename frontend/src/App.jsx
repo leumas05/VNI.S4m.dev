@@ -20,6 +20,7 @@ function App() {
   const [privacyText, setPrivacyText] = useState('');
   
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isElectron = navigator.userAgent.includes('Electron');
 
   const openPrivacy = (e) => {
       if (e) e.preventDefault();
@@ -187,24 +188,31 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-950 text-white font-sans overflow-hidden">
-       <div className="w-2/5 h-full border-r border-gray-800 bg-gray-900 flex flex-col relative z-10 shadow-2xl shadow-black">
-          <Sidebar 
-             startTrace={startTrace} 
-             tracing={tracing} 
-             hops={hops} 
-             selectedHop={selectedHop}
-             setSelectedHop={setSelectedHop}
-             setHoveredHop={setHoveredHop}
-             history={history}
-             loadHistoryTrace={loadHistoryTrace}
-             compareMode={compareMode}
-             compareHops={compareHops}
-             myLocation={myLocation}
-             openPrivacy={openPrivacy}
-          />
-       </div>
-       <div className="w-3/5 h-full relative z-0">
+    <div className="flex flex-col h-screen bg-gray-950 text-white font-sans overflow-hidden">
+       {isElectron && (
+           <div className="h-8 shrink-0 bg-gray-950 flex items-center px-4 border-b border-gray-900 z-50 select-none" style={{ WebkitAppRegion: 'drag' }}>
+               <Activity size={14} className="text-emerald-500 mr-2" />
+               <span className="text-[11px] font-bold text-gray-400 tracking-widest uppercase">Visual Network Intelligence</span>
+           </div>
+       )}
+       <div className="flex flex-1 overflow-hidden relative">
+           <div className="w-2/5 h-full border-r border-gray-800 bg-gray-900 flex flex-col relative z-10 shadow-2xl shadow-black">
+              <Sidebar 
+                 startTrace={startTrace} 
+                 tracing={tracing} 
+                 hops={hops} 
+                 selectedHop={selectedHop}
+                 setSelectedHop={setSelectedHop}
+                 setHoveredHop={setHoveredHop}
+                 history={history}
+                 loadHistoryTrace={loadHistoryTrace}
+                 compareMode={compareMode}
+                 compareHops={compareHops}
+                 myLocation={myLocation}
+                 openPrivacy={openPrivacy}
+              />
+           </div>
+           <div className="w-3/5 h-full relative z-0">
           <MapView hops={hops} selectedHop={selectedHop} setSelectedHop={setSelectedHop} hoveredHop={hoveredHop} myLocation={myLocation} />
           
           <button 
@@ -279,21 +287,39 @@ function App() {
                    <Activity className="w-16 h-16 text-emerald-500 mx-auto mb-6 animate-pulse" />
                    <h1 className="text-2xl font-bold text-white mb-4">VNI Engine is Not Running</h1>
                    <p className="text-gray-400 mb-6 leading-relaxed">
-                       To perform physical network traceroutes, VNI requires a lightweight background engine to be running on your local machine. 
-                       This allows the map to trace routes directly from your current location!
+                       {isElectron 
+                           ? "Starting local background engine..." 
+                           : "To perform physical network traceroutes, VNI requires a local engine. For the ultimate experience, we highly recommend downloading the full Desktop App!"}
                    </p>
                    
-                   <div className="flex gap-4 justify-center mb-8 flex-wrap">
-                       <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0/S4m.s-VNI-Engine-win.exe" download className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 px-6 rounded-lg transition shadow-lg shadow-emerald-900/50">
-                           Download for Windows
-                       </a>
-                       <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0/S4m.s-VNI-Engine-macos" download className="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg border border-gray-700 transition">
-                           Download for Mac
-                       </a>
-                       <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0/S4m.s-VNI-Engine-linux" download className="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg border border-gray-700 transition">
-                           Download for Linux
-                       </a>
-                   </div>
+                   {!isElectron && (
+                       <>
+                           <div className="mb-6">
+                               <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0/VNI.Engine.Setup.1.0.0.exe" download className="inline-block w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-8 rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:shadow-[0_0_30px_rgba(16,185,129,0.6)] hover:scale-[1.02]">
+                                   Download Full Desktop App (Windows)
+                               </a>
+                           </div>
+
+                           <div className="relative flex py-4 items-center">
+                               <div className="flex-grow border-t border-gray-800"></div>
+                               <span className="flex-shrink-0 mx-4 text-gray-600 text-xs uppercase tracking-widest">Or use web version</span>
+                               <div className="flex-grow border-t border-gray-800"></div>
+                           </div>
+                           
+                           <p className="text-xs text-gray-500 mb-4">Download just the raw background engine to continue using the browser version:</p>
+                           <div className="flex gap-2 justify-center mb-8 flex-wrap">
+                               <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0/S4m.s-VNI-Engine-win.exe" download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
+                                   Windows Engine
+                               </a>
+                               <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0/S4m.s-VNI-Engine-macos" download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
+                                   Mac Engine
+                               </a>
+                               <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0/S4m.s-VNI-Engine-linux" download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
+                                   Linux Engine
+                               </a>
+                           </div>
+                       </>
+                   )}
                    
                    <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-3 border border-gray-800 inline-block mb-6">
                        <span className="animate-pulse inline-block w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>
@@ -327,7 +353,7 @@ function App() {
               </div>
           </div>
       )}
-
+      </div>
     </div>
   );
 }
