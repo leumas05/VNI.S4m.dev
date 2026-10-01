@@ -41,15 +41,21 @@ jobs:
 
       - name: Build Windows
         if: matrix.os == 'windows-latest'
-        run: npm run build:app -- -w --publish never
+        run: |
+          npm run build:app -- -w --publish never
+          npx pkg backend/server.js -t node18-win-x64 -o release/S4m.s-VNI-Background-Engine.win.exe
 
       - name: Build Mac
         if: matrix.os == 'macos-latest'
-        run: npm run build:app -- -m --publish never
+        run: |
+          npm run build:app -- -m --publish never
+          npx pkg backend/server.js -t node18-macos-x64 -o release/S4m.s-VNI-Background-Engine.mac
 
       - name: Build Linux
         if: matrix.os == 'ubuntu-latest'
-        run: npm run build:app -- -l --publish never
+        run: |
+          npm run build:app -- -l --publish never
+          npx pkg backend/server.js -t node18-linux-x64 -o release/S4m.s-VNI-Background-Engine.linux
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
