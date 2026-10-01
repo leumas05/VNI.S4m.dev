@@ -19,11 +19,40 @@ function App() {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [privacyText, setPrivacyText] = useState('');
   const [userOs, setUserOs] = useState('Windows');
+  const [downloadLinks, setDownloadLinks] = useState({
+      winApp: "https://github.com/leumas05/VNI.S4m.dev/releases/latest",
+      macApp: "https://github.com/leumas05/VNI.S4m.dev/releases/latest",
+      linuxApp: "https://github.com/leumas05/VNI.S4m.dev/releases/latest",
+      winEngine: "https://github.com/leumas05/VNI.S4m.dev/releases/latest",
+      macEngine: "https://github.com/leumas05/VNI.S4m.dev/releases/latest",
+      linuxEngine: "https://github.com/leumas05/VNI.S4m.dev/releases/latest"
+  });
 
   useEffect(() => {
     if (navigator.userAgent.indexOf("Mac") !== -1) setUserOs("Mac");
     else if (navigator.userAgent.indexOf("Linux") !== -1) setUserOs("Linux");
     else setUserOs("Windows");
+    
+    fetch('https://api.github.com/repos/leumas05/VNI.S4m.dev/releases/latest')
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.assets) {
+                setDownloadLinks(prev => {
+                    const links = { ...prev };
+                    data.assets.forEach(asset => {
+                        const name = asset.name.toLowerCase();
+                        if (name.includes('setup') && name.endsWith('.exe')) links.winApp = asset.browser_download_url;
+                        else if (name.endsWith('.dmg')) links.macApp = asset.browser_download_url;
+                        else if (name.endsWith('.appimage')) links.linuxApp = asset.browser_download_url;
+                        else if (name.includes('background-engine.win')) links.winEngine = asset.browser_download_url;
+                        else if (name.includes('background-engine.mac')) links.macEngine = asset.browser_download_url;
+                        else if (name.includes('background-engine.linux')) links.linuxEngine = asset.browser_download_url;
+                    });
+                    return links;
+                });
+            }
+        })
+        .catch(e => console.error("Could not fetch latest release"));
   }, []);
   
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -304,9 +333,9 @@ function App() {
                            <div className="mb-6">
                                <a 
                                    href={
-                                       userOs === 'Mac' ? "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.5/S4m.s.VNI.Engine.1.0.5.dmg" :
-                                       userOs === 'Linux' ? "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.5/S4m.s.VNI.Engine.1.0.5.AppImage" :
-                                       "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.5/S4m.s.VNI.Engine.Setup.1.0.5.exe"
+                                       userOs === 'Mac' ? downloadLinks.macApp :
+                                       userOs === 'Linux' ? downloadLinks.linuxApp :
+                                       downloadLinks.winApp
                                    }
                                    download 
                                    className="inline-block w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-8 rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:shadow-[0_0_30px_rgba(16,185,129,0.6)] hover:scale-[1.02]"
@@ -323,13 +352,13 @@ function App() {
                            
                            <p className="text-xs text-gray-500 mb-4">Download just the raw background engine to continue using the browser version:</p>
                            <div className="flex gap-2 justify-center mb-8 flex-wrap">
-                               <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.5/S4m.s-VNI-Background-Engine.win.exe" download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
+                               <a href={downloadLinks.winEngine} download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
                                    Windows Engine
                                </a>
-                               <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.5/S4m.s-VNI-Background-Engine.mac" download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
+                               <a href={downloadLinks.macEngine} download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
                                    Mac Engine
                                </a>
-                               <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.5/S4m.s-VNI-Background-Engine.linux" download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
+                               <a href={downloadLinks.linuxEngine} download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
                                    Linux Engine
                                </a>
                            </div>
