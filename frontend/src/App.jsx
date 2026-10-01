@@ -304,9 +304,9 @@ function App() {
                            <div className="mb-6">
                                <a 
                                    href={
-                                       userOs === 'Mac' ? "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.4/S4m.s.VNI.Engine.1.0.4.dmg" :
-                                       userOs === 'Linux' ? "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.4/S4m.s.VNI.Engine.1.0.4.AppImage" :
-                                       "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.4/S4m.s.VNI.Engine.Setup.1.0.4.exe"
+                                       userOs === 'Mac' ? "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.5/S4m.s.VNI.Engine.1.0.5.dmg" :
+                                       userOs === 'Linux' ? "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.5/S4m.s.VNI.Engine.1.0.5.AppImage" :
+                                       "https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.5/S4m.s.VNI.Engine.Setup.1.0.5.exe"
                                    }
                                    download 
                                    className="inline-block w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-8 rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:shadow-[0_0_30px_rgba(16,185,129,0.6)] hover:scale-[1.02]"
@@ -323,13 +323,13 @@ function App() {
                            
                            <p className="text-xs text-gray-500 mb-4">Download just the raw background engine to continue using the browser version:</p>
                            <div className="flex gap-2 justify-center mb-8 flex-wrap">
-                               <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.4/S4m.s-VNI-Background-Engine.win.exe" download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
+                               <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.5/S4m.s-VNI-Background-Engine.win.exe" download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
                                    Windows Engine
                                </a>
-                               <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.4/S4m.s-VNI-Background-Engine.mac" download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
+                               <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.5/S4m.s-VNI-Background-Engine.mac" download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
                                    Mac Engine
                                </a>
-                               <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.4/S4m.s-VNI-Background-Engine.linux" download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
+                               <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0.5/S4m.s-VNI-Background-Engine.linux" download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
                                    Linux Engine
                                </a>
                            </div>

@@ -65,3 +65,5 @@ jobs:
             release/*.exe
             release/*.dmg
             release/*.AppImage
+            release/*.mac
+            release/*.linux
