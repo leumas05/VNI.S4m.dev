@@ -1,0 +1,248 @@
+import React, { useState, useEffect } from 'react';
+import { Info, X, Activity } from 'lucide-react';
+import Sidebar from './components/Sidebar';
+import MapView from './components/Map';
+
+function App() {
+  const [hops, setHops] = useState([]);
+  const [tracing, setTracing] = useState(false);
+  const [target, setTarget] = useState('');
+  const [selectedHop, setSelectedHop] = useState(null);
+  const [hoveredHop, setHoveredHop] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareHops, setCompareHops] = useState([]);
+  const [showInfo, setShowInfo] = useState(false);
+  const [myLocation, setMyLocation] = useState(null);
+  const [backendStatus, setBackendStatus] = useState('checking');
+  
+  useEffect(() => {
+     const saved = localStorage.getItem('vni_history');
+     if (saved) {
+         try { setHistory(JSON.parse(saved)); } catch (e) {}
+     }
+     
+     let interval;
+     let hasFetchedLocation = false;
+
+     const fetchLocation = () => {
+         fetch('http://127.0.0.1:3001/api/my-location')
+           .then(r => r.json())
+           .then(data => {
+               if (data.ip) {
+                   const baseLoc = {
+                       status: 'success',
+                       query: data.ip,
+                       country: data.country_name,
+                       countryCode: data.country_code,
+                       regionName: data.region_name,
+                       city: data.city_name,
+                       zip: data.zip_code,
+                       lat: parseFloat(data.latitude),
+                       lon: parseFloat(data.longitude),
+                       isp: data.as,
+                       org: data.as,
+                       as: data.asn ? `AS${data.asn}` : '',
+                       timezone: data.time_zone
+                   };
+                   
+                   setMyLocation(baseLoc);
+
+                   if ("geolocation" in navigator) {
+                       navigator.geolocation.getCurrentPosition(
+                           (position) => {
+                               setMyLocation(prev => {
+                                   if (!prev) return prev;
+                                   return {
+                                       ...prev,
+                                       lat: position.coords.latitude,
+                                       lon: position.coords.longitude
+                                   };
+                               });
+                           },
+                           (error) => console.log("GPS Geolocation denied or failed, using IP fallback."),
+                           { timeout: 10000 }
+                       );
+                   }
+               }
+           })
+           .catch(e => console.error(e));
+     };
+
+     const pingBackend = async () => {
+         try {
+             const res = await fetch('http://127.0.0.1:3001/api/ping');
+             if (res.ok) {
+                 setBackendStatus('connected');
+                 if (!hasFetchedLocation) {
+                     hasFetchedLocation = true;
+                     fetchLocation();
+                 }
+             } else {
+                 setBackendStatus('disconnected');
+             }
+         } catch (e) {
+             setBackendStatus('disconnected');
+         }
+     };
+
+     pingBackend();
+     interval = setInterval(pingBackend, 3000);
+
+     return () => clearInterval(interval);
+  }, []);
+
+  const saveToHistory = (traceTarget, traceHops) => {
+     if (traceHops.length === 0) return;
+     const entry = {
+         id: Date.now(),
+         target: traceTarget,
+         date: new Date().toLocaleString(),
+         hops: traceHops
+     };
+     const newHistory = [entry, ...history].slice(0, 10);
+     setHistory(newHistory);
+     localStorage.setItem('vni_history', JSON.stringify(newHistory));
+  };
+
+  const startTrace = (newTarget) => {
+    setTarget(newTarget);
+    setHops([]);
+    setSelectedHop(null);
+    setTracing(true);
+    setCompareMode(false);
+    
+    const pastTrace = history.find(h => h.target === newTarget);
+    if (pastTrace) {
+        setCompareHops(pastTrace.hops);
+        setCompareMode(true);
+    } else {
+        setCompareHops([]);
+    }
+
+    const evtSource = new EventSource(`http://localhost:3001/api/trace?target=${encodeURIComponent(newTarget)}`);
+    
+    let currentHops = [];
+    evtSource.onmessage = (event) => {
+      const parsed = JSON.parse(event.data);
+      if (parsed.type === 'hop') {
+         setHops(prev => {
+           if (prev.some(h => h.hop === parsed.data.hop)) return prev;
+           currentHops = [...prev, parsed.data].sort((a, b) => a.hop - b.hop);
+           return currentHops;
+         });
+      } else if (parsed.type === 'done' || parsed.type === 'error') {
+         evtSource.close();
+         setTracing(false);
+         saveToHistory(newTarget, currentHops);
+      }
+    };
+    
+    evtSource.onerror = () => {
+      evtSource.close();
+      setTracing(false);
+      saveToHistory(newTarget, currentHops);
+    };
+  };
+
+  const loadHistoryTrace = (entry) => {
+      if (tracing) return;
+      setTarget(entry.target);
+      setHops(entry.hops);
+      setSelectedHop(null);
+      setCompareMode(false);
+      setCompareHops([]);
+  };
+
+  return (
+    <div className="flex h-screen bg-gray-950 text-white font-sans overflow-hidden">
+       <div className="w-2/5 h-full border-r border-gray-800 bg-gray-900 flex flex-col relative z-10 shadow-2xl shadow-black">
+          <Sidebar 
+             startTrace={startTrace} 
+             tracing={tracing} 
+             hops={hops} 
+             selectedHop={selectedHop}
+             setSelectedHop={setSelectedHop}
+             setHoveredHop={setHoveredHop}
+             history={history}
+             loadHistoryTrace={loadHistoryTrace}
+             compareMode={compareMode}
+             compareHops={compareHops}
+             myLocation={myLocation}
+          />
+       </div>
+       <div className="w-3/5 h-full relative z-0">
+          <MapView hops={hops} selectedHop={selectedHop} setSelectedHop={setSelectedHop} hoveredHop={hoveredHop} myLocation={myLocation} />
+          
+          <button 
+             onClick={() => setShowInfo(true)}
+             className="absolute top-6 right-6 z-50 bg-gray-900/80 hover:bg-gray-800 text-gray-400 hover:text-emerald-400 p-2.5 rounded-full border border-gray-700 backdrop-blur-sm transition-all shadow-lg"
+             title="About VNI.S4m.dev"
+          >
+             <Info size={24} />
+          </button>
+
+          {showInfo && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                  <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 max-w-md shadow-2xl">
+                      <div className="flex justify-between items-start mb-4">
+                          <h2 className="text-xl font-bold text-emerald-400 flex items-center gap-2">
+                             <Activity /> About VNI.S4m.dev
+                          </h2>
+                          <button onClick={() => setShowInfo(false)} className="text-gray-500 hover:text-white transition">
+                             <X size={20} />
+                          </button>
+                      </div>
+                      <div className="space-y-4 text-gray-300 text-sm leading-relaxed">
+                          <p>
+                              <strong>Visual Network Intelligence (VNI)</strong> is an interactive traceroute dashboard.
+                          </p>
+                          <p>
+                              It tracks your network packets as they travel across the globe, plotting each router on an interactive map.
+                          </p>
+                          <ul className="list-disc list-inside space-y-1 text-gray-400">
+                              <li>Real-time IP Geolocation & mapping</li>
+                              <li>Deep WHOIS & ASN registry enrichment</li>
+                              <li>Historical route comparison (detect changes)</li>
+                              <li>Smart identification of local & internal gateways</li>
+                          </ul>
+                          <p className="text-xs text-gray-500 pt-4 mt-4 border-t border-gray-800">
+                              Built for network diagnostics and learning.
+                          </p>
+                      </div>
+                  </div>
+              </div>
+          )}
+       </div>
+       
+       {backendStatus === 'disconnected' && (
+           <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-gray-950/90 backdrop-blur-md p-6 text-center">
+               <div className="bg-gray-900 border border-emerald-500/30 rounded-2xl p-8 max-w-lg shadow-2xl shadow-emerald-900/20">
+                   <Activity className="w-16 h-16 text-emerald-500 mx-auto mb-6 animate-pulse" />
+                   <h1 className="text-2xl font-bold text-white mb-4">VNI Engine is Not Running</h1>
+                   <p className="text-gray-400 mb-6 leading-relaxed">
+                       To perform physical network traceroutes, VNI requires a lightweight background engine to be running on your local machine. 
+                       This allows the map to trace routes directly from your current location!
+                   </p>
+                   
+                   <div className="flex gap-4 justify-center mb-8">
+                       <button className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 px-6 rounded-lg transition shadow-lg shadow-emerald-900/50">
+                           Download for Windows
+                       </button>
+                       <button className="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg border border-gray-700 transition">
+                           Download for Mac
+                       </button>
+                   </div>
+                   
+                   <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-3 border border-gray-800 inline-block">
+                       <span className="animate-pulse inline-block w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>
+                       Waiting for connection on <strong>localhost:3001</strong>...
+                   </p>
+               </div>
+           </div>
+       )}
+    </div>
+  );
+}
+
+export default App;
