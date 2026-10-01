@@ -25,18 +25,23 @@
     "mac": {
       "target": [
         "dmg"
-      ]
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "S4m's.VNI.Engine.${version}.${ext}"
     },
     "win": {
       "target": [
         "nsis",
         "portable"
-      ]
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "S4m's.VNI.Engine.Setup.${version}.${ext}"
     },
     "linux": {
       "target": [
         "AppImage"
-      ]
+      ],
+      "artifactName": "S4m's.VNI.Engine.${version}.${ext}"
     }
   },
   "devDependencies": {

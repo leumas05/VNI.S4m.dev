@@ -192,7 +192,7 @@ function App() {
        {isElectron && (
            <div className="h-8 shrink-0 bg-gray-950 flex items-center px-4 border-b border-gray-900 z-50 select-none" style={{ WebkitAppRegion: 'drag' }}>
                <Activity size={14} className="text-emerald-500 mr-2" />
-               <span className="text-[11px] font-bold text-gray-400 tracking-widest uppercase">Visual Network Intelligence</span>
+               <span className="text-[11px] font-bold text-gray-400 tracking-widest uppercase">S4m's VNI</span>
            </div>
        )}
        <div className="flex flex-1 overflow-hidden relative">

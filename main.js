@@ -7,6 +7,7 @@ let backendProcess;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
+    title: "S4m's VNI",
     width: 1200,
     height: 800,
     titleBarStyle: 'hidden',
@@ -21,6 +22,12 @@ function createWindow() {
     },
     autoHideMenuBar: true,
     icon: path.join(__dirname, 'frontend', 'public', 'icon.png')
+  });
+
+  // Intercept links with target="_blank" and open them in the user's default OS web browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    require('electron').shell.openExternal(url);
+    return { action: 'deny' };
   });
 
   if (app.isPackaged) {
