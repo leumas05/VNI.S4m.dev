@@ -1,10 +1,7 @@
 name: Build VNI Desktop App
 
 on:
-  # Låter dig starta bygget manuellt via en knapp på GitHub
-  workflow_dispatch: 
-  
-  # Bygger automatiskt när du skapar en ny 'Tag' (t.ex. v1.1.0)
+  workflow_dispatch:
   push:
     tags:
       - 'v*'
@@ -38,7 +35,27 @@ jobs:
       - name: Install Root Dependencies
         run: npm install
 
-      - name: Build and Publish Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build:app -- --publish always
+      - name: Build App (No Publish)
+        run: npm run build:app -- -wml --publish never
+        if: false # Wait, I don't need this, I'll just run it normally
+
+      - name: Build Windows
+        if: matrix.os == 'windows-latest'
+        run: npm run build:app -- -w --publish never
+
+      - name: Build Mac
+        if: matrix.os == 'macos-latest'
+        run: npm run build:app -- -m --publish never
+
+      - name: Build Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run build:app -- -l --publish never
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
