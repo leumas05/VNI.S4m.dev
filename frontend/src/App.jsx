@@ -237,10 +237,19 @@ function App() {
                        </a>
                    </div>
                    
-                   <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-3 border border-gray-800 inline-block">
+                   <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-3 border border-gray-800 inline-block mb-6">
                        <span className="animate-pulse inline-block w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>
                        Waiting for connection on <strong>localhost:3001</strong>...
                    </p>
+
+                   <div className="w-full pt-6 border-t border-gray-800/50 flex flex-col items-center gap-2">
+                       <p className="text-xs text-gray-500">
+                           By downloading the VNI Engine, you agree to our <a href="#" className="text-emerald-500 hover:text-emerald-400 hover:underline transition">Privacy Policy</a> and <a href="#" className="text-emerald-500 hover:text-emerald-400 hover:underline transition">Terms of Service</a>.
+                       </p>
+                       <p className="text-xs text-gray-600">
+                           &copy; {new Date().getFullYear()} S4M.dev. All rights reserved.
+                       </p>
+                   </div>
                </div>
            </div>
        )}
