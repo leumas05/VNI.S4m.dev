@@ -1,6 +1,6 @@
 {
   "name": "vni-engine",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Visual Network Intelligence Desktop App",
   "main": "main.js",
   "scripts": {
@@ -44,7 +44,11 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "S4m's.VNI.Engine.Setup.${version}.${ext}"
+      "artifactName": "S4m's.VNI.Engine.Setup.${version}.${ext}",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp",
+      "uninstallerHeader": "build/installerHeader.bmp"
     }
   },
   "devDependencies": {
@@ -59,6 +63,7 @@
     "axios": "^1.20.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "jimp": "^0.16.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.49.0",
     "puppeteer": "^25.12.0",
