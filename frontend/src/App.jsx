@@ -226,13 +226,13 @@ function App() {
                    </p>
                    
                    <div className="flex gap-4 justify-center mb-8 flex-wrap">
-                       <a href="/VNI-Engine-win.exe" download className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 px-6 rounded-lg transition shadow-lg shadow-emerald-900/50">
+                       <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0/S4m.s-VNI-Engine-win.exe" download className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 px-6 rounded-lg transition shadow-lg shadow-emerald-900/50">
                            Download for Windows
                        </a>
-                       <a href="/VNI-Engine-macos" download className="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg border border-gray-700 transition">
+                       <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0/S4m.s-VNI-Engine-macos" download className="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg border border-gray-700 transition">
                            Download for Mac
                        </a>
-                       <a href="/VNI-Engine-linux" download className="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg border border-gray-700 transition">
+                       <a href="https://github.com/leumas05/VNI.S4m.dev/releases/download/v1.0/S4m.s-VNI-Engine-linux" download className="bg-gray-800 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg border border-gray-700 transition">
                            Download for Linux
                        </a>
                    </div>
