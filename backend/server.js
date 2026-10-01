@@ -94,5 +94,22 @@ app.get('/api/trace/json', (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-    console.log(`Backend listening on port ${PORT}`);
+    const green = '\x1b[32m';
+    const cyan = '\x1b[36m';
+    const gray = '\x1b[90m';
+    const reset = '\x1b[0m';
+    
+    console.log(`${green}
+  ____  _  _             _      __     ___   _ ___ 
+ / ___|| || |  _ __ ___ ( )___  \\ \\   / / \\ | |_ _|
+ \\___ \\| || |_| '_ \` _ \\|// __|  \\ \\ / /|  \\| || | 
+  ___) |__   _| | | | | | \\__ \\   \\ V / | |\\  || | 
+ |____/   |_| |_| |_| |_| |___/    \\_/  |_| \\_|___|
+${reset}`);
+    
+    console.log(`  ${cyan}[✓] S4m's VNI Background Engine is ONLINE${reset}`);
+    console.log(`  ${gray}>> Listening on port: ${PORT}${reset}`);
+    console.log(`  ${gray}>> Ready to bridge local network traceroutes${reset}`);
+    console.log(`  ${gray}>> You can now use the browser version at: ${cyan}https://vni.s4m.dev${reset}`);
+    console.log(`  ${gray}>> Press Ctrl+C to stop the engine${reset}\n`);
 });
