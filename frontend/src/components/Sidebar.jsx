@@ -2,22 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Activity, Download, Play, History as HistoryIcon, ArrowRightLeft, X, MapPin, Globe, Hash, Map, Building, Mail, AlignJustify, Briefcase, Radio } from 'lucide-react';
 import HopCard from './HopCard';
 
-export default function Sidebar({ startTrace, tracing, hops, selectedHop, setSelectedHop, setHoveredHop, history, loadHistoryTrace, compareMode, compareHops, myLocation }) {
+export default function Sidebar({ startTrace, tracing, hops, selectedHop, setSelectedHop, setHoveredHop, history, loadHistoryTrace, compareMode, compareHops, myLocation, openPrivacy }) {
   const [input, setInput] = useState('');
   const [showHistory, setShowHistory] = useState(false);
-  const [showPrivacy, setShowPrivacy] = useState(false);
-  const [privacyText, setPrivacyText] = useState('');
   const [showMyInfo, setShowMyInfo] = useState(false);
-
-  const openPrivacy = () => {
-      setShowPrivacy(true);
-      if (!privacyText) {
-          fetch('https://assets.s4m.dev/assets/txt/Privacy_Policy.txt')
-              .then(res => res.text())
-              .then(text => setPrivacyText(text))
-              .catch(() => setPrivacyText('Failed to load privacy policy.'));
-      }
-  };
 
   const onSubmit = (e) => {
     e.preventDefault();
@@ -215,28 +203,12 @@ export default function Sidebar({ startTrace, tracing, hops, selectedHop, setSel
          <span>
              &copy; {new Date().getFullYear() === 2026 ? '2026' : `2026 - ${new Date().getFullYear()}`}{' '}
              <a href="https://vni.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">VNI.S4m.dev</a> &amp;{' '}
-             <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">S4m.dev</a>
+             <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">S4M.dev</a>
          </span>
          <button onClick={openPrivacy} className="hover:text-gray-300 underline transition-colors cursor-pointer">
              Privacy Policy
          </button>
       </div>
-
-      {showPrivacy && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-              <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95">
-                  <div className="flex justify-between items-center mb-4 border-b border-gray-800 pb-3">
-                      <h2 className="text-lg font-bold text-emerald-400">Privacy Policy</h2>
-                      <button onClick={() => setShowPrivacy(false)} className="text-gray-500 hover:text-white transition">
-                         <X size={20} />
-                      </button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto custom-scrollbar text-sm text-gray-300 whitespace-pre-wrap leading-relaxed pr-2 font-mono">
-                      {renderPrivacyText(privacyText)}
-                  </div>
-              </div>
-          </div>
-      )}
     </div>
   );
 }

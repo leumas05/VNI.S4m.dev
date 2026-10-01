@@ -16,7 +16,39 @@ function App() {
   const [myLocation, setMyLocation] = useState(null);
   const [backendStatus, setBackendStatus] = useState('checking');
   
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [privacyText, setPrivacyText] = useState('');
+  
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  const openPrivacy = (e) => {
+      if (e) e.preventDefault();
+      setShowPrivacy(true);
+      if (!privacyText) {
+          fetch('https://assets.s4m.dev/assets/txt/Privacy_Policy.txt')
+              .then(res => res.text())
+              .then(text => setPrivacyText(text))
+              .catch(() => setPrivacyText('Failed to load privacy policy.'));
+      }
+  };
+
+  const renderPrivacyText = (text) => {
+      if (!text) return 'Loading...';
+      const parts = text.split(/(Google Ads Settings|home@s4m\.dev)/g);
+      return parts.map((part, index) => {
+          if (part === 'Google Ads Settings') {
+              return <a key={index} href="https://www.google.com/settings/ads" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:underline">Google Ads Settings</a>;
+          }
+          if (part === 'home@s4m.dev') {
+              return <a key={index} href="mailto:home@s4m.dev" className="text-emerald-400 hover:underline">home@s4m.dev</a>;
+          }
+          return <span key={index}>{part}</span>;
+      });
+  };
+  
   useEffect(() => {
+     if (isMobile) return;
+     
      const saved = localStorage.getItem('vni_history');
      if (saved) {
          try { setHistory(JSON.parse(saved)); } catch (e) {}
@@ -90,7 +122,7 @@ function App() {
      interval = setInterval(pingBackend, 3000);
 
      return () => clearInterval(interval);
-  }, []);
+  }, [isMobile]);
 
   const saveToHistory = (traceTarget, traceHops) => {
      if (traceHops.length === 0) return;
@@ -169,6 +201,7 @@ function App() {
              compareMode={compareMode}
              compareHops={compareHops}
              myLocation={myLocation}
+             openPrivacy={openPrivacy}
           />
        </div>
        <div className="w-3/5 h-full relative z-0">
@@ -215,7 +248,32 @@ function App() {
           )}
        </div>
        
-       {backendStatus === 'disconnected' && (
+       {isMobile && (
+           <div className="absolute inset-0 z-[150] flex flex-col items-center justify-center bg-gray-950/90 backdrop-blur-md p-6 text-center">
+               <div className="bg-gray-900 border border-emerald-500/30 rounded-2xl p-8 max-w-lg shadow-2xl shadow-emerald-900/20">
+                   <Activity className="w-16 h-16 text-emerald-500 mx-auto mb-6" />
+                   <h1 className="text-2xl font-bold text-white mb-4">Desktop Only</h1>
+                   <p className="text-gray-400 mb-6 leading-relaxed">
+                       VNI relies on a lightweight local background engine to trace network routes. 
+                       Because mobile devices (iOS/Android) cannot run desktop executables, this tool is only available on Windows, Mac, and Linux computers.
+                   </p>
+                   <p className="text-emerald-400 font-semibold mb-8">
+                       Please visit vni.s4m.dev on your computer!
+                   </p>
+
+                   <div className="w-full pt-6 border-t border-gray-800/50 flex flex-col items-center gap-2">
+                       <p className="text-xs text-gray-500">
+                           <button onClick={openPrivacy} className="text-emerald-500 hover:text-emerald-400 hover:underline transition">Privacy Policy</button>
+                       </p>
+                       <p className="text-xs text-gray-600">
+                           &copy; {new Date().getFullYear()} <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">S4M.dev</a>. All rights reserved.
+                       </p>
+                   </div>
+               </div>
+           </div>
+       )}
+
+       {!isMobile && backendStatus === 'disconnected' && (
            <div className="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-gray-950/90 backdrop-blur-md p-6 text-center">
                <div className="bg-gray-900 border border-emerald-500/30 rounded-2xl p-8 max-w-lg shadow-2xl shadow-emerald-900/20">
                    <Activity className="w-16 h-16 text-emerald-500 mx-auto mb-6 animate-pulse" />
@@ -244,15 +302,32 @@ function App() {
 
                    <div className="w-full pt-6 border-t border-gray-800/50 flex flex-col items-center gap-2">
                        <p className="text-xs text-gray-500">
-                           By downloading the VNI Engine, you agree to our <a href="#" className="text-emerald-500 hover:text-emerald-400 hover:underline transition">Privacy Policy</a> and <a href="#" className="text-emerald-500 hover:text-emerald-400 hover:underline transition">Terms of Service</a>.
+                           By downloading the VNI Engine, you agree to our <button onClick={openPrivacy} className="text-emerald-500 hover:text-emerald-400 hover:underline transition">Privacy Policy</button>.
                        </p>
                        <p className="text-xs text-gray-600">
-                           &copy; {new Date().getFullYear()} S4M.dev. All rights reserved.
+                           &copy; {new Date().getFullYear()} <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">S4M.dev</a>. All rights reserved.
                        </p>
                    </div>
                </div>
            </div>
        )}
+
+      {showPrivacy && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+              <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95">
+                  <div className="flex justify-between items-center mb-4 border-b border-gray-800 pb-3">
+                      <h2 className="text-lg font-bold text-emerald-400">Privacy Policy</h2>
+                      <button onClick={() => setShowPrivacy(false)} className="text-gray-500 hover:text-white transition">
+                         <X size={20} />
+                      </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar text-sm text-gray-300 whitespace-pre-wrap leading-relaxed pr-2 font-mono">
+                      {renderPrivacyText(privacyText)}
+                  </div>
+              </div>
+          </div>
+      )}
+
     </div>
   );
 }
