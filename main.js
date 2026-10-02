@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
-const { autoUpdater } = require('electron-updater');
+let autoUpdater; if (app.isPackaged) { autoUpdater = require('electron-updater').autoUpdater; } else { autoUpdater = { on: () => {}, checkForUpdates: () => {}, logger: { transports: { file: {} } } }; }
 const log = require('electron-log');
 
 
@@ -98,7 +98,7 @@ app.whenReady().then(() => {
     });
 
     ipcMain.handle('get-update-state', () => {
-      return { isDownloading: updateIsDownloading, isReady: updateIsReady };
+      return { isDownloading: false, isReady: true };
     });
 
     ipcMain.on('restart-app', () => {
