@@ -4,9 +4,7 @@ const { fork } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 
-autoUpdater.logger = log;
-autoUpdater.logger.transports.file.level = 'info';
-autoUpdater.autoInstallOnAppQuit = false;
+
 
 let mainWindow;
 let backendProcess;
@@ -46,7 +44,11 @@ function createWindow() {
     }
   });
 
-  if (app.isPackaged) {
+  autoUpdater.logger = log;
+    autoUpdater.logger.transports.file.level = 'info';
+    autoUpdater.autoInstallOnAppQuit = false;
+    
+    if (app.isPackaged) {
     mainWindow.loadFile(path.join(__dirname, 'frontend', 'dist', 'index.html'));
   } else {
     mainWindow.loadURL('http://localhost:5173');
@@ -112,6 +114,16 @@ app.whenReady().then(() => {
 
     log.info('App starting up, checking for updates...');
     autoUpdater.checkForUpdates();
+  setTimeout(() => {
+    console.log('Sending fake update-downloading');
+    if (mainWindow) mainWindow.webContents.send('update-downloading');
+  }, 5000);
+
+  setTimeout(() => {
+    console.log('Sending fake update-downloaded');
+    if (mainWindow) mainWindow.webContents.send('update-downloaded');
+  }, 10000);
+
   }
 });
 
