@@ -2,6 +2,10 @@ const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
 const { autoUpdater } = require('electron-updater');
+const log = require('electron-log');
+
+autoUpdater.logger = log;
+autoUpdater.logger.transports.file.level = 'info';
 
 let mainWindow;
 let backendProcess;
@@ -67,6 +71,34 @@ app.whenReady().then(() => {
 
   // Automatically check for updates and notify the user
   if (app.isPackaged) {
+    const { dialog } = require('electron');
+    
+    autoUpdater.on('error', (err) => {
+      dialog.showErrorBox('Update Error', err == null ? "unknown" : (err.stack || err).toString());
+    });
+    
+    autoUpdater.on('update-available', () => {
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Update Available',
+        message: 'A new version of VNI is available. Downloading now in the background...'
+      });
+    });
+    
+    autoUpdater.on('update-downloaded', () => {
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Update Ready',
+        message: 'Update downloaded successfully! The app will restart to apply the update.',
+        buttons: ['Restart Now', 'Later']
+      }).then((result) => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall();
+        }
+      });
+    });
+
+    log.info('App starting up, checking for updates...');
     autoUpdater.checkForUpdatesAndNotify();
   }
 });

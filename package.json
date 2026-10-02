@@ -1,6 +1,6 @@
 {
   "name": "vni-engine",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Visual Network Intelligence Desktop App",
   "main": "main.js",
   "scripts": {
@@ -69,6 +69,7 @@
   "dependencies": {
     "axios": "^1.20.0",
     "cors": "^2.8.5",
+    "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
     "express": "^4.19.2",
     "jimp": "^0.16.1",
