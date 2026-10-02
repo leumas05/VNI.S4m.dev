@@ -85,7 +85,14 @@ app.whenReady().then(() => {
     });
 
     ipcMain.on('restart-app', () => {
-      autoUpdater.quitAndInstall(true, true);
+      log.info('Restarting app for update. Killing backend process...');
+      if (backendProcess) {
+        try { backendProcess.kill('SIGKILL'); } catch (e) {}
+        backendProcess = null;
+      }
+      setTimeout(() => {
+        autoUpdater.quitAndInstall(true, true);
+      }, 500);
     });
 
     log.info('App starting up, checking for updates...');
