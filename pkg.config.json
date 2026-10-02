@@ -1,0 +1,6 @@
+{
+  "pkg": {
+    "scripts": "backend/**/*.js",
+    "assets": "frontend/dist/**/*"
+  }
+}
