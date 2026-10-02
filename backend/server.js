@@ -120,7 +120,7 @@ ${reset}`);
     console.log(`  ${gray}>> Listening on port: ${PORT}${reset}`);
     console.log(`  ${gray}>> Ready to bridge local network traceroutes${reset}`);
     console.log(`  ${gray}>> You can now use the browser version at: ${cyan}https://vni.s4m.dev${reset}`);
-    console.log(`  ${gray}>> Press Ctrl+C to stop the engine${reset}\n`);
+    console.log(`  ${gray}>> Press Ctrl+C or type 'quit' to stop the engine${reset}\n`);
 
     const rl = readline.createInterface({
         input: process.stdin,
@@ -130,7 +130,8 @@ ${reset}`);
     console.log(`  ${gray}>> Type '${cyan}uplink${gray}' to broadcast to your local network${reset}`);
 
     rl.on('line', (input) => {
-        if (input.trim().toLowerCase() === 'uplink') {
+        const cmd = input.trim().toLowerCase();
+        if (cmd === 'uplink') {
             const interfaces = os.networkInterfaces();
             let localIp = '127.0.0.1';
             for (const name of Object.keys(interfaces)) {
@@ -155,6 +156,9 @@ ${reset}`);
             } else {
                 console.log(`  ${gray}>> ERROR: Could not determine local network IP.${reset}\n`);
             }
+        } else if (cmd === 'quit' || cmd === 'stop' || cmd === 'exit') {
+            console.log(`\n  ${gray}>> Shutting down S4m's VNI Background Engine...${reset}`);
+            process.exit(0);
         }
     });
 
