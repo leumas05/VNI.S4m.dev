@@ -9,6 +9,7 @@ autoUpdater.logger.transports.file.level = 'info';
 
 let mainWindow;
 let backendProcess;
+let updateIsReady = false;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -79,10 +80,13 @@ app.whenReady().then(() => {
     });
     
         autoUpdater.on('update-downloaded', () => {
+      updateIsReady = true;
       if (mainWindow) {
         mainWindow.webContents.send('update-downloaded');
       }
     });
+
+    ipcMain.handle('is-update-ready', () => updateIsReady);
 
     ipcMain.on('restart-app', () => {
       log.info('Restarting app for update. Killing backend process...');
@@ -96,7 +100,7 @@ app.whenReady().then(() => {
     });
 
     log.info('App starting up, checking for updates...');
-    autoUpdater.checkForUpdatesAndNotify();
+    autoUpdater.checkForUpdates();
   }
 });
 

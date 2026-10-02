@@ -16,10 +16,17 @@ function App() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
-    if (window.electronAPI && window.electronAPI.onUpdateDownloaded) {
-      window.electronAPI.onUpdateDownloaded(() => {
-        setUpdateAvailable(true);
-      });
+    if (window.electronAPI) {
+      if (window.electronAPI.isUpdateReady) {
+        window.electronAPI.isUpdateReady().then(ready => {
+          if (ready) setUpdateAvailable(true);
+        });
+      }
+      if (window.electronAPI.onUpdateDownloaded) {
+        window.electronAPI.onUpdateDownloaded(() => {
+          setUpdateAvailable(true);
+        });
+      }
     }
   }, []);
   const [hops, setHops] = useState([]);
