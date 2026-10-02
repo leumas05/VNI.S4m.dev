@@ -31,6 +31,14 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // Intercept links that try to navigate the current window (e.g. Leaflet attribution)
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith('file://') && !url.startsWith('http://localhost:5173')) {
+      event.preventDefault();
+      require('electron').shell.openExternal(url);
+    }
+  });
+
   if (app.isPackaged) {
     mainWindow.loadFile(path.join(__dirname, 'frontend', 'dist', 'index.html'));
   } else {
