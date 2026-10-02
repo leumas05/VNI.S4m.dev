@@ -2,8 +2,17 @@ const express = require('express');
 const cors = require('cors');
 const { runTraceroute } = require('./traceroute');
 
+const path = require('path');
+const readline = require('readline');
+const os = require('os');
+const qrcode = require('qrcode-terminal');
+
+
 const app = express();
 app.use(cors());
+
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
+
 
 app.get('/api/ping', (req, res) => {
     res.json({ status: 'ok' });
@@ -112,4 +121,41 @@ ${reset}`);
     console.log(`  ${gray}>> Ready to bridge local network traceroutes${reset}`);
     console.log(`  ${gray}>> You can now use the browser version at: ${cyan}https://vni.s4m.dev${reset}`);
     console.log(`  ${gray}>> Press Ctrl+C to stop the engine${reset}\n`);
+
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    console.log(`  ${gray}>> Type '${cyan}uplink${gray}' to broadcast to your local network${reset}`);
+
+    rl.on('line', (input) => {
+        if (input.trim().toLowerCase() === 'uplink') {
+            const interfaces = os.networkInterfaces();
+            let localIp = '127.0.0.1';
+            for (const name of Object.keys(interfaces)) {
+                for (const iface of interfaces[name]) {
+                    if (iface.family === 'IPv4' && !iface.internal) {
+                        localIp = iface.address;
+                        break;
+                    }
+                }
+                if (localIp !== '127.0.0.1') break;
+            }
+            
+            if (localIp !== '127.0.0.1') {
+                const url = `http://${localIp}:${PORT}`;
+                console.log(`\n  ${cyan}[O] UPLINK ESTABLISHED${reset}`);
+                console.log(`  ${gray}>> Broadcasting on local network at:${reset} ${green}${url}${reset}\n`);
+                qrcode.generate(url, {small: true}, function (qr) {
+                    const indentedCode = qr.split('\n').map(line => '  ' + line).join('\n');
+                    console.log(indentedCode);
+                });
+                console.log(`  ${gray}>> Scan the QR code with your phone to connect.${reset}\n`);
+            } else {
+                console.log(`  ${gray}>> ERROR: Could not determine local network IP.${reset}\n`);
+            }
+        }
+    });
+
 });

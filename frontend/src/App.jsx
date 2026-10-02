@@ -3,6 +3,14 @@ import { Info, X, Activity } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MapView from './components/Map';
 
+const getApiBaseUrl = () => {
+    if (window.location.protocol === 'file:' || window.location.hostname === 'vni.s4m.dev' || window.location.hostname === 'localhost') {
+        return 'http://127.0.0.1:3001';
+    }
+    return ''; // When accessed via local IP (e.g. 192.168.x.x), use relative paths so it connects back to that IP
+};
+const API_BASE = getApiBaseUrl();
+
 function App() {
   const [hops, setHops] = useState([]);
   const [tracing, setTracing] = useState(false);
@@ -95,7 +103,7 @@ function App() {
      let hasFetchedLocation = false;
 
      const fetchLocation = () => {
-         fetch('http://127.0.0.1:3001/api/my-location')
+         fetch(`${API_BASE}/api/my-location`)
            .then(r => r.json())
            .then(data => {
                if (data.ip) {
@@ -140,7 +148,7 @@ function App() {
 
      const pingBackend = async () => {
          try {
-             const res = await fetch('http://127.0.0.1:3001/api/ping');
+             const res = await fetch(`${API_BASE}/api/ping`);
              if (res.ok) {
                  setBackendStatus('connected');
                  if (!hasFetchedLocation) {
@@ -189,7 +197,7 @@ function App() {
         setCompareHops([]);
     }
 
-    const evtSource = new EventSource(`http://localhost:3001/api/trace?target=${encodeURIComponent(newTarget)}`);
+    const evtSource = new EventSource(`${API_BASE}/api/trace?target=${encodeURIComponent(newTarget)}`);
     
     let currentHops = [];
     evtSource.onmessage = (event) => {

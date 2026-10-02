@@ -1,6 +1,6 @@
 {
   "name": "vni-engine",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "Visual Network Intelligence Desktop App",
   "main": "main.js",
   "scripts": {
@@ -69,7 +69,13 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^1.49.0",
     "puppeteer": "^25.12.0",
+    "qrcode-terminal": "^0.12.0",
     "rcedit": "^3.0.1",
     "react-leaflet": "^5.0.0"
+  },
+  "pkg": {
+    "assets": [
+      "frontend/dist/**/*"
+    ]
   }
 }
