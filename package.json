@@ -1,6 +1,6 @@
 {
   "name": "vni-engine",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "Visual Network Intelligence Desktop App",
   "main": "main.js",
   "scripts": {
@@ -35,7 +35,7 @@
         "dmg"
       ],
       "icon": "build/icon.png",
-      "artifactName": "S4m's.VNI.Engine.${version}.${ext}"
+      "artifactName": "vni-engine-mac-${version}.${ext}"
     },
     "win": {
       "target": [
@@ -47,12 +47,12 @@
       "target": [
         "AppImage"
       ],
-      "artifactName": "S4m's.VNI.Engine.${version}.${ext}"
+      "artifactName": "vni-engine-linux-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "S4m's.VNI.Engine.Setup.${version}.${ext}",
+      "artifactName": "vni-engine-setup-${version}.${ext}",
       "installerSidebar": "build/installerSidebar.bmp",
       "uninstallerSidebar": "build/uninstallerSidebar.bmp",
       "installerHeader": "build/installerHeader.bmp"
