@@ -239,8 +239,8 @@ function App() {
                <span className="text-[11px] font-bold text-gray-400 tracking-widest uppercase">S4m's VNI</span>
            </div>
        )}
-       <div className="flex flex-1 overflow-hidden relative">
-           <div className="w-2/5 h-full border-r border-gray-800 bg-gray-900 flex flex-col relative z-10 shadow-2xl shadow-black">
+       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative">
+           <div className="w-full lg:w-2/5 h-[55%] lg:h-full border-b lg:border-b-0 lg:border-r border-gray-800 bg-gray-900 flex flex-col relative z-10 shadow-2xl shadow-black overflow-y-auto lg:overflow-visible">
               <Sidebar 
                  startTrace={startTrace} 
                  tracing={tracing} 
@@ -256,7 +256,7 @@ function App() {
                  openPrivacy={openPrivacy}
               />
            </div>
-           <div className="w-3/5 h-full relative z-0">
+           <div className="w-full lg:w-3/5 h-[45%] lg:h-full relative z-0 flex-1">
           <MapView hops={hops} selectedHop={selectedHop} setSelectedHop={setSelectedHop} hoveredHop={hoveredHop} myLocation={myLocation} />
           
           <button 

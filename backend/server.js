@@ -21,10 +21,24 @@ app.get('/api/ping', (req, res) => {
 app.get('/api/my-location', async (req, res) => {
     let clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     let url = 'https://api.ip2location.io/?format=json';
-    if (clientIp && clientIp !== '::1' && clientIp !== '127.0.0.1' && !clientIp.startsWith('::ffff:127.0.0.1')) {
+    
+    const isPrivateIp = (ip) => {
+        if (!ip) return true;
+        if (ip === '::1' || ip === '127.0.0.1' || ip.startsWith('::ffff:127.0.0.1')) return true;
+        if (ip.startsWith('192.168.') || ip.startsWith('::ffff:192.168.')) return true;
+        if (ip.startsWith('10.') || ip.startsWith('::ffff:10.')) return true;
+        if (ip.startsWith('172.') || ip.startsWith('::ffff:172.')) {
+            // Technically 172.16.0.0 - 172.31.255.255, but this is a safe enough check
+            return true;
+        }
+        return false;
+    };
+
+    if (clientIp && !isPrivateIp(clientIp)) {
         clientIp = clientIp.split(',')[0].trim();
         url += `&ip=${clientIp}`;
     }
+    
     try {
         const fetchRes = await fetch(url);
         const data = await fetchRes.json();
