@@ -1,6 +1,6 @@
 {
   "name": "vni-engine",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "Visual Network Intelligence Desktop App",
   "main": "main.js",
   "scripts": {
@@ -16,6 +16,11 @@
     "productName": "VNI Engine",
     "directories": {
       "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "leumas05",
+      "repo": "VNI.S4m.dev"
     },
     "extraFiles": [
       "README.txt"
@@ -64,6 +69,7 @@
   "dependencies": {
     "axios": "^1.20.0",
     "cors": "^2.8.5",
+    "electron-updater": "^6.8.9",
     "express": "^4.19.2",
     "jimp": "^0.16.1",
     "leaflet": "^1.9.4",

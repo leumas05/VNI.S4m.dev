@@ -67,3 +67,6 @@ jobs:
             release/*.AppImage
             release/*.mac
             release/*.linux
+            release/*.yml
+            release/*.blockmap
+            release/*.zip

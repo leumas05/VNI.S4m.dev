@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
 let backendProcess;
@@ -55,6 +56,11 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+
+  // Automatically check for updates and notify the user
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify();
+  }
 });
 
 app.on('window-all-closed', () => {
