@@ -1,6 +1,6 @@
 {
   "name": "vni-engine",
-  "version": "1.1.12",
+  "version": "1.1.13",
   "description": "Visual Network Intelligence Desktop App",
   "main": "main.js",
   "scripts": {
