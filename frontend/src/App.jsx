@@ -18,9 +18,10 @@ function App() {
 
   useEffect(() => {
     if (window.electronAPI) {
-      if (window.electronAPI.isUpdateReady) {
-        window.electronAPI.isUpdateReady().then(ready => {
-          if (ready) setUpdateAvailable(true);
+      if (window.electronAPI.getUpdateState) {
+        window.electronAPI.getUpdateState().then(state => {
+          if (state.isReady) setUpdateAvailable(true);
+          else if (state.isDownloading) setIsDownloading(true);
         });
       }
       if (window.electronAPI.onUpdateDownloaded) {

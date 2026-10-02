@@ -6,6 +6,7 @@ const log = require('electron-log');
 
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
+autoUpdater.autoInstallOnAppQuit = false;
 
 let mainWindow;
 let backendProcess;
@@ -79,20 +80,24 @@ app.whenReady().then(() => {
       dialog.showErrorBox('Update Error', err == null ? "unknown" : (err.stack || err).toString());
     });
 
+    let updateIsDownloading = false;
+
     autoUpdater.on('update-available', () => {
-      if (mainWindow) {
-        mainWindow.webContents.send('update-downloading');
-      }
+      updateIsDownloading = true;
+      if (mainWindow) mainWindow.webContents.send('update-downloading');
     });
     
         autoUpdater.on('update-downloaded', () => {
+      updateIsDownloading = false;
       updateIsReady = true;
       if (mainWindow) {
         mainWindow.webContents.send('update-downloaded');
       }
     });
 
-    ipcMain.handle('is-update-ready', () => updateIsReady);
+    ipcMain.handle('get-update-state', () => {
+      return { isDownloading: updateIsDownloading, isReady: updateIsReady };
+    });
 
     ipcMain.on('restart-app', () => {
       log.info('Restarting app for update. Killing backend process...');
