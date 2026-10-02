@@ -77,23 +77,15 @@ app.whenReady().then(() => {
       dialog.showErrorBox('Update Error', err == null ? "unknown" : (err.stack || err).toString());
     });
     
-    autoUpdater.on('update-available', () => {
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Update Available',
-        message: 'A new version of VNI is available. Downloading now in the background...'
-      });
-    });
-    
     autoUpdater.on('update-downloaded', () => {
       dialog.showMessageBox({
         type: 'info',
         title: 'Update Ready',
-        message: 'Update downloaded successfully! The app will restart to apply the update.',
+        message: 'A new version of VNI has been downloaded in the background. The app will restart to apply the update.',
         buttons: ['Restart Now', 'Later']
       }).then((result) => {
         if (result.response === 0) {
-          autoUpdater.quitAndInstall();
+          autoUpdater.quitAndInstall(true, true);
         }
       });
     });
