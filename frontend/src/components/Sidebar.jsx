@@ -62,7 +62,7 @@ export default function Sidebar({ startTrace, tracing, hops, selectedHop, setSel
   };
 
   return (
-    <div className="h-full flex flex-col p-6 overflow-hidden relative">
+    <div className="h-full flex flex-col p-4 lg:p-6 overflow-y-auto lg:overflow-hidden relative custom-scrollbar">
       <div className="flex justify-between items-center mb-6">
         <a href="https://vni.s4m.dev/" className="text-2xl font-bold text-emerald-400 tracking-wider flex items-center gap-2 hover:text-emerald-300 transition-colors">
           <Activity className="text-emerald-500" /> VNI.S4m.dev
@@ -181,7 +181,7 @@ export default function Sidebar({ startTrace, tracing, hops, selectedHop, setSel
          </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-1.5">
+      <div className="flex-none lg:flex-1 lg:overflow-y-auto pr-2 space-y-1.5 lg:custom-scrollbar">
          {hops.map((hop, idx) => {
              const pastHop = compareHops.find(h => h.hop === hop.hop);
              return (
