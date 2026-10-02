@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', callback),
+  onUpdateDownloading: (callback) => ipcRenderer.on('update-downloading', callback),
   restartApp: () => ipcRenderer.send('restart-app'),
   isUpdateReady: () => ipcRenderer.invoke('is-update-ready')
 });

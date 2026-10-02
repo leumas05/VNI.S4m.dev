@@ -78,6 +78,12 @@ app.whenReady().then(() => {
     autoUpdater.on('error', (err) => {
       dialog.showErrorBox('Update Error', err == null ? "unknown" : (err.stack || err).toString());
     });
+
+    autoUpdater.on('update-available', () => {
+      if (mainWindow) {
+        mainWindow.webContents.send('update-downloading');
+      }
+    });
     
         autoUpdater.on('update-downloaded', () => {
       updateIsReady = true;

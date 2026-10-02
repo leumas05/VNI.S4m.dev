@@ -14,6 +14,7 @@ const API_BASE = getApiBaseUrl();
 
 function App() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     if (window.electronAPI) {
@@ -24,7 +25,13 @@ function App() {
       }
       if (window.electronAPI.onUpdateDownloaded) {
         window.electronAPI.onUpdateDownloaded(() => {
+          setIsDownloading(false);
           setUpdateAvailable(true);
+        });
+      }
+      if (window.electronAPI.onUpdateDownloading) {
+        window.electronAPI.onUpdateDownloading(() => {
+          setIsDownloading(true);
         });
       }
     }
@@ -282,6 +289,9 @@ function App() {
            <div className="h-8 shrink-0 bg-gray-950 flex items-center px-4 border-b border-gray-900 z-50 select-none" style={{ WebkitAppRegion: 'drag' }}>
                <Activity size={14} className="text-emerald-500 mr-2" />
                <span className="text-[11px] font-bold text-gray-400 tracking-widest uppercase">S4m's VNI (v{__APP_VERSION__})</span>
+                {isDownloading && (
+                    <span className="ml-4 text-[10px] text-emerald-500 font-mono animate-pulse">Downloading update...</span>
+                )}
            </div>
        )}
        <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative">
