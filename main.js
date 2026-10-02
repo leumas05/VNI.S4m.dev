@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { fork } = require('child_process');
 const { autoUpdater } = require('electron-updater');
@@ -23,7 +23,8 @@ function createWindow() {
     },
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
     },
     autoHideMenuBar: true,
     icon: path.join(__dirname, 'frontend', 'public', 'icon.png')
@@ -77,17 +78,14 @@ app.whenReady().then(() => {
       dialog.showErrorBox('Update Error', err == null ? "unknown" : (err.stack || err).toString());
     });
     
-    autoUpdater.on('update-downloaded', () => {
-      dialog.showMessageBox({
-        type: 'info',
-        title: 'Update Ready',
-        message: 'A new version of VNI has been downloaded in the background. The app will restart to apply the update.',
-        buttons: ['Restart Now', 'Later']
-      }).then((result) => {
-        if (result.response === 0) {
-          autoUpdater.quitAndInstall(true, true);
-        }
-      });
+        autoUpdater.on('update-downloaded', () => {
+      if (mainWindow) {
+        mainWindow.webContents.send('update-downloaded');
+      }
+    });
+
+    ipcMain.on('restart-app', () => {
+      autoUpdater.quitAndInstall(true, true);
     });
 
     log.info('App starting up, checking for updates...');

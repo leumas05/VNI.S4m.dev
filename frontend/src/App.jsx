@@ -11,6 +11,15 @@ const getApiBaseUrl = () => {
 };
 const API_BASE = getApiBaseUrl();
 
+  useEffect(() => {
+    if (window.electronAPI && window.electronAPI.onUpdateDownloaded) {
+      window.electronAPI.onUpdateDownloaded(() => {
+        setUpdateAvailable(true);
+      });
+    }
+  }, []);
+
+
 function App() {
   const [hops, setHops] = useState([]);
   const [tracing, setTracing] = useState(false);
