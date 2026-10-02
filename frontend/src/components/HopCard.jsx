@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Network, Server, Globe2, AlertCircle, ArrowRight, Copy, Check } from 'lucide-react';
 
-const CopyableRow = ({ label, value, copyText, mono = false, className = '' }) => {
+const CopyableRow = ({ label, value, copyText, mono = false, className = '', title = "Click to copy" }) => {
     const [copied, setCopied] = useState(false);
     const displayValue = value || 'N/A';
     const textToCopy = copyText !== undefined ? copyText : displayValue;
@@ -19,7 +19,7 @@ const CopyableRow = ({ label, value, copyText, mono = false, className = '' }) =
     };
 
     return (
-        <div className={`group flex justify-between items-start hover:bg-gray-800/80 -mx-2 px-2 py-0.5 rounded transition-colors cursor-pointer ${className}`} onClick={handleCopy} title="Click to copy">
+        <div className={`group flex justify-between items-start hover:bg-gray-800/80 -mx-2 px-2 py-0.5 rounded transition-colors cursor-pointer ${className}`} onClick={handleCopy} title={title}>
             <div className="flex-1">
                 <span className="text-gray-500">{label}:</span>{' '}
                 <span className={mono ? "font-mono text-gray-300" : "text-gray-300"}>{displayValue}</span>
@@ -228,9 +228,12 @@ export default function HopCard({ hop, isSelected, onClick, pastHop, compareMode
                         <CopyableRow label="NetName" value={formatNetnameLink(hop.registry.netname)} copyText={hop.registry.netname} />
                         <CopyableRow label="Descr" value={hop.registry.descr} />
                         <CopyableRow label="ASN" value={formatAsnLink(hop.registry.asn)} copyText={hop.registry.asn} />
-                        <div title={getIpCount(hop.registry.netblock) ? `Total IPs in this block: ${getIpCount(hop.registry.netblock)}` : ''} className="cursor-help w-fit">
-                            <CopyableRow label="Range" value={formatRange(hop.registry.netblock)} copyText={formatRange(hop.registry.netblock)} />
-                        </div>
+                        <CopyableRow 
+                            label="Range" 
+                            value={formatRange(hop.registry.netblock)} 
+                            copyText={formatRange(hop.registry.netblock)} 
+                            title={getIpCount(hop.registry.netblock) ? `Total IPs in this block: ${getIpCount(hop.registry.netblock)} (Click to copy)` : 'Click to copy'}
+                        />
                         {hop.registry.authoritative && (
                             <CopyableRow label="Registry" value={hop.registry.authoritative} />
                         )}
