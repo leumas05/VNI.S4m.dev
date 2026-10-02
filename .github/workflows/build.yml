@@ -41,26 +41,20 @@ jobs:
 
       - name: Build Windows
         if: matrix.os == 'windows-latest'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npm run build:app -- -w --publish always
+          npm run build:app -- -w --publish never
           npx pkg backend/server.js -c pkg.config.json -t node18-win-x64 -o release/S4m.s-VNI-Background-Engine.win.exe
 
       - name: Build Mac
         if: matrix.os == 'macos-latest'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npm run build:app -- -m --publish always
+          npm run build:app -- -m --publish never
           npx pkg backend/server.js -c pkg.config.json -t node18-macos-x64 -o release/S4m.s-VNI-Background-Engine.mac
 
       - name: Build Linux
         if: matrix.os == 'ubuntu-latest'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npm run build:app -- -l --publish always
+          npm run build:app -- -l --publish never
           npx pkg backend/server.js -c pkg.config.json -t node18-linux-x64 -o release/S4m.s-VNI-Background-Engine.linux
 
       - name: Upload to GitHub Release
@@ -69,3 +63,9 @@ jobs:
         with:
           files: |
             release/S4m.s-VNI-Background-Engine.*
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.yml
+            release/*.blockmap
+            release/*.zip
