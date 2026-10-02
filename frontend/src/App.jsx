@@ -63,7 +63,7 @@ function App() {
         .catch(e => console.error("Could not fetch latest release"));
   }, []);
   
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && window.location.hostname === 'vni.s4m.dev';
   const isElectron = navigator.userAgent.includes('Electron');
 
   const openPrivacy = (e) => {
