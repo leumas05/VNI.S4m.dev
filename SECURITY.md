@@ -23,4 +23,6 @@ In your email, please include:
 If you email a report, I might read it, and I might act on it. If I do fix the issue, the code will be silently updated in the background. I might give you credit in the release notes, but honestly, it's a 50/50 chance. Please do not expect a reply.
 
 ## Local Execution Context
-Please note that VNI Engine performs raw network operations (`traceroute`/`tracert`) which inherently require local execution permissions. It is designed to run locally on the user's machine and only binds its internal API to `127.0.0.1` (localhost) to prevent external network access to the trace engine.
+Please note that VNI Engine performs raw network operations (`traceroute`/`tracert`) which inherently require local execution permissions. It is designed to run locally on your machine. However, the background API server binds to all available network interfaces (`0.0.0.0`), not just localhost. This means anyone on your local network (e.g., your home Wi-Fi) can access the API and execute traceroutes from your machine if they know your IP address. 
+
+Do not run this engine on a public or untrusted Wi-Fi network unless you are comfortable with other devices on that network having the ability to trigger traceroutes via your machine.
