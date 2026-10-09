@@ -20,7 +20,7 @@ In your email, please include:
 - Steps to reproduce the issue.
 - (Optional) Any suggestions on how to mitigate the issue.
 
-We will acknowledge receipt of your vulnerability report within 72 hours and strive to send you regular updates about our progress. If you report a vulnerability, we will gladly credit you in our release notes (unless you prefer to remain anonymous).
+If you email a report, I might read it, and I might act on it. If I do fix the issue, the code will be silently updated in the background. I might give you credit in the release notes, but honestly, it's a 50/50 chance. Please do not expect a reply.
 
 ## Local Execution Context
 Please note that VNI Engine performs raw network operations (`traceroute`/`tracert`) which inherently require local execution permissions. It is designed to run locally on the user's machine and only binds its internal API to `127.0.0.1` (localhost) to prevent external network access to the trace engine.
