@@ -2,12 +2,12 @@
 
 ## Supported Versions
 
-Currently, only the latest release of VNI is actively supported with security updates. 
+I only support the absolute latest release. Since the app updates automatically in the background, if you are not on the latest version, just wait a minute or restart the app. Older versions do not receive backported patches.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.x.x   | :white_check_mark: |
-| < 1.0   | :x:                |
+| Version | Supported |
+| --- | --- |
+| Latest | :white_check_mark: |
+| Everything else | :x: |
 
 ## Reporting a Vulnerability
 
