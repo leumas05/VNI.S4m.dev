@@ -45,4 +45,4 @@ npm run build:app
 The resulting executable will be available in the `release/` directory.
 
 ---
-*Created by [S4M.dev](https://www.s4m.dev/)*
+*Created by [S4m.dev](https://www.s4m.dev/)*
