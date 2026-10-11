@@ -83,8 +83,27 @@ export default function LanScannerPanel({
       return {};
     }
   });
+  const [topologyLinks, setTopologyLinks] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('vni_lan_topology_links')) || {};
+    } catch (e) {
+      return {};
+    }
+  });
   const [editingKey, setEditingKey] = useState(null);
   const [editValue, setEditValue] = useState('');
+
+  // Sync nicknames and topology links across components
+  React.useEffect(() => {
+    const handleStorage = () => {
+      try {
+        setNicknames(JSON.parse(localStorage.getItem('vni_lan_nicknames')) || {});
+        setTopologyLinks(JSON.parse(localStorage.getItem('vni_lan_topology_links')) || {});
+      } catch (e) {}
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   const saveNickname = (key, val) => {
     const trimmed = (val || '').trim();
@@ -96,6 +115,7 @@ export default function LanScannerPanel({
         delete next[key];
       }
       localStorage.setItem('vni_lan_nicknames', JSON.stringify(next));
+      window.dispatchEvent(new Event('storage'));
       return next;
     });
     setEditingKey(null);
@@ -111,6 +131,90 @@ export default function LanScannerPanel({
   const devices = useMemo(() => lanData?.devices || [], [lanData]);
   const gateway = lanData?.gateway;
   const thisDevice = lanData?.thisDevice;
+
+  // Identify Mesh satellite nodes
+  const meshNodes = useMemo(() => {
+    return devices.filter(d =>
+      d.isMeshNode ||
+      d.deviceType === 'mesh_node' ||
+      (d.vendor && d.vendor.includes('Deco Mesh Node')) ||
+      (d.hostname && d.hostname.includes('Deco'))
+    );
+  }, [devices]);
+
+  // Available Access Point hubs
+  const apHubs = useMemo(() => {
+    const list = [];
+    if (gateway) {
+      const gNick = nicknames[gateway.mac] || nicknames[gateway.ip];
+      list.push({
+        ip: gateway.ip,
+        mac: gateway.mac,
+        name: gNick || gateway.vendor || 'Deco Huvudrouter (.1)',
+        isGateway: true
+      });
+    }
+    meshNodes.forEach(m => {
+      const mNick = nicknames[m.mac] || nicknames[m.ip];
+      list.push({
+        ip: m.ip,
+        mac: m.mac,
+        name: mNick || `Deco Nod (${m.ip})`,
+        isMeshNode: true
+      });
+    });
+    return list;
+  }, [gateway, meshNodes, nicknames]);
+
+  const getEffectiveParentIp = (dev) => {
+    if (!dev || dev.isGateway) return null;
+    const key = dev.mac || dev.ip;
+    if (topologyLinks[key]?.parentIp) {
+      return topologyLinks[key].parentIp;
+    }
+    if (dev.isThisDevice || dev.ip === '192.168.68.100') {
+      const deco249 = meshNodes.find(m => m.ip === '192.168.68.249');
+      if (deco249) return deco249.ip;
+    }
+    if (dev.isMeshNode) {
+      return gateway?.ip;
+    }
+    return gateway?.ip;
+  };
+
+  const getEffectiveMedium = (dev) => {
+    if (!dev) return 'cable';
+    const key = dev.mac || dev.ip;
+    if (topologyLinks[key]?.medium) {
+      return topologyLinks[key].medium;
+    }
+    if (dev.medium) return dev.medium;
+    if (dev.isThisDevice) return 'cable';
+    if (dev.isMeshNode) return 'cable';
+    return 'wifi_5g';
+  };
+
+  const updateDeviceLink = (dev, newParentIp, newMedium) => {
+    if (!dev) return;
+    const key = dev.mac || dev.ip;
+    setTopologyLinks(prev => {
+      const existing = prev[key] || {};
+      const currentParent = existing.parentIp || getEffectiveParentIp(dev);
+      const currentMed = existing.medium || getEffectiveMedium(dev);
+      const updated = {
+        ...prev,
+        [key]: {
+          parentIp: newParentIp !== undefined ? newParentIp : currentParent,
+          medium: newMedium !== undefined ? newMedium : currentMed
+        }
+      };
+      try {
+        localStorage.setItem('vni_lan_topology_links', JSON.stringify(updated));
+        window.dispatchEvent(new Event('storage'));
+      } catch (e) {}
+      return updated;
+    });
+  };
 
   // Filter client devices
   const filteredDevices = useMemo(() => {
@@ -380,75 +484,140 @@ export default function LanScannerPanel({
         )}
 
         {/* This Device (Host PC Running VNI) */}
-        {thisDevice && (
-          <div
-            onClick={() => onSelectDevice && onSelectDevice(selectedDevice?.id === thisDevice.id ? null : thisDevice)}
-            className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
-              selectedDevice?.id === thisDevice.id
-                ? 'bg-sky-950/40 border-sky-500/80 shadow-[0_0_15px_rgba(56,189,248,0.25)] ring-1 ring-sky-500/50'
-                : 'bg-gray-900/80 hover:bg-gray-850 border-gray-800 hover:border-sky-500/40'
-            }`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400 shrink-0">
-                  <Laptop size={15} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-xs text-sky-300 font-mono">{thisDevice.ip}</span>
-                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-950 border border-sky-500/40 text-sky-300">
-                      THIS PC (YOU)
-                    </span>
+        {thisDevice && (() => {
+          const thisParentIp = getEffectiveParentIp(thisDevice);
+          const thisParent = apHubs.find(h => h.ip === thisParentIp);
+          const thisParentName = thisParent?.name || (thisParentIp ? `Nod ${thisParentIp}` : 'Router');
+          const thisMed = getEffectiveMedium(thisDevice);
+          const isSelected = selectedDevice?.id === thisDevice.id;
+
+          return (
+            <div
+              onClick={() => onSelectDevice && onSelectDevice(isSelected ? null : thisDevice)}
+              className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                isSelected
+                  ? 'bg-sky-950/40 border-sky-500/80 shadow-[0_0_15px_rgba(56,189,248,0.25)] ring-1 ring-sky-500/50'
+                  : 'bg-gray-900/80 hover:bg-gray-850 border-gray-800 hover:border-sky-500/40'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400 shrink-0">
+                    <Laptop size={15} />
                   </div>
-                  <div className="text-[11px] text-gray-300 font-medium truncate">
-                    {thisDevice.vendor || thisDevice.hostname}
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-xs text-sky-300 font-mono">{thisDevice.ip}</span>
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-950 border border-sky-500/40 text-sky-300">
+                        THIS PC (YOU)
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-950/90 border border-emerald-500/40 text-emerald-300">
+                        🔌 {thisMed === 'cable' ? 'Kabel' : thisMed}
+                      </span>
+                      {thisParentName && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-mono bg-indigo-950/80 border border-indigo-500/40 text-indigo-300" title={`Ansluten till ${thisParentName}`}>
+                          ➔ {thisParentName}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-gray-300 font-medium truncate mt-0.5">
+                      {thisDevice.vendor || thisDevice.hostname}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-950 text-sky-400 border border-sky-500/30">
+                    0 ms
+                  </span>
+                  <div className="flex items-center gap-1 font-mono text-[10px] bg-gray-950/90 border border-gray-700/80 px-2 py-0.5 rounded text-gray-200">
+                    <span className="text-[9px] text-gray-400 font-bold">MAC:</span>
+                    <span className="font-bold tracking-wider text-sky-400">{thisDevice.mac}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex flex-col items-end gap-1.5">
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-950 text-sky-400 border border-sky-500/30">
-                  0 ms
-                </span>
-                <div className="flex items-center gap-1 font-mono text-[10px] bg-gray-950/90 border border-gray-700/80 px-2 py-0.5 rounded text-gray-200">
-                  <span className="text-[9px] text-gray-400 font-bold">MAC:</span>
-                  <span className="font-bold tracking-wider text-sky-400">{thisDevice.mac}</span>
+              {/* Uplink & Medium controls when selected */}
+              {isSelected && (
+                <div className="mt-2 pt-2 border-t border-sky-900/50 flex flex-wrap items-center justify-between gap-1.5 text-[10px]" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-1">
+                    <span className="text-gray-400">Kopplad till:</span>
+                    <select
+                      value={thisParentIp || ''}
+                      onChange={(e) => updateDeviceLink(thisDevice, e.target.value, undefined)}
+                      className="bg-gray-950 border border-gray-700 hover:border-sky-500 rounded px-1.5 py-0.5 text-[10px] text-sky-300 font-mono focus:outline-none"
+                    >
+                      {apHubs.map(hub => (
+                        <option key={hub.ip} value={hub.ip}>
+                          {hub.isGateway ? `🌐 ${hub.name} (${hub.ip})` : `📡 ${hub.name}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-1 bg-gray-950 p-0.5 rounded border border-gray-800">
+                    <button
+                      type="button"
+                      onClick={() => updateDeviceLink(thisDevice, undefined, 'cable')}
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                        thisMed === 'cable' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      🔌 Kabel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateDeviceLink(thisDevice, undefined, 'wifi_5g')}
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                        thisMed === 'wifi_5g' ? 'bg-sky-600 text-white' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      📶 5G
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateDeviceLink(thisDevice, undefined, 'wifi_24g')}
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                        thisMed === 'wifi_24g' ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      📶 2.4G
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
+                <span className="text-gray-500 text-[10px]">Local Host Adapter</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyToClipboard(thisDevice.ip, `ip-${thisDevice.id}`);
+                    }}
+                    className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
+                    title="Copy IP Address"
+                  >
+                    {copiedId === `ip-${thisDevice.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                    <span className="text-[10px]">IP</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyToClipboard(thisDevice.mac, `mac-${thisDevice.id}`);
+                    }}
+                    className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
+                    title="Copy MAC Address"
+                  >
+                    {copiedId === `mac-${thisDevice.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                    <span className="text-[10px]">MAC</span>
+                  </button>
                 </div>
               </div>
             </div>
-
-            <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
-              <span className="text-gray-500 text-[10px]">Local Host Adapter</span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    copyToClipboard(thisDevice.ip, `ip-${thisDevice.id}`);
-                  }}
-                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
-                  title="Copy IP Address"
-                >
-                  {copiedId === `ip-${thisDevice.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                  <span className="text-[10px]">IP</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    copyToClipboard(thisDevice.mac, `mac-${thisDevice.id}`);
-                  }}
-                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
-                  title="Copy MAC Address"
-                >
-                  {copiedId === `mac-${thisDevice.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                  <span className="text-[10px]">MAC</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Separator / Count indicator */}
         <div className="flex items-center justify-between px-1 pt-1 text-[11px] text-gray-500">
@@ -473,6 +642,10 @@ export default function LanScannerPanel({
             const customName = nicknames[dev.mac] || nicknames[dev.ip];
             const devTitle = customName || dev.hostname || dev.friendlyName || dev.vendor || dev.ip;
             const isEditing = editingKey === dev.mac || editingKey === dev.ip;
+            const devMed = getEffectiveMedium(dev);
+            const devParentIp = getEffectiveParentIp(dev);
+            const devParent = apHubs.find(h => h.ip === devParentIp);
+            const devParentName = devParent?.name || (devParentIp ? `Nod ${devParentIp}` : 'Router');
 
             return (
               <div
@@ -497,8 +670,33 @@ export default function LanScannerPanel({
                       <IconComponent size={15} />
                     </div>
                     <div className="truncate">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-bold text-xs text-white font-mono">{dev.ip}</span>
+                        {dev.isMeshNode && (
+                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-indigo-950/90 border border-indigo-500/40 text-indigo-300">
+                            DECO MESH
+                          </span>
+                        )}
+                        {devMed === 'cable' && (
+                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-emerald-950/80 border border-emerald-500/40 text-emerald-300">
+                            🔌 Kabel
+                          </span>
+                        )}
+                        {devMed === 'wifi_5g' && (
+                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-sky-950/80 border border-sky-500/40 text-sky-300">
+                            📶 5 GHz
+                          </span>
+                        )}
+                        {devMed === 'wifi_24g' && (
+                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-amber-950/80 border border-amber-500/40 text-amber-300">
+                            📶 2,4 GHz
+                          </span>
+                        )}
+                        {!dev.isMeshNode && devParentName && (
+                          <span className="px-1.5 py-0.2 rounded text-[8px] font-mono bg-gray-950 border border-gray-800 text-gray-400" title={`Kopplad till ${devParentName}`}>
+                            ➔ {devParentName}
+                          </span>
+                        )}
                         {dev.isRandomized && (
                           <span className="px-1 py-0.2 rounded text-[8px] bg-purple-950/80 border border-purple-500/40 text-purple-300" title="Private MAC (Apple / Android privacy feature)">
                             PRIVATE MAC
@@ -584,6 +782,55 @@ export default function LanScannerPanel({
                     </div>
                   </div>
                 </div>
+
+                {/* Uplink & Medium controls when selected */}
+                {isSelected && !dev.isGateway && (
+                  <div className="mt-2 pt-2 border-t border-amber-900/50 flex flex-wrap items-center justify-between gap-1.5 text-[10px]" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1">
+                      <span className="text-gray-400">Kopplad till:</span>
+                      <select
+                        value={devParentIp || ''}
+                        onChange={(e) => updateDeviceLink(dev, e.target.value, undefined)}
+                        className="bg-gray-950 border border-gray-700 hover:border-amber-500 rounded px-1.5 py-0.5 text-[10px] text-amber-300 font-mono focus:outline-none cursor-pointer"
+                      >
+                        {apHubs.map(hub => (
+                          <option key={hub.ip} value={hub.ip}>
+                            {hub.isGateway ? `🌐 ${hub.name} (${hub.ip})` : `📡 ${hub.name}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-1 bg-gray-950 p-0.5 rounded border border-gray-800">
+                      <button
+                        type="button"
+                        onClick={() => updateDeviceLink(dev, undefined, 'cable')}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                          devMed === 'cable' ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        🔌 Kabel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateDeviceLink(dev, undefined, 'wifi_5g')}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                          devMed === 'wifi_5g' ? 'bg-sky-600 text-white' : 'text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        📶 5G
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateDeviceLink(dev, undefined, 'wifi_24g')}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                          devMed === 'wifi_24g' ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        📶 2.4G
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Bottom Action strip */}
                 <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
