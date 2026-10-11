@@ -23,10 +23,10 @@ const OUI_DATABASE = {
   '34159e': 'Apple', '34363b': 'Apple', '38ca84': 'Apple', '3c0754': 'Apple', '3c15c2': 'Apple',
   '3cd0f8': 'Apple', '404d7f': 'Apple', '406c8f': 'Apple', '40a6d9': 'Apple', '442a60': 'Apple',
   '48437c': 'Apple', '4c57ca': 'Apple', '50ea9c': 'Apple', '542696': 'Apple', '5855ca': 'Apple',
-  '5c879c': 'Apple', '600308': 'Apple', '64bb1e': 'Apple (TV / Device)', '68a86d': 'Apple', '6c4008': 'Apple',
+  '5c879c': 'Apple', '600308': 'Apple', '68a86d': 'Apple', '6c4008': 'Apple',
   '701124': 'Apple', '748114': 'Apple', '784f43': 'Apple', '7cd1c3': 'Apple', '804971': 'Apple',
   '843835': 'Apple', '88665a': 'Apple', '8c8590': 'Apple', '907240': 'Apple', '949426': 'Apple',
-  '9801a7': 'Apple', '9cb1dc': 'Apple (TV / Device)', 'a45e60': 'Apple', 'a808cf': 'Apple (TV / Device)',
+  '9801a7': 'Apple', 'a45e60': 'Apple', '4ccd86': 'Apple (iPhone / iPad)', '4ccdb6': 'Apple (iPhone / iPad)',
   'acbc32': 'Apple', 'b065bd': 'Apple', 'b418d1': 'Apple', 'b8e856': 'Apple', 'bc52b7': 'Apple',
   'c09a42': 'Apple', 'c4b301': 'Apple', 'c869cd': 'Apple', 'cc29f5': 'Apple', 'd023db': 'Apple',
   'd4619d': 'Apple', 'd8004d': 'Apple', 'dc2b61': 'Apple', 'e0b55f': 'Apple', 'e4e4ab': 'Apple',
@@ -34,9 +34,13 @@ const OUI_DATABASE = {
 
   // Google / Nest
   '001a11': 'Google', '089e08': 'Google', '18d6c7': 'Google', '20dfb9': 'Google', '30fd38': 'Google',
-  '3cf7a4': 'Google', '48d6d5': 'Google', '4ccd86': 'Google', '4ccdb6': 'Google (Nest / Smart Device)',
-  '546009': 'Google', '641666': 'Google', '70ee50': 'Google', '94ebcd': 'Google', 'a47733': 'Google',
-  'b827eb': 'Google', 'd86c63': 'Google', 'e03f49': 'Google', 'f40343': 'Google', 'f88f12': 'Google',
+  '3cf7a4': 'Google', '48d6d5': 'Google', '546009': 'Google', '641666': 'Google', '70ee50': 'Google',
+  '94ebcd': 'Google', 'a47733': 'Google', 'b827eb': 'Google', 'd86c63': 'Google', 'e03f49': 'Google',
+  'f40343': 'Google', 'f88f12': 'Google',
+
+  // Smart TVs & Display Modules (Vestel, Earda Technologies, TCL, etc.)
+  'a808cf': 'Vestel (Smart TV)', '001a2b': 'Vestel (Smart TV)', '2827bf': 'Vestel (Smart TV)', 'bc1485': 'Vestel (Smart TV)',
+  '64bb1e': 'Earda Technologies (Smart TV)', '9cb1dc': 'Earda Technologies (Smart TV)',
 
   // Samsung
   '0007ab': 'Samsung', '001247': 'Samsung', '001599': 'Samsung', '0016db': 'Samsung', '001a80': 'Samsung',
@@ -187,7 +191,7 @@ function guessDeviceType({ vendor, isGateway, isThisDevice, hostname }) {
   if (v.includes('oven') || v.includes('appliance') || h.includes('oven') || h.includes('ugn')) return 'iot';
   if (v.includes('printer') || h.includes('skrivare') || h.includes('printer')) return 'printer';
   if (v.includes('mesh') || v.includes('deco') || h.includes('deco')) return 'mesh_node';
-  if (v.includes('tv') || h.includes('tv') || h.includes('chromecast')) return 'tv';
+  if (v.includes('tv') || v.includes('vestel') || v.includes('earda') || h.includes('tv') || h.includes('chromecast')) return 'tv';
   if (v.includes('playstation') || v.includes('sony') || v.includes('xbox') || v.includes('nintendo') || h.includes('playstation') || h.includes('xbox')) return 'console';
   if (v.includes('espressif') || v.includes('philips') || v.includes('iot') || v.includes('hue') || v.includes('sonos') || v.includes('nest') || v.includes('amazon') || h.includes('iot')) return 'iot';
   if (v.includes('tp-link') || v.includes('netgear') || v.includes('asus') || v.includes('cisco') || v.includes('ubiquiti') || v.includes('linksys')) return 'network';
