@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { X, Terminal, Copy, Check, RefreshCw, Server, Search, Globe, FileText, ArrowRight, CornerDownLeft, Layers, ExternalLink } from 'lucide-react';
+import { X, Terminal, Copy, Check, RefreshCw, Server, Search, Globe, FileText, ArrowRight, CornerDownLeft, Layers, ExternalLink, ChevronDown, ChevronUp, Info } from 'lucide-react';
 
 const DNS_SERVERS = [
   { label: 'System Default', value: '' },
@@ -51,13 +51,192 @@ function formatTtl(ttl) {
   const seconds = val % 60;
 
   if (hours > 0) {
-    if (minutes === 0 && seconds === 0) return `${hours} tim`;
+    if (minutes === 0 && seconds === 0) return `${hours}h`;
     if (seconds === 0) return `${hours}h ${minutes}m`;
-    return `${hours}h ${minutes}m`;
+    return `${hours}h ${minutes}m ${seconds}s`;
   }
 
-  if (seconds === 0) return `${minutes} min`;
+  if (seconds === 0) return `${minutes}m`;
   return `${minutes}m ${seconds}s`;
+}
+
+// Convert DNS RNAME dot-notation email (e.g. "dns.cloudflare.com" or "hostmaster.example.com") to standard email ("dns@cloudflare.com")
+function formatDnsEmail(rname) {
+  if (!rname) return '--';
+  let clean = rname.replace(/\.$/, '');
+  if (clean.includes('\\.')) {
+    const parts = clean.split(/(?<!\\)\./);
+    if (parts.length > 1) {
+      const mailbox = parts[0].replace(/\\\./g, '.');
+      const domain = parts.slice(1).join('.');
+      return `${mailbox}@${domain}`;
+    }
+  }
+  const firstDot = clean.indexOf('.');
+  if (firstDot > 0) {
+    return `${clean.slice(0, firstDot)}@${clean.slice(firstDot + 1)}`;
+  }
+  return clean;
+}
+
+// Parse SOA record from structured object or raw RFC 1035 string
+function parseSoa(dataStr, soaObj) {
+  if (soaObj && typeof soaObj === 'object') {
+    return {
+      primaryNs: soaObj.primaryNs || '--',
+      hostmaster: soaObj.hostmaster || '--',
+      serial: soaObj.serial ?? '--',
+      refresh: soaObj.refresh ?? '--',
+      retry: soaObj.retry ?? '--',
+      expire: soaObj.expire ?? '--',
+      minttl: soaObj.minttl ?? '--'
+    };
+  }
+
+  if (!dataStr || typeof dataStr !== 'string') return null;
+  const parts = dataStr.trim().split(/\s+/);
+  if (parts.length >= 7) {
+    return {
+      primaryNs: parts[0],
+      hostmaster: parts[1],
+      serial: Number(parts[2]) || parts[2],
+      refresh: Number(parts[3]),
+      retry: Number(parts[4]),
+      expire: Number(parts[5]),
+      minttl: Number(parts[6])
+    };
+  }
+  return null;
+}
+
+function SoaDetailsCard({ soa, onCopy, copiedId, rowId }) {
+  if (!soa) return null;
+
+  const email = formatDnsEmail(soa.hostmaster);
+  const fields = [
+    {
+      label: 'Start of authority',
+      code: 'MNAME',
+      desc: 'Primär namnserver med zonens auktoritativa master-kopia',
+      value: soa.primaryNs,
+      rawValue: soa.primaryNs,
+      copyable: true
+    },
+    {
+      label: 'Email',
+      code: 'RNAME',
+      desc: 'Zonadministratörens e-postadress (ansvarig för DNS-zonsfilen)',
+      value: email,
+      rawValue: email,
+      copyable: true,
+      isEmail: true
+    },
+    {
+      label: 'Serial',
+      code: 'SERIAL',
+      desc: 'Zonens versionsnummer (ökas vid varje ändring så sekundära servrar vet att de ska synka)',
+      value: typeof soa.serial === 'number' ? soa.serial.toLocaleString() : soa.serial,
+      rawValue: String(soa.serial),
+      copyable: true
+    },
+    {
+      label: 'Refresh',
+      code: 'REFRESH',
+      desc: 'Hur ofta sekundära namnservrar frågar den primära servern efter uppdateringar',
+      value: formatTtl(soa.refresh),
+      extra: typeof soa.refresh === 'number' ? `(${soa.refresh.toLocaleString()} s)` : null
+    },
+    {
+      label: 'Retry',
+      code: 'RETRY',
+      desc: 'Väntetid innan återförsök om primär server inte svarar vid uppdateringsförsök',
+      value: formatTtl(soa.retry),
+      extra: typeof soa.retry === 'number' ? `(${soa.retry.toLocaleString()} s)` : null
+    },
+    {
+      label: 'Expire',
+      code: 'EXPIRE',
+      desc: 'Hur länge sekundära servrar fortsätter svara om primär server slutar svara helt',
+      value: formatTtl(soa.expire),
+      extra: typeof soa.expire === 'number' ? `(${Math.round(soa.expire / 86400)} dagar / ${soa.expire.toLocaleString()} s)` : null
+    },
+    {
+      label: 'Negative cache TTL',
+      code: 'MINIMUM',
+      desc: 'Hur länge negativa DNS-svar (t.ex. NXDOMAIN för namn som inte finns) får sparas i cachen',
+      value: formatTtl(soa.minttl),
+      extra: typeof soa.minttl === 'number' ? `(${soa.minttl.toLocaleString()} s)` : null
+    }
+  ];
+
+  return (
+    <div className="mt-2 mb-3 mx-3 p-3.5 rounded-xl bg-gray-900/95 border border-indigo-500/30 shadow-lg shadow-black/50 text-xs font-sans">
+      <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-gray-800">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+          <span className="font-semibold text-gray-200">Start of Authority (SOA) — Detaljerad översikt</span>
+        </div>
+        <span className="text-[10px] text-gray-500 font-mono">RFC 1035 specifikation</span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {fields.map((f, i) => {
+          const fieldCopyId = `${rowId}-${f.code}`;
+          return (
+            <div 
+              key={i} 
+              className={`p-2.5 rounded-lg bg-gray-950/80 border border-gray-800 flex flex-col justify-between ${
+                i === 0 || i === 1 ? 'md:col-span-2' : ''
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-gray-200 font-semibold text-xs">{f.label}</span>
+                    <span className="text-[10px] font-mono font-bold text-indigo-400 bg-indigo-950/70 border border-indigo-500/30 px-1.5 py-0.5 rounded">
+                      {f.code}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-400 leading-snug mt-0.5 font-sans">
+                    {f.desc}
+                  </div>
+                </div>
+                {f.copyable && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCopy(f.rawValue, fieldCopyId);
+                    }}
+                    className="text-gray-500 hover:text-sky-400 p-1 rounded transition-colors cursor-pointer shrink-0"
+                    title={`Kopiera ${f.label}`}
+                  >
+                    {copiedId === fieldCopyId ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                  </button>
+                )}
+              </div>
+              <div className="flex items-baseline gap-2 mt-1.5 pt-1.5 border-t border-gray-900 font-mono">
+                <span className="text-white font-medium text-xs break-all">
+                  {f.isEmail ? (
+                    <a href={`mailto:${f.rawValue}`} className="text-sky-400 hover:underline">
+                      {f.value}
+                    </a>
+                  ) : (
+                    f.value
+                  )}
+                </span>
+                {f.extra && (
+                  <span className="text-[11px] text-gray-500 font-normal">
+                    {f.extra}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
@@ -70,6 +249,7 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
   const [viewMode, setViewMode] = useState('visual'); // 'visual' | 'raw'
   const [copiedRaw, setCopiedRaw] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
+  const [collapsedSoa, setCollapsedSoa] = useState({});
 
   // Generate quick target pills (IP, Hostname, Subdomains, Base Domain, Trace Destination)
   const quickTargets = useMemo(() => {
@@ -535,53 +715,89 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
                   <div className="divide-y divide-gray-800/60">
                     {data.answers.map((rec, idx) => {
                       const rowId = `rec-${idx}`;
+                      const isSoa = rec.type === 'SOA';
+                      const soaInfo = isSoa ? parseSoa(rec.data, rec.soa) : null;
+                      const isCollapsed = Boolean(collapsedSoa[rowId]);
+
                       return (
-                        <div 
-                          key={idx} 
-                          className="grid grid-cols-12 px-4 py-2.5 hover:bg-gray-900/50 transition-colors items-center text-xs group"
-                        >
-                          <div className="col-span-4 text-gray-300 truncate pr-2 font-mono" title={rec.name}>
-                            {rec.name}
-                          </div>
-                          <div className="col-span-2 text-center">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
-                              rec.type === 'A' || rec.type === 'AAAA'
-                                ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-400'
-                                : rec.type === 'PTR'
-                                ? 'bg-sky-950/80 border-sky-500/40 text-sky-400'
-                                : rec.type === 'MX'
-                                ? 'bg-purple-950/80 border-purple-500/40 text-purple-400'
-                                : rec.type === 'TXT'
-                                ? 'bg-amber-950/80 border-amber-500/40 text-amber-400'
-                                : rec.type === 'NS' || rec.type === 'SOA'
-                                ? 'bg-indigo-950/80 border-indigo-500/40 text-indigo-400'
-                                : 'bg-gray-900 border-gray-800 text-gray-400'
-                            }`}>
-                              {rec.type}
-                            </span>
-                          </div>
+                        <div key={idx} className="flex flex-col">
                           <div 
-                            className="col-span-2 text-center text-gray-400 font-mono"
-                            title={rec.ttl !== undefined ? `${Number(rec.ttl).toLocaleString()} sekunder` : undefined}
+                            className="grid grid-cols-12 px-4 py-2.5 hover:bg-gray-900/50 transition-colors items-center text-xs group"
                           >
-                            <span className="text-gray-300 font-medium">{formatTtl(rec.ttl)}</span>
-                          </div>
-                          <div className="col-span-4 flex items-center justify-between text-gray-200 font-mono overflow-hidden">
-                            <span className="truncate pr-2" title={rec.data}>
-                              {rec.priority !== undefined && (
-                                <span className="text-purple-400 font-bold mr-1">[{rec.priority}]</span>
-                              )}
-                              {rec.data}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyField(rec.data, rowId)}
-                              className="text-gray-500 hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded shrink-0 cursor-pointer"
-                              title="Copy record value"
+                            <div className="col-span-4 text-gray-300 truncate pr-2 font-mono" title={rec.name}>
+                              {rec.name}
+                            </div>
+                            <div className="col-span-2 text-center">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                                rec.type === 'A' || rec.type === 'AAAA'
+                                  ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-400'
+                                  : rec.type === 'PTR'
+                                  ? 'bg-sky-950/80 border-sky-500/40 text-sky-400'
+                                  : rec.type === 'MX'
+                                  ? 'bg-purple-950/80 border-purple-500/40 text-purple-400'
+                                  : rec.type === 'TXT'
+                                  ? 'bg-amber-950/80 border-amber-500/40 text-amber-400'
+                                  : rec.type === 'NS' || rec.type === 'SOA'
+                                  ? 'bg-indigo-950/80 border-indigo-500/40 text-indigo-400'
+                                  : 'bg-gray-900 border-gray-800 text-gray-400'
+                              }`}>
+                                {rec.type}
+                              </span>
+                            </div>
+                            <div 
+                              className="col-span-2 text-center text-gray-400 font-mono"
+                              title={rec.ttl !== undefined ? `${Number(rec.ttl).toLocaleString()} sekunder` : undefined}
                             >
-                              {copiedField === rowId ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-                            </button>
+                              <span className="text-gray-300 font-medium">{formatTtl(rec.ttl)}</span>
+                            </div>
+                            <div className="col-span-4 flex items-center justify-between text-gray-200 font-mono overflow-hidden">
+                              <span className="truncate pr-2" title={rec.data}>
+                                {rec.priority !== undefined && (
+                                  <span className="text-purple-400 font-bold mr-1">[{rec.priority}]</span>
+                                )}
+                                {isSoa && soaInfo ? (
+                                  <span>
+                                    <span className="text-indigo-300">{soaInfo.primaryNs}</span>
+                                    <span className="text-gray-500 mx-1">•</span>
+                                    <span className="text-gray-400">{formatDnsEmail(soaInfo.hostmaster)}</span>
+                                  </span>
+                                ) : (
+                                  rec.data
+                                )}
+                              </span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {isSoa && soaInfo && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setCollapsedSoa(prev => ({ ...prev, [rowId]: !prev[rowId] }))}
+                                    className="text-indigo-400 hover:text-indigo-300 bg-indigo-950/70 hover:bg-indigo-900/70 border border-indigo-500/40 px-2 py-0.5 rounded text-[10px] font-sans flex items-center gap-1 transition cursor-pointer"
+                                    title={isCollapsed ? 'Visa detaljerad SOA-översikt' : 'Dölj SOA-översikt'}
+                                  >
+                                    <span>{isCollapsed ? 'Visa SOA' : 'Dölj'}</span>
+                                    {isCollapsed ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyField(rec.data, rowId)}
+                                  className="text-gray-500 hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded shrink-0 cursor-pointer"
+                                  title="Copy record value"
+                                >
+                                  {copiedField === rowId ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                                </button>
+                              </div>
+                            </div>
                           </div>
+
+                          {/* Expandable SOA Details Card */}
+                          {isSoa && soaInfo && !isCollapsed && (
+                            <SoaDetailsCard
+                              soa={soaInfo}
+                              rowId={rowId}
+                              onCopy={handleCopyField}
+                              copiedId={copiedField}
+                            />
+                          )}
                         </div>
                       );
                     })}

@@ -142,7 +142,16 @@ async function performDig({ target, type, server }) {
                             name: cleanTarget,
                             type: 'SOA',
                             ttl: soa.minttl || 300,
-                            data: `${soa.nsname} ${soa.hostmaster} ${soa.serial} ${soa.refresh} ${soa.retry} ${soa.expire} ${soa.minttl}`
+                            data: `${soa.nsname} ${soa.hostmaster} ${soa.serial} ${soa.refresh} ${soa.retry} ${soa.expire} ${soa.minttl}`,
+                            soa: {
+                                primaryNs: soa.nsname,
+                                hostmaster: soa.hostmaster,
+                                serial: soa.serial,
+                                refresh: soa.refresh,
+                                retry: soa.retry,
+                                expire: soa.expire,
+                                minttl: soa.minttl
+                            }
                         });
                     }
                 } catch (e) {
