@@ -488,16 +488,11 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5 pb-2 border-b border-gray-900">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-gray-200 flex items-center gap-1.5">
-                <Globe size={14} className="text-indigo-400" /> Täckta domäner & underdomäner (SANs)
+                <Globe size={14} className="text-indigo-400" /> Täckta domäner (SANs — Subject Alternative Names)
               </span>
               <span className="px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-500/30 text-[10px] font-mono font-bold text-indigo-300">
                 {allSans.length} st domäner
               </span>
-              {sslData.ctSans && sslData.ctSans.length > 0 && (
-                <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-emerald-950/60 border border-emerald-500/30 text-emerald-400" title="Utökad med Certificate Transparency (CT)-loggar">
-                  CT-loggar aktiva
-                </span>
-              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -547,7 +542,6 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
                 const cleanName = name.replace(/^\*\./, '');
                 const isCurrent = cleanName.toLowerCase() === target.trim().toLowerCase() || name.toLowerCase() === target.trim().toLowerCase();
                 const isWildcard = name.startsWith('*.');
-                const isCtOnly = sslData.ctSans && sslData.ctSans.includes(name) && (!sslData.directSans || !sslData.directSans.includes(name));
 
                 return (
                   <button
@@ -561,7 +555,7 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
                         ? 'bg-gray-900/90 border-purple-500/30 text-purple-300 hover:border-purple-400 hover:bg-purple-950/40'
                         : 'bg-gray-900 border-gray-800 text-gray-300 hover:border-indigo-500/50 hover:bg-indigo-950/30 hover:text-white'
                     }`}
-                    title={`Klicka för att inspektera SSL för ${cleanName}${isCtOnly ? ' (hittad via CT-logg)' : ''}`}
+                    title={`Klicka för att kontrollera SSL för ${cleanName}`}
                   >
                     <span>{name}</span>
                     {isCurrent && (
@@ -578,7 +572,7 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
           </div>
 
           <div className="mt-2 pt-2 border-t border-gray-900/80 flex items-center justify-between text-[10px] text-gray-500 font-sans">
-            <span>Tips: Klicka på valfritt domännamn för att kontrollera dess SSL-certifikat direkt.</span>
+            <span>Visar alternativa namn (SANs) som certifikatet skyddar. Klicka på ett namn för att inspektera det.</span>
             {filteredSans.length !== allSans.length && (
               <span>Visar {filteredSans.length} av {allSans.length}</span>
             )}

@@ -1,80 +1,6 @@
 const tls = require('tls');
 const net = require('net');
 
-function getApexDomain(hostname) {
-    if (!hostname || net.isIP(hostname)) return hostname;
-    const parts = hostname.trim().toLowerCase().split('.');
-    if (parts.length <= 2) return hostname;
-    const secondLevelTlds = ['co.uk', 'com.se', 'org.uk', 'gov.uk', 'ac.uk', 'com.au', 'net.au'];
-    const lastTwo = parts.slice(-2).join('.');
-    if (secondLevelTlds.includes(lastTwo) && parts.length >= 3) {
-        return parts.slice(-3).join('.');
-    }
-    return parts.slice(-2).join('.');
-}
-
-async function fetchCertificateTransparencySans(targetDomain) {
-    if (!targetDomain || net.isIP(targetDomain)) return [];
-    const names = new Set();
-    const clean = targetDomain.trim().toLowerCase();
-    const apex = getApexDomain(clean);
-
-    const domainsToQuery = Array.from(new Set([clean, apex]));
-
-    for (const d of domainsToQuery) {
-        // 1. Try CertSpotter (Fast, comprehensive CT API)
-        try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 2500);
-            const res = await fetch(`https://api.certspotter.com/v1/issuances?domain=${encodeURIComponent(d)}&include_subdomains=true&expand=dns_names`, {
-                signal: controller.signal
-            });
-            clearTimeout(timeout);
-            if (res.ok) {
-                const data = await res.json();
-                if (Array.isArray(data)) {
-                    data.forEach(item => {
-                        (item.dns_names || []).forEach(n => {
-                            if (typeof n === 'string') names.add(n.trim().toLowerCase());
-                        });
-                    });
-                }
-            }
-        } catch {
-            // timeout or network issue
-        }
-
-        // 2. Fallback to crt.sh if needed
-        if (names.size <= 2) {
-            try {
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 3000);
-                const res = await fetch(`https://crt.sh/?q=${encodeURIComponent(d)}&output=json`, {
-                    signal: controller.signal
-                });
-                clearTimeout(timeout);
-                if (res.ok) {
-                    const certs = await res.json();
-                    if (Array.isArray(certs)) {
-                        certs.forEach(c => {
-                            if (c.name_value) {
-                                c.name_value.split('\n').forEach(n => {
-                                    const cleaned = n.trim().toLowerCase();
-                                    if (cleaned) names.add(cleaned);
-                                });
-                            }
-                        });
-                    }
-                }
-            } catch {
-                // timeout or network issue
-            }
-        }
-    }
-
-    return Array.from(names);
-}
-
 function checkSsl(target, port = 443, timeoutMs = 5000) {
     return new Promise((resolve) => {
         const startTime = Date.now();
@@ -90,9 +16,6 @@ function checkSsl(target, port = 443, timeoutMs = 5000) {
         const targetPort = parseInt(port, 10) || 443;
         const isIp = net.isIP(cleanTarget) !== 0;
 
-        // Start CT log search in parallel with TLS connection
-        const ctPromise = isIp ? Promise.resolve([]) : fetchCertificateTransparencySans(cleanTarget);
-
         const options = {
             port: targetPort,
             host: cleanTarget,
@@ -102,7 +25,7 @@ function checkSsl(target, port = 443, timeoutMs = 5000) {
         };
 
         let timer;
-        const socket = tls.connect(options, async () => {
+        const socket = tls.connect(options, () => {
             clearTimeout(timer);
             const duration = Date.now() - startTime;
             const cert = socket.getPeerCertificate(true);
@@ -148,29 +71,19 @@ function checkSsl(target, port = 443, timeoutMs = 5000) {
                 curr = curr.issuerCertificate;
             }
 
-            // Extract Direct Active Cert SANs
-            let directSans = [];
+            // Extract Active Cert SANs (Subject Alternative Names)
+            let sans = [];
             if (cert.subjectaltname) {
-                directSans = cert.subjectaltname
+                sans = cert.subjectaltname
                     .split(',')
                     .map(s => s.trim().replace(/^DNS:|^IP Address:/i, ''))
                     .filter(Boolean);
             } else if (cert.subject?.CN) {
-                directSans = [cert.subject.CN];
+                sans = [cert.subject.CN];
             }
 
-            // Await CT logs results
-            let ctSans = [];
-            try {
-                ctSans = await ctPromise;
-            } catch {
-                ctSans = [];
-            }
-
-            // Merge direct SANs and CT log SANs
-            const allSansSet = new Set([...directSans, ...ctSans]);
-            const allSans = Array.from(allSansSet).sort((a, b) => {
-                // Keep apex and wildcard at the top, rest alphabetical
+            // Sort SANs: queried target first, wildcards next, then alphabetical
+            sans.sort((a, b) => {
                 if (a === cleanTarget) return -1;
                 if (b === cleanTarget) return 1;
                 if (a.startsWith('*.')) return -1;
@@ -217,9 +130,7 @@ function checkSsl(target, port = 443, timeoutMs = 5000) {
                 daysRemaining,
                 isExpired,
                 isExpiringSoon,
-                sans: allSans,
-                directSans,
-                ctSans,
+                sans,
                 fingerprint: cert.fingerprint || null,
                 fingerprint256: cert.fingerprint256 || null,
                 serialNumber: cert.serialNumber || null,
