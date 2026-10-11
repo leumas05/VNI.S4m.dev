@@ -29,14 +29,6 @@ export default function Sidebar({
   setSelectedRadarConn,
   hideSelfConnections,
   onToggleHideSelf,
-  isRecordingRadar,
-  onStartRecordingRadar,
-  onStopRecordingRadar,
-  onClearRecordingRadar,
-  onExportRecordingRadar,
-  recordingElapsed,
-  radarViewTab,
-  onSetRadarViewTab
 }) {
   const [input, setInput] = useState('');
   const [showHistory, setShowHistory] = useState(false);
@@ -53,7 +45,7 @@ export default function Sidebar({
   const totalHops = hops.length;
   const droppedHops = hops.filter(h => h.dropped).length;
   const packetLoss = totalHops > 0 ? Math.round((droppedHops / totalHops) * 100) : 0;
-  
+
   const getHopLatency = (hop) => {
       if (!hop || hop.dropped || !hop.rtt || hop.rtt.length === 0) return null;
       const valid = hop.rtt.filter(v => v !== '*');
@@ -104,7 +96,7 @@ export default function Sidebar({
         </a>
         <div className="flex gap-2">
             {myLocation && (
-                <button 
+                <button
                    onClick={() => setShowMyInfo(!showMyInfo)}
                    className="text-gray-400 text-xs flex items-center bg-gray-800 px-3 py-1.5 hover:text-emerald-400 hover:border-emerald-500 rounded border border-gray-700 font-mono transition-colors"
                    title="View my IP details"
@@ -112,7 +104,7 @@ export default function Sidebar({
                    IP: {myLocation.query}
                 </button>
             )}
-            <button 
+            <button
                onClick={() => setShowHistory(!showHistory)}
                className="text-gray-400 hover:text-white transition flex items-center gap-1 text-sm bg-gray-800 px-3 py-1.5 rounded border border-gray-700"
             >
@@ -129,7 +121,7 @@ export default function Sidebar({
                     <X size={14} />
                  </button>
              </div>
-             <HopCard 
+             <HopCard
                 hop={{
                    hop: 'Me',
                    ip: myLocation.query,
@@ -202,28 +194,20 @@ export default function Sidebar({
           onDig={onDig}
           hideSelfConnections={hideSelfConnections}
           onToggleHideSelf={onToggleHideSelf}
-          isRecording={isRecordingRadar}
-          onStartRecording={onStartRecordingRadar}
-          onStopRecording={onStopRecordingRadar}
-          onClearRecording={onClearRecordingRadar}
-          onExportRecording={onExportRecordingRadar}
-          recordingElapsed={recordingElapsed}
-          radarViewTab={radarViewTab}
-          onSetRadarViewTab={onSetRadarViewTab}
         />
       ) : (
         <>
           <form onSubmit={onSubmit} className="flex gap-2 mb-4">
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Domain or IP (e.g. s4m.dev)"
               className="flex-1 bg-gray-800 border border-gray-700 rounded px-4 py-2 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
               disabled={tracing}
             />
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={tracing || !input}
               className={`px-4 py-2 rounded font-semibold flex items-center gap-2 transition-all ${tracing ? 'bg-gray-700 text-gray-500' : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.5)]'}`}
             >
@@ -263,8 +247,8 @@ export default function Sidebar({
                 <p className="text-[10px] text-gray-400 uppercase">Packet Loss</p>
                 <p className={`text-lg font-mono leading-none mt-1 ${packetLoss > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{packetLoss}%</p>
              </div>
-             <button 
-                 className={`w-full bg-gray-800 p-2.5 rounded border border-gray-700 flex items-center justify-center transition ${tracing || hops.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-gray-700'}`} 
+             <button
+                 className={`w-full bg-gray-800 p-2.5 rounded border border-gray-700 flex items-center justify-center transition ${tracing || hops.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-gray-700'}`}
                  onClick={tracing || hops.length === 0 ? undefined : exportData}
                  disabled={tracing || hops.length === 0}
              >
@@ -277,9 +261,9 @@ export default function Sidebar({
              {hops.map((hop, idx) => {
                  const pastHop = compareHops.find(h => h.hop === hop.hop);
                  return (
-                     <HopCard 
-                       key={idx} 
-                       hop={hop} 
+                     <HopCard
+                       key={idx}
+                       hop={hop}
                        pastHop={pastHop}
                        compareMode={compareMode}
                        isSelected={selectedHop && selectedHop.hop === hop.hop}
@@ -314,3 +298,4 @@ export default function Sidebar({
     </div>
   );
 }
+

@@ -23,7 +23,7 @@ function ZoomTracker({ setZoomLevel }) {
 function MapBounds({ positions, myLocation }) {
   const map = useMap();
   const positionsHash = JSON.stringify(positions);
-  
+
   useEffect(() => {
     if (positions.length > 0) {
       const bounds = L.latLngBounds(positions);
@@ -36,23 +36,17 @@ function MapBounds({ positions, myLocation }) {
   return null;
 }
 
-function formatTimer(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
 function getCurvedPoints(p1, p2, offsetMultiplier) {
     const [lat1, lon1] = p1;
     const [lat2, lon2] = p2;
-    
+
     if (lat1 === lat2 && lon1 === lon2) {
         const loopPoints = [];
         const steps = 32;
         const radius = 0.2 + (offsetMultiplier * 0.8);
         const centerLat = lat1 + radius;
         const centerLon = lon1;
-        
+
         for (let i = 0; i <= steps; i++) {
             const angle = (i / steps) * Math.PI * 2;
             const a = angle - (Math.PI / 2);
@@ -68,20 +62,20 @@ function getCurvedPoints(p1, p2, offsetMultiplier) {
     const dLon = lon2 - lon1;
     const midLon = (lon1 + lon2) / 2;
     const dLat = lat2 - lat1;
-    
+
     const length = Math.sqrt(dLat*dLat + dLon*dLon);
-    
+
     const perpLat = -dLon / length;
     const perpLon = dLat / length;
-    
+
     const curveDepth = length * offsetMultiplier;
-    
+
     const ctrlLat = midLat + perpLat * curveDepth;
     const ctrlLon = midLon + perpLon * curveDepth;
-    
+
     const points = [];
     const steps = 32;
-    
+
     for (let i = 0; i <= steps; i++) {
         const t = i / steps;
         const u = 1 - t;
@@ -101,16 +95,14 @@ export default function MapView({
   activeMode = 'traceroute',
   radarData,
   selectedRadarConn,
-  setSelectedRadarConn,
-  isRecordingRadar = false,
-  recordingElapsed = 0
+  setSelectedRadarConn
 }) {
   const [zoomLevel, setZoomLevel] = useState(2);
   const isRadar = activeMode === 'radar';
 
   const validHops = (hops || []).filter(h => h && h.geo && !isNaN(Number(h.geo.lat)) && !isNaN(Number(h.geo.lon)));
   const radarConnections = (radarData?.connections || []).filter(c => c && c.geo && !isNaN(Number(c.geo.lat)) && !isNaN(Number(c.geo.lon)));
-  
+
   let myDisplayLat = myLocation?.lat;
   let myDisplayLon = myLocation?.lon;
 
@@ -128,13 +120,13 @@ export default function MapView({
   for (let i = 0; i < validHops.length; i++) {
       const hop = { ...validHops[i], geo: { ...validHops[i].geo } };
       let lon = hop.geo.lon;
-      
+
       if (prevLon !== null) {
           let dLon = lon - prevLon;
           if (dLon > 180) currentLonOffset -= 360;
           else if (dLon < -180) currentLonOffset += 360;
       }
-      
+
       hop.geo.lon = lon + currentLonOffset;
       prevLon = lon;
       unwrappedHops.push(hop);
@@ -150,39 +142,38 @@ export default function MapView({
   for (let i = 0; i < unwrappedHops.length; i++) {
       const hop = unwrappedHops[i];
       const key = `${hop.geo.lat},${hop.geo.lon}`;
-      
+
       hop.isClustered = originalCoordCounts[key] > 1;
-      
+
       if (hopCoordMap[key] === undefined) {
           hopCoordMap[key] = 0;
       } else {
           hopCoordMap[key]++;
           const count = hopCoordMap[key];
-          const angle = count * 2.4; 
+          const angle = count * 2.4;
           const radius = 0.005 + (count * 0.002);
           hop.geo.lat += Math.sin(angle) * radius;
           hop.geo.lon += Math.cos(angle) * radius;
       }
   }
 
-  const positions = isRadar 
+  const positions = isRadar
     ? radarConnections.map(c => [c.geo.lat, c.geo.lon])
     : unwrappedHops.map(h => [h.geo.lat, h.geo.lon]);
 
   const segments = [];
   const segmentCounts = {};
-  
+
   if (isRadar) {
     if (myDisplayLat && myDisplayLon) {
       radarConnections.forEach((conn) => {
         const isSelected = selectedRadarConn && selectedRadarConn.remoteIp === conn.remoteIp && selectedRadarConn.remotePort === conn.remotePort;
-        const isInactive = conn.isActive === false;
         segments.push({
           points: getCurvedPoints([myDisplayLat, myDisplayLon], [conn.geo.lat, conn.geo.lon], 0.12),
           isSelected,
-          color: isSelected ? '#f59e0b' : (isInactive ? '#64748b' : '#10b981'),
-          weight: isSelected ? 3 : (isInactive ? 1.5 : 2),
-          opacity: isInactive ? 0.35 : (isSelected ? 0.9 : 0.6)
+          color: isSelected ? '#f59e0b' : '#10b981',
+          weight: isSelected ? 3 : 2,
+          opacity: isSelected ? 0.9 : 0.6
         });
       });
     }
@@ -202,7 +193,7 @@ export default function MapView({
             const key = `${p1[0]},${p1[1]}->${p2[0]},${p2[1]}`;
             if (!segmentCounts[key]) segmentCounts[key] = 0;
             segmentCounts[key]++;
-            
+
             const multiplier = segmentCounts[key] * 0.15;
             segments.push({
                 points: getCurvedPoints(p1, p2, multiplier),
@@ -217,7 +208,7 @@ export default function MapView({
       let color = '#10b981';
       let border = '#064e3b';
       let size = 12;
-      
+
       if (isSelected) {
           color = '#f59e0b';
           border = '#78350f';
@@ -237,7 +228,7 @@ export default function MapView({
           color = theme.bg;
           border = theme.border;
       }
-      
+
       return new L.DivIcon({
           className: isSelected ? 'custom-marker-selected' : 'custom-marker',
           html: `<div style="background-color: ${color}; width: ${size}px; height: ${size}px; border-radius: 50%; border: 2px solid ${border}; box-shadow: 0 0 10px ${color};"></div>`,
@@ -248,9 +239,9 @@ export default function MapView({
 
   return (
     <div className="w-full h-full relative bg-gray-900 z-0">
-      <MapContainer 
-        center={[20, 0]} 
-        zoom={2} 
+      <MapContainer
+        center={[20, 0]}
+        zoom={2}
         style={{ height: '100%', width: '100%', background: '#0a0a0a' }}
         zoomControl={false}
       >
@@ -259,15 +250,15 @@ export default function MapView({
           url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
           attribution='Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ'
         />
-        
+
         <MapBounds positions={positions} myLocation={myLocation} />
-        
+
         {segments.map((segment, idx) => {
            return (
-             <Polyline 
+             <Polyline
                key={idx}
-               positions={segment.points} 
-               color={segment.color || '#10b981'} 
+               positions={segment.points}
+               color={segment.color || '#10b981'}
                weight={segment.weight || 2}
                opacity={segment.isSelected ? 0.9 : 0.6}
                dashArray="5, 10"
@@ -275,20 +266,16 @@ export default function MapView({
              />
            );
         })}
-        
+
         {isRadar ? (
           radarConnections.map((conn, idx) => {
             const isSelected = selectedRadarConn && selectedRadarConn.remoteIp === conn.remoteIp && selectedRadarConn.remotePort === conn.remotePort;
-            const isInactive = conn.isActive === false;
             const p = (conn.process || '').toLowerCase();
             let color = '#6366f1';
             let border = '#312e81';
             if (isSelected) {
               color = '#f59e0b';
               border = '#78350f';
-            } else if (isInactive) {
-              color = '#64748b';
-              border = '#334155';
             } else if (p.includes('chrome') || p.includes('edge') || p.includes('firefox') || p.includes('brave')) {
               color = '#10b981';
               border = '#064e3b';
@@ -302,10 +289,10 @@ export default function MapView({
               color = '#f59e0b';
               border = '#78350f';
             }
-            const size = isSelected ? 16 : (isInactive ? 10 : 12);
+            const size = isSelected ? 16 : 12;
             const icon = new L.DivIcon({
               className: isSelected ? 'custom-marker-selected' : 'custom-marker',
-              html: `<div style="background-color: ${color}; width: ${size}px; height: ${size}px; border-radius: 50%; border: 2px solid ${border}; box-shadow: 0 0 ${isInactive ? '3px' : '10px'} ${color}; opacity: ${isInactive ? 0.65 : 1};"></div>`,
+              html: `<div style="background-color: ${color}; width: ${size}px; height: ${size}px; border-radius: 50%; border: 2px solid ${border}; box-shadow: 0 0 10px ${color};"></div>`,
               iconSize: [size, size],
               iconAnchor: [size / 2, size / 2]
             });
@@ -315,14 +302,14 @@ export default function MapView({
                 key={`radar-${conn.remoteIp}-${conn.remotePort}-${idx}`}
                 position={[conn.geo.lat, conn.geo.lon]}
                 icon={icon}
-                zIndexOffset={isSelected ? 500 : (isInactive ? -50 : 0)}
+                zIndexOffset={isSelected ? 500 : 0}
                 eventHandlers={{
                   click: () => setSelectedRadarConn && setSelectedRadarConn(isSelected ? null : conn)
                 }}
               >
                 <Tooltip direction="top" offset={[0, -10]} opacity={1}>
                   <div className="text-gray-900 font-sans text-sm">
-                    <strong>{conn.process || 'Process'} (:{conn.remotePort || ''}){isInactive ? ' [Closed]' : ''}</strong><br/>
+                    <strong>{conn.process || 'Process'} (:{conn.remotePort || ''})</strong><br/>
                     <span className="text-gray-600 text-xs font-mono">{conn.remoteIp}</span><br/>
                     <span className="text-gray-500 text-xs">
                       {conn.geo?.city ? `${conn.geo.city}, ` : ''}{conn.geo?.country} {conn.geo?.isp ? `• ${conn.geo.isp}` : ''}
@@ -336,8 +323,8 @@ export default function MapView({
           unwrappedHops.map((hop) => {
             const isSelected = (selectedHop && selectedHop.hop === hop.hop) || (hoveredHop && hoveredHop.hop === hop.hop);
             return (
-              <Marker 
-                key={hop.hop} 
+              <Marker
+                key={hop.hop}
                 position={[hop.geo.lat, hop.geo.lon]}
                 icon={getIcon(hop.hop, isSelected, zoomLevel >= 10, hop.isClustered)}
                 zIndexOffset={isSelected ? 500 : 0}
@@ -355,9 +342,9 @@ export default function MapView({
             );
           })
         )}
-        
+
         {myDisplayLat && myDisplayLon && (
-             <Marker 
+             <Marker
                position={[myDisplayLat, myDisplayLon]}
                zIndexOffset={1000}
                icon={new L.DivIcon({
@@ -381,22 +368,10 @@ export default function MapView({
       {isRadar && (
         <div className="absolute top-6 left-6 z-[1000] flex flex-col gap-1.5 pointer-events-none select-none">
           <div className="flex items-center gap-2 bg-gray-900/85 border border-emerald-500/40 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto">
-            {(isRecordingRadar || radarData?.isRecording) ? (
-              <div className="flex items-center gap-1.5 text-red-400 font-semibold">
-                <span className="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>
-                <span className="font-bold">REC {formatTimer(recordingElapsed || radarData?.recordingElapsed || 0)}</span>
-              </div>
-            ) : radarData?.isRecordedView ? (
-              <div className="flex items-center gap-1.5 text-amber-400 font-semibold">
-                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                <span className="font-bold">RECORDED</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                <span className="font-bold">LIVE RADAR</span>
-              </div>
-            )}
+            <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+              <span className="font-bold">LIVE RADAR</span>
+            </div>
             <span className="text-gray-600">•</span>
             <div className="flex items-center gap-1.5 text-sky-400 font-semibold" title={myLocation?.city}>
               <span className="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
@@ -404,9 +379,7 @@ export default function MapView({
             </div>
             <span className="text-gray-500 font-bold">➔</span>
             <span className="text-emerald-300 px-1.5 py-0.5 bg-emerald-950/80 border border-emerald-500/30 rounded text-[11px] font-bold">
-              {radarData?.isRecordedView
-                ? `${radarData?.internetCount || 0} recorded (${radarData?.activeCount || 0} active)`
-                : `${radarData?.internetCount || 0} active connections`}
+              {radarData?.internetCount || 0} active connections
             </span>
           </div>
 
@@ -430,10 +403,11 @@ export default function MapView({
           )}
         </div>
       )}
-      
+
       <div className="absolute inset-0 pointer-events-none" style={{
          boxShadow: 'inset 0 0 100px rgba(0,0,0,0.9)'
       }}></div>
     </div>
   );
 }
+

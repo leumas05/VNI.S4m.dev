@@ -16,11 +16,11 @@ const API_BASE = getApiBaseUrl();
 
 function GithubIcon({ size = 18, className = "" }) {
   return (
-    <svg 
-      width={size} 
-      height={size} 
-      viewBox="0 0 24 24" 
-      fill="currentColor" 
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
       className={className}
       aria-hidden="true"
     >
@@ -116,13 +116,6 @@ function App() {
   const [selectedRadarConn, setSelectedRadarConn] = useState(null);
   const [hideSelfConnections, setHideSelfConnections] = useState(() => localStorage.getItem('vni_radar_hide_self') !== 'false');
 
-  // Radar Recording State
-  const [isRecordingRadar, setIsRecordingRadar] = useState(false);
-  const [recordingStartTime, setRecordingStartTime] = useState(null);
-  const [recordingElapsed, setRecordingElapsed] = useState(0);
-  const [recordedConnections, setRecordedConnections] = useState([]);
-  const [radarViewTab, setRadarViewTab] = useState('live'); // 'live' | 'recorded'
-
   const fetchRadarData = useCallback(async () => {
     try {
       setRadarLoading(true);
@@ -146,132 +139,6 @@ function App() {
     return () => clearInterval(interval);
   }, [activeMode, radarAutoRefresh, fetchRadarData]);
 
-  // Recording Timer
-  useEffect(() => {
-    if (!isRecordingRadar || !recordingStartTime) {
-      setRecordingElapsed(0);
-      return;
-    }
-    const timer = setInterval(() => {
-      setRecordingElapsed(Math.floor((Date.now() - recordingStartTime) / 1000));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [isRecordingRadar, recordingStartTime]);
-
-  // Accumulate recorded connections as new polls arrive
-  useEffect(() => {
-    if (!isRecordingRadar || !radarData?.connections) return;
-
-    setRecordedConnections(prevList => {
-      const prevMap = new Map();
-      prevList.forEach(item => {
-        const id = `${item.process}|${item.remoteIp}|${item.remotePort}`;
-        prevMap.set(id, { ...item });
-      });
-
-      const currentIds = new Set();
-      const now = Date.now();
-
-      radarData.connections.forEach(conn => {
-        const id = `${conn.process}|${conn.remoteIp}|${conn.remotePort}`;
-        currentIds.add(id);
-
-        if (prevMap.has(id)) {
-          const existing = prevMap.get(id);
-          existing.lastSeen = now;
-          existing.seenCount = (existing.seenCount || 1) + 1;
-          existing.isActive = true;
-          existing.state = conn.state;
-          if (conn.geo && !existing.geo) existing.geo = conn.geo;
-        } else {
-          prevMap.set(id, {
-            ...conn,
-            firstSeen: now,
-            lastSeen: now,
-            seenCount: 1,
-            isActive: true
-          });
-        }
-      });
-
-      for (const [id, item] of prevMap.entries()) {
-        if (!currentIds.has(id)) {
-          item.isActive = false;
-        }
-      }
-
-      return Array.from(prevMap.values());
-    });
-  }, [radarData, isRecordingRadar]);
-
-  const handleStartRecording = useCallback(() => {
-    const now = Date.now();
-    setIsRecordingRadar(true);
-    setRecordingStartTime(now);
-    setRadarAutoRefresh(true);
-
-    if (radarData?.connections && radarData.connections.length > 0) {
-      setRecordedConnections(prev => {
-        const prevMap = new Map();
-        prev.forEach(item => {
-          const id = `${item.process}|${item.remoteIp}|${item.remotePort}`;
-          prevMap.set(id, { ...item });
-        });
-
-        radarData.connections.forEach(conn => {
-          const id = `${conn.process}|${conn.remoteIp}|${conn.remotePort}`;
-          if (!prevMap.has(id)) {
-            prevMap.set(id, {
-              ...conn,
-              firstSeen: now,
-              lastSeen: now,
-              seenCount: 1,
-              isActive: true
-            });
-          } else {
-            const item = prevMap.get(id);
-            item.isActive = true;
-            item.lastSeen = now;
-          }
-        });
-        return Array.from(prevMap.values());
-      });
-    }
-  }, [radarData]);
-
-  const handleStopRecording = useCallback(() => {
-    setIsRecordingRadar(false);
-  }, []);
-
-  const handleClearRecording = useCallback(() => {
-    setIsRecordingRadar(false);
-    setRecordingStartTime(null);
-    setRecordingElapsed(0);
-    setRecordedConnections([]);
-    setRadarViewTab('live');
-  }, []);
-
-  const handleExportRecording = useCallback(() => {
-    if (recordedConnections.length === 0) return;
-    const session = {
-      startTime: recordingStartTime ? new Date(recordingStartTime).toISOString() : null,
-      endTime: new Date().toISOString(),
-      durationSeconds: recordingElapsed,
-      totalConnections: recordedConnections.length,
-      activeConnections: recordedConnections.filter(c => c.isActive).length,
-      closedConnections: recordedConnections.filter(c => !c.isActive).length,
-      connections: recordedConnections
-    };
-
-    const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `vni-radar-recording-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [recordedConnections, recordingStartTime, recordingElapsed]);
-
   const toggleHideSelfConnections = useCallback(() => {
     setHideSelfConnections(prev => {
       const next = !prev;
@@ -281,13 +148,12 @@ function App() {
   }, []);
 
   const displayRadarData = useMemo(() => {
-    const rawList = radarViewTab === 'recorded' ? recordedConnections : (radarData?.connections || []);
+    const rawList = radarData?.connections || [];
     const filtered = hideSelfConnections ? rawList.filter(c => !c.isSelf) : rawList;
 
     const countryCounts = {};
     const processCounts = {};
     const uniqueIps = new Set();
-    let activeCount = 0;
 
     filtered.forEach(c => {
       if (c.geo?.countryCode) {
@@ -299,9 +165,6 @@ function App() {
       if (c.remoteIp) {
         uniqueIps.add(c.remoteIp);
       }
-      if (c.isActive !== false) {
-        activeCount++;
-      }
     });
 
     const hiddenCount = rawList.length - filtered.length;
@@ -310,18 +173,15 @@ function App() {
       timestamp: radarData?.timestamp || Date.now(),
       totalEstablished: radarData?.totalEstablished || 0,
       internetCount: filtered.length,
-      activeCount,
+      activeCount: filtered.length,
       uniqueIpsCount: uniqueIps.size,
       countryCounts,
       processCounts,
       connections: filtered,
-      hiddenSelfCount: hiddenCount,
-      isRecordedView: radarViewTab === 'recorded',
-      isRecording: isRecordingRadar,
-      totalRecordedCount: recordedConnections.length
+      hiddenSelfCount: hiddenCount
     };
-  }, [radarData, recordedConnections, radarViewTab, hideSelfConnections, isRecordingRadar]);
-  
+  }, [radarData, hideSelfConnections]);
+
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [privacyText, setPrivacyText] = useState('');
   const [userOs, setUserOs] = useState('Windows');
@@ -338,7 +198,7 @@ function App() {
     if (navigator.userAgent.indexOf("Mac") !== -1) setUserOs("Mac");
     else if (navigator.userAgent.indexOf("Linux") !== -1) setUserOs("Linux");
     else setUserOs("Windows");
-    
+
     fetch('https://api.github.com/repos/leumas05/VNI.S4m.dev/releases/latest')
         .then(res => res.json())
         .then(data => {
@@ -360,7 +220,7 @@ function App() {
         })
         .catch(e => console.error("Could not fetch latest release"));
   }, []);
-  
+
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && window.location.hostname === 'vni.s4m.dev';
   const isElectron = navigator.userAgent.includes('Electron');
 
@@ -388,15 +248,15 @@ function App() {
           return <span key={index}>{part}</span>;
       });
   };
-  
+
   useEffect(() => {
      if (isMobile) return;
-     
+
      const saved = localStorage.getItem('vni_history');
      if (saved) {
          try { setHistory(JSON.parse(saved)); } catch (e) {}
      }
-     
+
      let interval;
      let hasFetchedLocation = false;
 
@@ -420,7 +280,7 @@ function App() {
                        as: data.asn ? `AS${data.asn}` : '',
                        timezone: data.time_zone
                    };
-                   
+
                    setMyLocation(baseLoc);
 
                    if ("geolocation" in navigator) {
@@ -486,7 +346,7 @@ function App() {
     setSelectedHop(null);
     setTracing(true);
     setCompareMode(false);
-    
+
     const pastTrace = history.find(h => h.target === newTarget);
     if (pastTrace) {
         setCompareHops(pastTrace.hops);
@@ -496,7 +356,7 @@ function App() {
     }
 
     const evtSource = new EventSource(`${API_BASE}/api/trace?target=${encodeURIComponent(newTarget)}`);
-    
+
     let currentHops = [];
     evtSource.onmessage = (event) => {
       const parsed = JSON.parse(event.data);
@@ -512,7 +372,7 @@ function App() {
          saveToHistory(newTarget, currentHops);
       }
     };
-    
+
     evtSource.onerror = () => {
       evtSource.close();
       setTracing(false);
@@ -542,13 +402,13 @@ function App() {
               A new version of VNI has been downloaded in the background. Restart the app to apply the update.
             </p>
             <div className="flex gap-3 w-full">
-              <button 
+              <button
                 onClick={() => setUpdateAvailable(false)}
                 className="flex-1 px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-medium transition-colors"
               >
                 Later
               </button>
-              <button 
+              <button
                 onClick={() => window.electronAPI.restartApp()}
                 className="flex-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-colors"
               >
@@ -570,10 +430,10 @@ function App() {
        )}
        <div className="flex flex-col lg:flex-row flex-1 overflow-hidden relative">
            <div className="w-full lg:w-2/5 h-[55%] lg:h-full border-b lg:border-b-0 lg:border-r border-gray-800 bg-gray-900 flex flex-col relative z-10 shadow-2xl shadow-black overflow-y-auto lg:overflow-visible">
-              <Sidebar 
-                 startTrace={startTrace} 
-                 tracing={tracing} 
-                 hops={hops} 
+              <Sidebar
+                 startTrace={startTrace}
+                 tracing={tracing}
+                 hops={hops}
                  selectedHop={selectedHop}
                  setSelectedHop={setSelectedHop}
                  setHoveredHop={setHoveredHop}
@@ -596,14 +456,6 @@ function App() {
                  setSelectedRadarConn={setSelectedRadarConn}
                  hideSelfConnections={hideSelfConnections}
                  onToggleHideSelf={toggleHideSelfConnections}
-                 isRecordingRadar={isRecordingRadar}
-                 onStartRecordingRadar={handleStartRecording}
-                 onStopRecordingRadar={handleStopRecording}
-                 onClearRecordingRadar={handleClearRecording}
-                 onExportRecordingRadar={handleExportRecording}
-                 recordingElapsed={recordingElapsed}
-                 radarViewTab={radarViewTab}
-                 onSetRadarViewTab={setRadarViewTab}
               />
            </div>
            <div className="w-full lg:w-3/5 h-[45%] lg:h-full relative z-0 flex-1">
@@ -615,33 +467,29 @@ function App() {
                   <span className="tracking-wide">Loading 3D Globe Engine...</span>
                 </div>
               }>
-                <GlobeView 
-                  hops={hops} 
-                  selectedHop={selectedHop} 
-                  setSelectedHop={setSelectedHop} 
-                  hoveredHop={hoveredHop} 
+                <GlobeView
+                  hops={hops}
+                  selectedHop={selectedHop}
+                  setSelectedHop={setSelectedHop}
+                  hoveredHop={hoveredHop}
                   myLocation={myLocation}
                   activeMode={activeMode}
                   radarData={displayRadarData}
                   selectedRadarConn={selectedRadarConn}
                   setSelectedRadarConn={setSelectedRadarConn}
-                  isRecordingRadar={isRecordingRadar}
-                  recordingElapsed={recordingElapsed}
                 />
               </React.Suspense>
             ) : (
-              <MapView 
-                hops={hops} 
-                selectedHop={selectedHop} 
-                setSelectedHop={setSelectedHop} 
-                hoveredHop={hoveredHop} 
+              <MapView
+                hops={hops}
+                selectedHop={selectedHop}
+                setSelectedHop={setSelectedHop}
+                hoveredHop={hoveredHop}
                 myLocation={myLocation}
                 activeMode={activeMode}
                 radarData={displayRadarData}
                 selectedRadarConn={selectedRadarConn}
                 setSelectedRadarConn={setSelectedRadarConn}
-                isRecordingRadar={isRecordingRadar}
-                recordingElapsed={recordingElapsed}
               />
             )}
           </ErrorBoundary>
@@ -691,7 +539,7 @@ function App() {
               <GithubIcon size={18} />
             </a>
 
-            <button 
+            <button
               onClick={() => setShowInfo(true)}
               className="bg-gray-900/80 hover:bg-gray-800 text-gray-400 hover:text-emerald-400 p-2.5 rounded-full border border-gray-700 backdrop-blur-sm transition-all shadow-lg flex items-center justify-center cursor-pointer"
               title="About VNI.S4m.dev"
@@ -726,7 +574,7 @@ function App() {
                           </ul>
                           <div className="text-xs text-gray-500 pt-4 mt-4 border-t border-gray-800 flex items-center justify-between">
                               <span>Built for network diagnostics and learning.</span>
-                              <a 
+                              <a
                                   href="https://github.com/leumas05/VNI.S4m.dev"
                                   target="_blank"
                                   rel="noopener noreferrer"
@@ -740,14 +588,14 @@ function App() {
               </div>
           )}
        </div>
-       
+
        {isMobile && (
            <div className="absolute inset-0 z-[150] flex flex-col items-center justify-center bg-gray-950/90 backdrop-blur-md p-6 text-center">
                <div className="bg-gray-900 border border-emerald-500/30 rounded-2xl p-8 max-w-lg shadow-2xl shadow-emerald-900/20">
                    <Activity className="w-16 h-16 text-emerald-500 mx-auto mb-6" />
                    <h1 className="text-2xl font-bold text-white mb-4">Desktop Only</h1>
                    <p className="text-gray-400 mb-6 leading-relaxed">
-                       VNI relies on a lightweight local background engine to trace network routes. 
+                       VNI relies on a lightweight local background engine to trace network routes.
                        Because mobile devices (iOS/Android) cannot run desktop executables, this tool is only available on Windows, Mac, and Linux computers.
                    </p>
                    <p className="text-emerald-400 font-semibold mb-8">
@@ -776,21 +624,21 @@ function App() {
                    <Activity className="w-16 h-16 text-emerald-500 mx-auto mb-6 " />
                    <h1 className="text-2xl font-bold text-white mb-4">VNI Engine is Not Running</h1>
                    <p className="text-gray-400 mb-6 leading-relaxed">
-                       {isElectron 
-                           ? "Starting local background engine..." 
+                       {isElectron
+                           ? "Starting local background engine..."
                            : "To perform physical network traceroutes, VNI requires a local engine. For the ultimate experience, we highly recommend downloading the full Desktop App!"}
                    </p>
-                   
+
                    {!isElectron && (
                        <>
                            <div className="mb-6">
-                               <a 
+                               <a
                                    href={
                                        userOs === 'Mac' ? downloadLinks.macApp :
                                        userOs === 'Linux' ? downloadLinks.linuxApp :
                                        downloadLinks.winApp
                                    }
-                                   download 
+                                   download
                                    className="inline-block w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 px-8 rounded-xl transition-all shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:shadow-[0_0_30px_rgba(16,185,129,0.6)] hover:scale-[1.02]"
                                >
                                    Download Full Desktop App ({userOs})
@@ -802,7 +650,7 @@ function App() {
                                <span className="flex-shrink-0 mx-4 text-gray-600 text-xs uppercase tracking-widest">Or use web version</span>
                                <div className="flex-grow border-t border-gray-800"></div>
                            </div>
-                           
+
                            <p className="text-xs text-gray-500 mb-4">Download just the raw background engine to continue using the browser version:</p>
                            <div className="flex gap-2 justify-center mb-8 flex-wrap">
                                <a href={downloadLinks.winEngine} download className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold py-2 px-4 rounded border border-gray-700 transition">
@@ -817,14 +665,14 @@ function App() {
                            </div>
                        </>
                    )}
-                   
+
                    <p className="text-sm text-gray-500 bg-gray-950 rounded-lg p-3 border border-gray-800 inline-block mb-6">
                        <span className=" inline-block w-2 h-2 rounded-full bg-emerald-500 mr-2"></span>
                        Waiting for connection on <strong>localhost:3001</strong>...
                    </p>
 
                     <div className="mb-4">
-                        <a 
+                        <a
                             href="https://github.com/leumas05/VNI.S4m.dev"
                             target="_blank"
                             rel="noopener noreferrer"
@@ -865,19 +713,19 @@ function App() {
       )}
 
       {pingingHop && (
-          <PingModal 
-              hop={pingingHop} 
-              onClose={() => setPingingHop(null)} 
-              apiBase={API_BASE} 
+          <PingModal
+              hop={pingingHop}
+              onClose={() => setPingingHop(null)}
+              apiBase={API_BASE}
           />
       )}
 
       {diggingHop && (
-          <DigModal 
-              hop={diggingHop} 
+          <DigModal
+              hop={diggingHop}
               traceTarget={target}
-              onClose={() => setDiggingHop(null)} 
-              apiBase={API_BASE} 
+              onClose={() => setDiggingHop(null)}
+              apiBase={API_BASE}
           />
       )}
       </div>
@@ -886,3 +734,4 @@ function App() {
 }
 
 export default App;
+
