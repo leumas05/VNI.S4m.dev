@@ -11,15 +11,20 @@ function getCountryFlag(countryCode) {
 }
 
 function formatTime(seconds) {
+  if (!seconds || isNaN(seconds)) return '00:00';
   const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
+  const s = Math.floor(seconds % 60);
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 function formatTimestamp(ts) {
   if (!ts) return '';
-  const d = new Date(ts);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  try {
+    const d = new Date(ts);
+    return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch {
+    return '';
+  }
 }
 
 function getProcessColor(processName) {
@@ -127,7 +132,7 @@ export default function LiveRadarPanel({
                 type="button"
                 onClick={onStopRecording}
                 className="px-2.5 py-1 rounded text-[11px] font-bold flex items-center gap-1.5 border border-red-500/60 bg-red-950/90 text-red-300 shadow-[0_0_10px_rgba(239,68,68,0.35)] transition cursor-pointer hover:bg-red-900"
-                title="Stoppa pågående inspelning av anslutningar"
+                title="Stop active connection recording"
               >
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -141,10 +146,10 @@ export default function LiveRadarPanel({
                 type="button"
                 onClick={onStartRecording}
                 className="px-2.5 py-1 rounded text-[11px] font-medium flex items-center gap-1.5 border border-gray-800 bg-gray-900 hover:border-red-500/50 hover:bg-red-950/40 text-gray-300 hover:text-red-400 transition cursor-pointer"
-                title="Starta inspelning av anslutningar över tid"
+                title="Start recording connections over time"
               >
                 <Circle size={9} className="fill-red-500 text-red-500" />
-                <span>Spela in</span>
+                <span>Record</span>
               </button>
             )}
 
@@ -156,10 +161,10 @@ export default function LiveRadarPanel({
                   ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300'
                   : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-gray-200'
               }`}
-              title={autoRefresh ? 'Pausa automatisk uppdatering' : 'Starta live uppdatering (4s)'}
+              title={autoRefresh ? 'Pause auto-refresh' : 'Resume live updates (4s)'}
             >
               {autoRefresh ? <Pause size={10} /> : <Play size={10} />}
-              <span>{autoRefresh ? 'Live (4s)' : 'Pausad'}</span>
+              <span>{autoRefresh ? 'Live (4s)' : 'Paused'}</span>
             </button>
 
             <button
@@ -167,7 +172,7 @@ export default function LiveRadarPanel({
               onClick={onRefresh}
               disabled={loading}
               className="p-1.5 rounded bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-400 hover:text-white transition cursor-pointer disabled:opacity-50"
-              title="Uppdatera anslutningar nu"
+              title="Refresh connections now"
             >
               <RefreshCw size={12} className={loading ? 'animate-spin text-emerald-400' : ''} />
             </button>
@@ -178,27 +183,27 @@ export default function LiveRadarPanel({
         <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-gray-900">
           <div className="p-1.5 rounded bg-gray-900/60 border border-gray-800/80">
             <div className="text-[10px] text-gray-400 uppercase tracking-wider">
-              {radarViewTab === 'recorded' ? 'Totalt sedda' : 'Aktiva'}
+              {radarViewTab === 'recorded' ? 'Total Recorded' : 'Active'}
             </div>
             <div className="text-sm font-bold font-mono text-emerald-400">
               {radarData?.internetCount || 0}
             </div>
           </div>
           <div className="p-1.5 rounded bg-gray-900/60 border border-gray-800/80">
-            <div className="text-[10px] text-gray-400 uppercase tracking-wider">Unika IP</div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wider">Unique IPs</div>
             <div className="text-sm font-bold font-mono text-sky-400">
               {radarData?.uniqueIpsCount || 0}
             </div>
           </div>
           <div className="p-1.5 rounded bg-gray-900/60 border border-gray-800/80">
-            <div className="text-[10px] text-gray-400 uppercase tracking-wider">Länder</div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wider">Countries</div>
             <div className="text-sm font-bold font-mono text-indigo-400">
               {Object.keys(radarData?.countryCounts || {}).length}
             </div>
           </div>
         </div>
 
-        {/* View Switcher Pills: Realtid vs Inspelning */}
+        {/* View Switcher Pills: Live vs Recorded */}
         {(radarData?.totalRecordedCount > 0 || isRecording) && (
           <div className="grid grid-cols-2 gap-1 p-1 bg-gray-900/90 rounded-lg border border-gray-800 mt-2.5">
             <button
@@ -211,7 +216,7 @@ export default function LiveRadarPanel({
               }`}
             >
               <Activity size={12} />
-              <span>Realtid</span>
+              <span>Live</span>
             </button>
             <button
               type="button"
@@ -223,7 +228,7 @@ export default function LiveRadarPanel({
               }`}
             >
               <Clock size={12} />
-              <span>Inspelning</span>
+              <span>Recorded</span>
               <span className={`text-[10px] font-mono px-1 rounded ${
                 radarViewTab === 'recorded' ? 'bg-emerald-950/90 text-emerald-200' : 'bg-gray-800 text-gray-300'
               }`}>
@@ -240,10 +245,10 @@ export default function LiveRadarPanel({
         <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-gray-900 text-[11px]">
           <div className="flex items-center gap-1.5 text-gray-400">
             <ShieldCheck size={12} className={hideSelfConnections ? 'text-emerald-400' : 'text-gray-500'} />
-            <span>Exkludera detta program (VNI)</span>
+            <span>Hide app connections (VNI)</span>
             {radarData?.hiddenSelfCount > 0 && hideSelfConnections && (
               <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-300">
-                {radarData.hiddenSelfCount} dolda
+                {radarData.hiddenSelfCount} hidden
               </span>
             )}
           </div>
@@ -255,10 +260,10 @@ export default function LiveRadarPanel({
                 ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-300 font-semibold shadow-sm'
                 : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-gray-200'
             }`}
-            title={hideSelfConnections ? 'Klicka för att visa alla anslutningar inklusive VNIs egna (Node/Electron)' : 'Klicka för att dölja VNIs egna anslutningar'}
+            title={hideSelfConnections ? 'Show all connections including VNI internal (Node/Electron)' : 'Hide VNI internal connections'}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${hideSelfConnections ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'}`}></span>
-            <span>{hideSelfConnections ? 'Dolt' : 'Visas'}</span>
+            <span>{hideSelfConnections ? 'Hidden' : 'Visible'}</span>
           </button>
         </div>
       </div>
@@ -276,7 +281,7 @@ export default function LiveRadarPanel({
                   : 'text-gray-400 hover:text-gray-200'
               }`}
             >
-              Alla ({connections.length})
+              All ({connections.length})
             </button>
             <button
               type="button"
@@ -287,7 +292,7 @@ export default function LiveRadarPanel({
                   : 'text-gray-400 hover:text-gray-200'
               }`}
             >
-              Aktiva ({radarData?.activeCount || 0})
+              Active ({radarData?.activeCount || 0})
             </button>
             <button
               type="button"
@@ -298,7 +303,7 @@ export default function LiveRadarPanel({
                   : 'text-gray-400 hover:text-gray-200'
               }`}
             >
-              Avslutade ({Math.max(0, (connections.length) - (radarData?.activeCount || 0))})
+              Closed ({Math.max(0, (connections.length) - (radarData?.activeCount || 0))})
             </button>
           </div>
 
@@ -307,7 +312,7 @@ export default function LiveRadarPanel({
               type="button"
               onClick={onExportRecording}
               className="px-2 py-0.5 rounded bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 text-gray-300 hover:text-emerald-400 transition cursor-pointer flex items-center gap-1"
-              title="Exportera inspelad session som JSON"
+              title="Export recorded session as JSON"
             >
               <Download size={11} className="text-emerald-400" />
               <span>JSON</span>
@@ -316,7 +321,7 @@ export default function LiveRadarPanel({
               type="button"
               onClick={onClearRecording}
               className="p-1 rounded bg-gray-900 hover:bg-red-950/50 border border-gray-800 hover:border-red-500/40 text-gray-400 hover:text-red-400 transition cursor-pointer"
-              title="Rensa inspelning"
+              title="Clear recording"
             >
               <Trash2 size={11} />
             </button>
@@ -331,7 +336,7 @@ export default function LiveRadarPanel({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Sök process, IP, land, stad, port..."
+            placeholder="Search process, IP, country, city, port..."
             className="w-full bg-gray-950 border border-gray-800 rounded-lg pl-8 pr-7 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-emerald-500 font-mono transition"
           />
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
@@ -358,7 +363,7 @@ export default function LiveRadarPanel({
                   : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-gray-200'
               }`}
             >
-              Alla ({connections.length})
+              All ({connections.length})
             </button>
             {topProcesses.map(([procName, count]) => (
               <button
@@ -370,7 +375,7 @@ export default function LiveRadarPanel({
                     ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300 font-semibold'
                     : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-gray-200'
                 }`}
-                title={`${procName} (${count} anslutningar)`}
+                title={`${procName} (${count} connections)`}
               >
                 {procName.replace(/\.exe$/i, '')} ({count})
               </button>
@@ -408,18 +413,18 @@ export default function LiveRadarPanel({
                       {conn.process}
                     </span>
                     {conn.isSelf && (
-                      <span className="px-1 py-0.2 rounded text-[9px] font-mono font-bold border border-amber-500/40 text-amber-300 bg-amber-950/60 uppercase" title="Detta program (VNI / Engine)">
+                      <span className="px-1 py-0.2 rounded text-[9px] font-mono font-bold border border-amber-500/40 text-amber-300 bg-amber-950/60 uppercase" title="This app (VNI / Engine)">
                         VNI
                       </span>
                     )}
                     {isInactive ? (
-                      <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border border-gray-700 text-gray-400 bg-gray-900/90" title="Denna anslutning avslutades under sessionen">
-                        Avslutad
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border border-gray-700 text-gray-400 bg-gray-900/90" title="This connection closed during the session">
+                        Closed
                       </span>
                     ) : (radarViewTab === 'recorded' || conn.firstSeen) ? (
-                      <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border border-emerald-500/40 text-emerald-300 bg-emerald-950/60 flex items-center gap-1" title="Aktiv anslutning just nu">
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border border-emerald-500/40 text-emerald-300 bg-emerald-950/60 flex items-center gap-1" title="Active connection right now">
                         <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse"></span>
-                        Aktiv
+                        Active
                       </span>
                     ) : null}
                     {conn.pid && (
@@ -440,7 +445,7 @@ export default function LiveRadarPanel({
                     <div className="text-gray-200 font-semibold text-xs flex items-center gap-1.5 truncate">
                       <span>{flag}</span>
                       <span className="truncate">
-                        {conn.geo?.city ? `${conn.geo.city}, ` : ''}{conn.geo?.country || 'Okänd plats'}
+                        {conn.geo?.city ? `${conn.geo.city}, ` : ''}{conn.geo?.country || 'Unknown Location'}
                       </span>
                     </div>
                     <div className="text-[11px] text-gray-400 truncate mt-0.5">
@@ -452,8 +457,8 @@ export default function LiveRadarPanel({
                 {/* Recording Session Timestamps */}
                 {(conn.firstSeen || conn.lastSeen) && (
                   <div className="flex items-center justify-between text-[10px] text-gray-500 font-mono mb-2 bg-gray-900/50 px-2 py-1 rounded border border-gray-800/80">
-                    <span>Sedd: {formatTimestamp(conn.firstSeen)}{conn.lastSeen && conn.lastSeen !== conn.firstSeen ? ` ➔ ${formatTimestamp(conn.lastSeen)}` : ''}</span>
-                    {conn.seenCount ? <span>{conn.seenCount} {conn.seenCount === 1 ? 'mätning' : 'mätningar'}</span> : null}
+                    <span>Seen: {formatTimestamp(conn.firstSeen)}{conn.lastSeen && conn.lastSeen !== conn.firstSeen ? ` ➔ ${formatTimestamp(conn.lastSeen)}` : ''}</span>
+                    {conn.seenCount ? <span>{conn.seenCount} {conn.seenCount === 1 ? 'poll' : 'polls'}</span> : null}
                   </div>
                 )}
 
@@ -483,7 +488,7 @@ export default function LiveRadarPanel({
                         onDig && onDig({ ip: conn.remoteIp, hostname: conn.process, geo: conn.geo });
                       }}
                       className="px-2 py-0.5 rounded bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 text-gray-300 hover:text-sky-400 transition cursor-pointer flex items-center gap-1"
-                      title={`DiG DNS-kontroll för ${conn.remoteIp}`}
+                      title={`DiG DNS lookup for ${conn.remoteIp}`}
                     >
                       <Terminal size={10} className="text-sky-400" />
                       <span>DiG</span>
@@ -496,7 +501,7 @@ export default function LiveRadarPanel({
                         onDig && onDig({ ip: conn.remoteIp, hostname: conn.process, geo: conn.geo, initialTab: 'ssl' });
                       }}
                       className="px-2 py-0.5 rounded bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 text-gray-300 hover:text-emerald-400 transition cursor-pointer flex items-center gap-1"
-                      title={`SSL-kontroll för ${conn.remoteIp}`}
+                      title={`SSL certificate check for ${conn.remoteIp}`}
                     >
                       <ShieldCheck size={10} className="text-emerald-400" />
                       <span>SSL</span>
@@ -510,12 +515,12 @@ export default function LiveRadarPanel({
           <div className="flex flex-col items-center justify-center py-12 text-center p-4 bg-gray-950/60 rounded-xl border border-gray-800">
             <Radio size={24} className="text-gray-600 mb-2 animate-pulse" />
             <h4 className="text-xs font-semibold text-gray-300 mb-1">
-              {search || activeProcess !== 'ALL' ? 'Inga matchande anslutningar' : 'Inga aktiva anslutningar just nu'}
+              {search || activeProcess !== 'ALL' ? 'No matching connections' : 'No active connections right now'}
             </h4>
             <p className="text-[11px] text-gray-500 max-w-xs font-sans">
               {search
-                ? `Ingen anslutning matchade "${search}". Prova att rensa sökningen.`
-                : 'Öppna en webbsida eller ett program för att se dess anslutningar här i realtid.'}
+                ? `No connection matched "${search}". Try clearing search.`
+                : 'Open a browser or application to see its real-time network traffic here.'}
             </p>
           </div>
         )}

@@ -101,13 +101,15 @@ export default function MapView({
   activeMode = 'traceroute',
   radarData,
   selectedRadarConn,
-  setSelectedRadarConn
+  setSelectedRadarConn,
+  isRecordingRadar = false,
+  recordingElapsed = 0
 }) {
   const [zoomLevel, setZoomLevel] = useState(2);
   const isRadar = activeMode === 'radar';
 
-  const validHops = (hops || []).filter(h => h && h.geo && h.geo.lat && h.geo.lon);
-  const radarConnections = (radarData?.connections || []).filter(c => c && c.geo && c.geo.lat && c.geo.lon);
+  const validHops = (hops || []).filter(h => h && h.geo && !isNaN(Number(h.geo.lat)) && !isNaN(Number(h.geo.lon)));
+  const radarConnections = (radarData?.connections || []).filter(c => c && c.geo && !isNaN(Number(c.geo.lat)) && !isNaN(Number(c.geo.lon)));
   
   let myDisplayLat = myLocation?.lat;
   let myDisplayLon = myLocation?.lon;
@@ -320,7 +322,7 @@ export default function MapView({
               >
                 <Tooltip direction="top" offset={[0, -10]} opacity={1}>
                   <div className="text-gray-900 font-sans text-sm">
-                    <strong>{conn.process} (:{conn.remotePort}){isInactive ? ' [Avslutad]' : ''}</strong><br/>
+                    <strong>{conn.process || 'Process'} (:{conn.remotePort || ''}){isInactive ? ' [Closed]' : ''}</strong><br/>
                     <span className="text-gray-600 text-xs font-mono">{conn.remoteIp}</span><br/>
                     <span className="text-gray-500 text-xs">
                       {conn.geo?.city ? `${conn.geo.city}, ` : ''}{conn.geo?.country} {conn.geo?.isp ? `• ${conn.geo.isp}` : ''}
@@ -367,7 +369,7 @@ export default function MapView({
              >
                <Tooltip direction="top" offset={[0, -10]} opacity={1}>
                  <div className="text-gray-900 font-sans text-sm">
-                   <strong>{isRadar ? 'Radar Gateway (Din dator)' : 'My Location'}</strong><br/>
+                   <strong>{isRadar ? 'Radar Gateway (This Device)' : 'My Location'}</strong><br/>
                    <span className="text-gray-500 text-xs">{myLocation?.city}, {myLocation?.country}</span>
                  </div>
                </Tooltip>
@@ -379,15 +381,15 @@ export default function MapView({
       {isRadar && (
         <div className="absolute top-6 left-6 z-[1000] flex flex-col gap-1.5 pointer-events-none select-none">
           <div className="flex items-center gap-2 bg-gray-900/85 border border-emerald-500/40 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto">
-            {radarData?.isRecording ? (
+            {(isRecordingRadar || radarData?.isRecording) ? (
               <div className="flex items-center gap-1.5 text-red-400 font-semibold">
                 <span className="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>
-                <span className="font-bold">REC {formatTimer(radarData.recordingElapsed || 0)}</span>
+                <span className="font-bold">REC {formatTimer(recordingElapsed || radarData?.recordingElapsed || 0)}</span>
               </div>
             ) : radarData?.isRecordedView ? (
               <div className="flex items-center gap-1.5 text-amber-400 font-semibold">
                 <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                <span className="font-bold">INSPELNING</span>
+                <span className="font-bold">RECORDED</span>
               </div>
             ) : (
               <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
@@ -403,8 +405,8 @@ export default function MapView({
             <span className="text-gray-500 font-bold">➔</span>
             <span className="text-emerald-300 px-1.5 py-0.5 bg-emerald-950/80 border border-emerald-500/30 rounded text-[11px] font-bold">
               {radarData?.isRecordedView
-                ? `${radarData?.internetCount || 0} sedda (${radarData?.activeCount || 0} aktiva)`
-                : `${radarData?.internetCount || 0} aktiva anslutningar`}
+                ? `${radarData?.internetCount || 0} recorded (${radarData?.activeCount || 0} active)`
+                : `${radarData?.internetCount || 0} active connections`}
             </span>
           </div>
 
@@ -412,7 +414,7 @@ export default function MapView({
             <div className="flex items-center justify-between gap-2 bg-gray-950/90 border border-amber-500/60 rounded-lg px-3 py-1.5 backdrop-blur-md shadow-xl text-xs font-mono pointer-events-auto">
               <div className="flex items-center gap-2 truncate">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                <span className="font-bold text-amber-400">{selectedRadarConn.process}:</span>
+                <span className="font-bold text-amber-400">{selectedRadarConn.process || 'Process'}:</span>
                 <span className="text-gray-200">{selectedRadarConn.remoteIp}:{selectedRadarConn.remotePort}</span>
                 <span className="text-gray-400 truncate">({selectedRadarConn.geo?.city || ''}, {selectedRadarConn.geo?.country || ''})</span>
               </div>
@@ -420,7 +422,7 @@ export default function MapView({
                 type="button"
                 onClick={() => setSelectedRadarConn && setSelectedRadarConn(null)}
                 className="text-gray-500 hover:text-white p-0.5 ml-2 cursor-pointer"
-                title="Stäng markering"
+                title="Clear selection"
               >
                 ✕
               </button>

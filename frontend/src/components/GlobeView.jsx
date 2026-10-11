@@ -120,7 +120,9 @@ export default function GlobeView({
   activeMode = 'traceroute',
   radarData,
   selectedRadarConn,
-  setSelectedRadarConn
+  setSelectedRadarConn,
+  isRecordingRadar = false,
+  recordingElapsed = 0
 }) {
   const globeRef = useRef();
   const containerRef = useRef();
@@ -147,18 +149,27 @@ export default function GlobeView({
   // Filter valid connections with geo coordinates and de-cluster overlapping endpoints
   const radarConnections = useMemo(() => {
     if (activeMode !== 'radar') return [];
-    const valid = (radarData?.connections || []).filter(c => c && c.geo && c.geo.lat && c.geo.lon);
+    const valid = (radarData?.connections || []).filter(c => {
+      if (!c || !c.geo) return false;
+      const lat = Number(c.geo.lat);
+      const lon = Number(c.geo.lon);
+      return !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0;
+    });
 
     const coordCounts = {};
     valid.forEach(c => {
-      const key = `${c.geo.lat.toFixed(3)},${c.geo.lon.toFixed(3)}`;
+      const lat = Number(c.geo.lat);
+      const lon = Number(c.geo.lon);
+      const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
       coordCounts[key] = (coordCounts[key] || 0) + 1;
     });
 
     const seenCoords = {};
     return valid.map(c => {
-      const copy = { ...c, geo: { ...c.geo } };
-      const key = `${c.geo.lat.toFixed(3)},${c.geo.lon.toFixed(3)}`;
+      const lat = Number(c.geo.lat);
+      const lon = Number(c.geo.lon);
+      const copy = { ...c, geo: { ...c.geo, lat, lon } };
+      const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
 
       if (coordCounts[key] > 1) {
         seenCoords[key] = (seenCoords[key] || 0) + 1;
@@ -166,9 +177,9 @@ export default function GlobeView({
         const total = coordCounts[key];
         const angle = ((count - 1) / total) * (2 * Math.PI) + 0.35;
         const spreadRadius = 0.20 + (total > 4 ? 0.05 : 0);
-        const cosLat = Math.max(0.25, Math.cos(copy.geo.lat * Math.PI / 180));
-        copy.geo.lat = Math.max(-89.9, Math.min(89.9, copy.geo.lat + Math.sin(angle) * spreadRadius));
-        const rawLon = copy.geo.lon + (Math.cos(angle) * spreadRadius) / cosLat;
+        const cosLat = Math.max(0.25, Math.cos(lat * Math.PI / 180));
+        copy.geo.lat = Math.max(-89.9, Math.min(89.9, lat + Math.sin(angle) * spreadRadius));
+        const rawLon = lon + (Math.cos(angle) * spreadRadius) / cosLat;
         copy.geo.lon = ((rawLon + 180) % 360 + 360) % 360 - 180;
       }
       return copy;
@@ -241,7 +252,7 @@ export default function GlobeView({
     // User Location Node (matching 2D map #3b82f6)
     if (myLocation?.lat && myLocation?.lon) {
       const tooltip = getTooltip({
-        title: activeMode === 'radar' ? 'Radar Gateway (Din dator)' : 'My Location (Gateway)',
+        title: activeMode === 'radar' ? 'Radar Gateway (This Device)' : 'My Location (Gateway)',
         subtitle: `${myLocation.city || 'Local'}, ${myLocation.country || ''}`,
         info: `IP: ${myLocation.query || 'Internal'}`,
         color: '#3b82f6'
@@ -279,10 +290,10 @@ export default function GlobeView({
         const haloColor = isSelected ? 'rgba(245, 158, 11, 0.45)' : (isInactive ? 'rgba(100, 116, 139, 0.2)' : `${baseColor}44`);
 
         const tooltip = getTooltip({
-          title: `${conn.process} (Port ${conn.remotePort})${isInactive ? ' [Avslutad]' : ''}`,
-          subtitle: `${conn.geo?.city ? `${conn.geo.city}, ` : ''}${conn.geo?.country || 'Okänd plats'}`,
+          title: `${conn.process || 'Process'} (Port ${conn.remotePort || ''})${isInactive ? ' [Closed]' : ''}`,
+          subtitle: `${conn.geo?.city ? `${conn.geo.city}, ` : ''}${conn.geo?.country || 'Unknown Location'}`,
           info: `IP: ${conn.remoteIp} ${conn.geo?.isp ? `• ${conn.geo.isp}` : ''}`,
-          extra: `Status: ${isInactive ? 'Avslutad session' : conn.state} ${conn.pid ? `(PID: ${conn.pid})` : ''}`,
+          extra: `Status: ${isInactive ? 'Closed Session' : conn.state} ${conn.pid ? `(PID: ${conn.pid})` : ''}`,
           color
         });
 
@@ -364,7 +375,7 @@ export default function GlobeView({
         const arcAlt = getArcAltitude(myLocation.lat, myLocation.lon, conn.geo.lat, conn.geo.lon);
         const strokeColor = isSelected
           ? ['#f59e0b', '#f59e0b']
-          : (isInactive ? ['rgba(59, 130, 246, 0.25)', 'rgba(100, 116, 139, 0.25)'] : ['#3b82f6', connColor]);
+          : (isInactive ? ['#3b82f6', '#64748b'] : ['#3b82f6', connColor]);
 
         arcs.push({
           startLat: myLocation.lat,
@@ -374,7 +385,7 @@ export default function GlobeView({
           altitude: arcAlt,
           color: strokeColor,
           stroke: isSelected ? 0.32 : (isInactive ? 0.08 : 0.14),
-          name: `${conn.process} -> ${conn.remoteIp}`
+          name: `${conn.process || 'Process'} -> ${conn.remoteIp}`
         });
       });
       return arcs;
@@ -436,10 +447,11 @@ export default function GlobeView({
         });
       }
       if (selectedRadarConn?.geo?.lat && selectedRadarConn?.geo?.lon) {
+        const procLabel = (selectedRadarConn.process || 'Process').replace(/\.exe$/i, '');
         list.push({
-          lat: selectedRadarConn.geo.lat,
-          lng: selectedRadarConn.geo.lon,
-          text: `${selectedRadarConn.process.replace(/\.exe$/i, '')} (:${selectedRadarConn.remotePort})`,
+          lat: Number(selectedRadarConn.geo.lat),
+          lng: Number(selectedRadarConn.geo.lon),
+          text: `${procLabel} (:${selectedRadarConn.remotePort || ''})`,
           color: '#f59e0b',
           size: 0.40,
           altitude: 0.02,
@@ -562,23 +574,6 @@ export default function GlobeView({
 
     return rings;
   }, [activeMode, selectedRadarConn, processedHops, selectedHop, hoveredHop, myLocation]);
-
-  // Explicitly sync layers on real-time streaming updates
-  useEffect(() => {
-    if (!globeRef.current) return;
-    if (typeof globeRef.current.pointsData === 'function') {
-      globeRef.current.pointsData(pointsData);
-    }
-    if (typeof globeRef.current.arcsData === 'function') {
-      globeRef.current.arcsData(arcsData);
-    }
-    if (typeof globeRef.current.ringsData === 'function') {
-      globeRef.current.ringsData(ringsData);
-    }
-    if (typeof globeRef.current.labelsData === 'function') {
-      globeRef.current.labelsData(labelsData);
-    }
-  }, [pointsData, arcsData, ringsData, labelsData]);
 
   // Setup globe controls and orientation
   useEffect(() => {
@@ -744,15 +739,15 @@ export default function GlobeView({
       {activeMode === 'radar' ? (
         <div className="absolute top-6 left-6 z-20 flex flex-col gap-1.5 pointer-events-none select-none">
           <div className="flex items-center gap-2 bg-gray-900/85 border border-emerald-500/40 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto">
-            {radarData?.isRecording ? (
+            {(isRecordingRadar || radarData?.isRecording) ? (
               <div className="flex items-center gap-1.5 text-red-400 font-semibold">
                 <span className="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>
-                <span className="font-bold">REC {formatTimer(radarData.recordingElapsed || 0)}</span>
+                <span className="font-bold">REC {formatTimer(recordingElapsed || radarData?.recordingElapsed || 0)}</span>
               </div>
             ) : radarData?.isRecordedView ? (
               <div className="flex items-center gap-1.5 text-amber-400 font-semibold">
                 <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                <span className="font-bold">INSPELNING</span>
+                <span className="font-bold">RECORDED</span>
               </div>
             ) : (
               <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
@@ -768,11 +763,11 @@ export default function GlobeView({
             <span className="text-gray-500 font-bold">➔</span>
             <span className="text-emerald-300 px-1.5 py-0.5 bg-emerald-950/80 border border-emerald-500/30 rounded text-[11px] font-bold">
               {radarData?.isRecordedView
-                ? `${radarData?.internetCount || 0} sedda (${radarData?.activeCount || 0} aktiva)`
-                : `${radarData?.internetCount || 0} aktiva anslutningar`}
+                ? `${radarData?.internetCount || 0} recorded (${radarData?.activeCount || 0} active)`
+                : `${radarData?.internetCount || 0} active connections`}
             </span>
             <span className="text-gray-400 text-[11px] hidden sm:inline">
-              ({Object.keys(radarData?.countryCounts || {}).length} länder)
+              ({Object.keys(radarData?.countryCounts || {}).length} countries)
             </span>
           </div>
 
@@ -780,7 +775,7 @@ export default function GlobeView({
             <div className="flex items-center justify-between gap-2 bg-gray-950/90 border border-amber-500/60 rounded-lg px-3 py-1.5 backdrop-blur-md shadow-xl text-xs font-mono pointer-events-auto">
               <div className="flex items-center gap-2 truncate">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                <span className="font-bold text-amber-400">{selectedRadarConn.process}:</span>
+                <span className="font-bold text-amber-400">{selectedRadarConn.process || 'Process'}:</span>
                 <span className="text-gray-200">{selectedRadarConn.remoteIp}:{selectedRadarConn.remotePort}</span>
                 <span className="text-gray-400 truncate">({selectedRadarConn.geo?.city || ''}, {selectedRadarConn.geo?.country || ''})</span>
               </div>
@@ -788,7 +783,7 @@ export default function GlobeView({
                 type="button"
                 onClick={() => setSelectedRadarConn && setSelectedRadarConn(null)}
                 className="text-gray-500 hover:text-white p-0.5 ml-2 cursor-pointer"
-                title="Stäng markering"
+                title="Clear selection"
               >
                 ✕
               </button>
