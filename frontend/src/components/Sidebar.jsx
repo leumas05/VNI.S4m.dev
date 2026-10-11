@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Activity, Download, Play, History as HistoryIcon, ArrowRightLeft, X, MapPin, Globe, Hash, Map, Building, Mail, AlignJustify, Briefcase, Radio } from 'lucide-react';
 import HopCard from './HopCard';
 
-export default function Sidebar({ startTrace, tracing, hops, selectedHop, setSelectedHop, setHoveredHop, history, loadHistoryTrace, compareMode, compareHops, myLocation, openPrivacy }) {
+export default function Sidebar({ startTrace, tracing, hops, selectedHop, setSelectedHop, setHoveredHop, history, loadHistoryTrace, compareMode, compareHops, myLocation, openPrivacy, onPing }) {
   const [input, setInput] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
@@ -194,6 +194,7 @@ export default function Sidebar({ startTrace, tracing, hops, selectedHop, setSel
                    onClick={() => setSelectedHop(hop.hop === selectedHop?.hop ? null : hop)}
                    onMouseEnter={() => setHoveredHop(hop)}
                    onMouseLeave={() => setHoveredHop(null)}
+                   onPing={onPing}
                  />
              )
          })}

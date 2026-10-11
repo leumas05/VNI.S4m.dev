@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Info, X, Activity, Globe, Map } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MapView from './components/Map';
+import PingModal from './components/PingModal';
 const GlobeView = React.lazy(() => import('./components/GlobeView'));
 
 const getApiBaseUrl = () => {
@@ -50,6 +51,7 @@ function App() {
   const [myLocation, setMyLocation] = useState(null);
   const [backendStatus, setBackendStatus] = useState('checking');
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('vni_view_mode') || '2d');
+  const [pingingHop, setPingingHop] = useState(null);
   
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [privacyText, setPrivacyText] = useState('');
@@ -312,6 +314,7 @@ function App() {
                  compareHops={compareHops}
                  myLocation={myLocation}
                  openPrivacy={openPrivacy}
+                 onPing={setPingingHop}
               />
            </div>
            <div className="w-full lg:w-3/5 h-[45%] lg:h-full relative z-0 flex-1">
@@ -519,6 +522,14 @@ function App() {
                   </div>
               </div>
           </div>
+      )}
+
+      {pingingHop && (
+          <PingModal 
+              hop={pingingHop} 
+              onClose={() => setPingingHop(null)} 
+              apiBase={API_BASE} 
+          />
       )}
       </div>
     </div>

@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const { spawn } = require('child_process');
 const { runTraceroute } = require('./traceroute');
 
 const path = require('path');
@@ -14,8 +15,118 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
 
+function pingHost(target, callback) {
+    const isWin = os.platform() === 'win32';
+    const isMac = os.platform() === 'darwin';
+
+    const cmd = 'ping';
+    let args;
+    if (isWin) {
+        args = ['-n', '1', '-w', '1500', target];
+    } else if (isMac) {
+        args = ['-c', '1', '-W', '1500', target];
+    } else {
+        args = ['-c', '1', '-W', '2', target];
+    }
+
+    let output = '';
+    const child = spawn(cmd, args);
+
+    child.stdout.on('data', (d) => { output += d.toString(); });
+    child.stderr.on('data', (d) => { output += d.toString(); });
+
+    child.on('close', (code) => {
+        const timeMatch = output.match(/time[=<](\d+(?:\.\d+)?) ?ms/i);
+        const ttlMatch = output.match(/TTL=(\d+)/i);
+
+        if (timeMatch) {
+            const timeVal = parseFloat(timeMatch[1]);
+            callback(null, {
+                status: 'success',
+                time: output.includes('time<1ms') ? 1 : Math.round(timeVal),
+                rawTime: timeVal,
+                ttl: ttlMatch ? parseInt(ttlMatch[1], 10) : null
+            });
+        } else if (output.toLowerCase().includes('timed out') || output.toLowerCase().includes('unreachable') || code !== 0) {
+            callback(null, {
+                status: 'timeout',
+                time: null,
+                ttl: null
+            });
+        } else {
+            callback(null, {
+                status: 'unknown',
+                time: null,
+                ttl: null
+            });
+        }
+    });
+
+    child.on('error', (err) => {
+        callback(err);
+    });
+
+    return child;
+}
+
 app.get('/api/ping', (req, res) => {
     res.json({ status: 'ok' });
+});
+
+app.get('/api/ping-stream', (req, res) => {
+    const target = req.query.target;
+    if (!target || !/^[a-zA-Z0-9\.\:\-]+$/.test(target)) {
+        return res.status(400).json({ error: 'Valid target IP or hostname is required' });
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    let seq = 0;
+    let isClosed = false;
+    let currentChild = null;
+    let timer = null;
+
+    const pingNext = () => {
+        if (isClosed) return;
+        seq++;
+        currentChild = pingHost(target, (err, result) => {
+            currentChild = null;
+            if (isClosed) return;
+
+            if (err) {
+                res.write(`data: ${JSON.stringify({ seq, time: null, status: 'error', error: err.message, timestamp: Date.now() })}\n\n`);
+            } else {
+                res.write(`data: ${JSON.stringify({ seq, time: result.time, status: result.status, ttl: result.ttl, timestamp: Date.now() })}\n\n`);
+            }
+
+            if (!isClosed) {
+                timer = setTimeout(pingNext, 850);
+            }
+        });
+    };
+
+    pingNext();
+
+    req.on('close', () => {
+        isClosed = true;
+        if (timer) clearTimeout(timer);
+        if (currentChild && !currentChild.killed) {
+            try { currentChild.kill(); } catch (e) {}
+        }
+    });
+});
+
+app.get('/api/ping-target', (req, res) => {
+    const target = req.query.target;
+    if (!target || !/^[a-zA-Z0-9\.\:\-]+$/.test(target)) {
+        return res.status(400).json({ error: 'Valid target IP or hostname is required' });
+    }
+    pingHost(target, (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(result);
+    });
 });
 
 app.get('/api/my-location', async (req, res) => {

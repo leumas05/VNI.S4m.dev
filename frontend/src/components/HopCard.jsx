@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Network, AlertCircle, ArrowRight, Copy, Check } from 'lucide-react';
+import { Network, AlertCircle, ArrowRight, Copy, Check, Activity } from 'lucide-react';
 
 const CopyableRow = ({ label, value, copyText, mono = false, className = '', title = "Click to copy" }) => {
     const [copied, setCopied] = useState(false);
@@ -31,7 +31,7 @@ const CopyableRow = ({ label, value, copyText, mono = false, className = '', tit
     );
 };
 
-export default function HopCard({ hop, isSelected, onClick, pastHop, compareMode, onMouseEnter, onMouseLeave }) {
+export default function HopCard({ hop, isSelected, onClick, pastHop, compareMode, onMouseEnter, onMouseLeave, onPing }) {
   const isPrivate = hop.isPrivate;
   const isDropped = hop.dropped;
   
@@ -161,41 +161,63 @@ export default function HopCard({ hop, isSelected, onClick, pastHop, compareMode
     <div className="flex flex-col mb-1.5 transition-all duration-300" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       <div 
          onClick={hasExpandableInfo ? onClick : undefined}
-         className={`px-3 py-2 rounded border ${hasExpandableInfo ? 'cursor-pointer hover:border-gray-600' : 'cursor-default'} transition flex items-center justify-between ${borderColor} ${bgColor}`}
+         className={`px-3 py-2 rounded border ${hasExpandableInfo ? 'cursor-pointer hover:border-gray-600' : 'cursor-default'} transition flex flex-col gap-1.5 ${borderColor} ${bgColor}`}
       >
-         <div className="flex items-center gap-2 overflow-hidden">
-            <div className={`min-w-6 h-6 px-1 rounded-full flex items-center justify-center bg-gray-900 font-bold text-[10px] ${statusColor}`}>
-               {hop.hop}
+         <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-2 overflow-hidden">
+               <div className={`min-w-6 h-6 px-1 rounded-full flex items-center justify-center bg-gray-900 font-bold text-[10px] ${statusColor}`}>
+                  {hop.hop}
+               </div>
+               <div className="flex flex-col overflow-hidden">
+                  {isDropped ? (
+                     <span className="font-semibold text-sm text-red-400">
+                         {hop.errorMsg ? hop.errorMsg : 'Hidden Gateway / Firewall Enforced'}
+                     </span>
+                  ) : (
+                     <>
+                       <span className="font-semibold text-sm truncate" title={hop.hostname || hop.ip}>
+                          {hop.hostname || hop.ip}
+                       </span>
+                       <span className="text-[11px] text-gray-400 font-mono leading-tight">
+                          {hop.ip} {isPrivate && `(${hop.privateType || 'Internal'})`}
+                       </span>
+                     </>
+                  )}
+               </div>
             </div>
-            <div className="flex flex-col overflow-hidden">
-               {isDropped ? (
-                  <span className="font-semibold text-sm text-red-400">
-                      {hop.errorMsg ? hop.errorMsg : 'Hidden Gateway / Firewall Enforced'}
-                  </span>
-               ) : (
-                  <>
-                    <span className="font-semibold text-sm truncate" title={hop.hostname || hop.ip}>
-                       {hop.hostname || hop.ip}
-                    </span>
-                    <span className="text-[11px] text-gray-400 font-mono leading-tight">
-                       {hop.ip} {isPrivate && `(${hop.privateType || 'Internal'})`}
-                    </span>
-                  </>
+            <div className="flex flex-col items-end gap-0.5">
+               {!isDropped && (
+                   <div className="text-[11px] font-mono bg-gray-900 px-1.5 py-0.5 rounded text-gray-300 flex items-center">
+                       {isNaN(avgLatency) ? '-' : avgLatency} ms
+                   </div>
+               )}
+               {compareMode && !isDropped && (
+                   <div className={`text-[9px] font-mono ${changedRoute ? 'text-indigo-400' : (latencyDiff > 10 ? 'text-red-400' : 'text-emerald-400')}`}>
+                       {changedRoute ? 'Route Changed' : (latencyDiff > 0 ? `+${latencyDiff}ms` : `${latencyDiff}ms`)}
+                   </div>
                )}
             </div>
          </div>
-         <div className="flex flex-col items-end gap-0.5">
-            {!isDropped && (
-                <div className="text-[11px] font-mono bg-gray-900 px-1.5 py-0.5 rounded text-gray-300 flex items-center">
-                    {isNaN(avgLatency) ? '-' : avgLatency} ms
-                </div>
-            )}
-            {compareMode && !isDropped && (
-                <div className={`text-[9px] font-mono ${changedRoute ? 'text-indigo-400' : (latencyDiff > 10 ? 'text-red-400' : 'text-emerald-400')}`}>
-                    {changedRoute ? 'Route Changed' : (latencyDiff > 0 ? `+${latencyDiff}ms` : `${latencyDiff}ms`)}
-                </div>
-            )}
-         </div>
+
+         {/* Bottom Action Footer with Ping Button */}
+         {hop.ip && (
+           <div className="pt-1.5 border-t border-gray-800/80 flex items-center justify-between text-xs font-mono">
+             <span className="text-[10px] text-gray-500 truncate max-w-[170px]" title={hop.geo?.city ? `${hop.geo.city}, ${hop.geo.country || ''}` : ''}>
+               {hop.geo?.city ? `${hop.geo.city}${hop.geo.countryCode ? `, ${hop.geo.countryCode}` : ''}` : (hop.isPrivate ? 'Internal Gateway' : 'Router')}
+             </span>
+             <button
+               onClick={(e) => {
+                 e.stopPropagation();
+                 if (onPing) onPing(hop);
+               }}
+               className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-gray-950/80 hover:bg-emerald-950 text-gray-400 hover:text-emerald-400 border border-gray-700/80 hover:border-emerald-500/60 text-[11px] font-mono transition cursor-pointer shadow-sm group"
+               title={`Live continuous ping monitor for ${hop.ip}`}
+             >
+               <Activity size={12} className="text-emerald-500 group-hover:animate-pulse" />
+               <span>Ping</span>
+             </button>
+           </div>
+         )}
       </div>
 
       {isSelected && !isDropped && (!isPrivate || (compareMode && pastHop && changedRoute)) && (
