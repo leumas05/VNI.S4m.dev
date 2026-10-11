@@ -1,0 +1,54 @@
+Visual Network Intelligence (VNI) / VNI Engine
+Copyright 2024-2026 S4m.dev (https://www.s4m.dev/)
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file in the root directory for the full license terms.
+
+================================================================================
+Third-Party Software and Dataset Attributions
+================================================================================
+
+This product includes software, datasets, and digital assets developed by
+third parties:
+
+1. Natural Earth / GeoJSON World Boundaries (countries.json)
+   - Source: Natural Earth (https://www.naturalearthdata.com/)
+   - License: Public Domain
+   - Used for rendering vector continent borders and country outlines in GlobeView.
+
+2. Three.js
+   - Copyright (c) 2010-2026 Three.js Authors (Ricardo Cabello / Mr.doob)
+   - Website: https://threejs.org/
+   - License: MIT License
+
+3. react-globe.gl & three-globe
+   - Copyright (c) 2019-2026 Vasco Asturiano
+   - Website: https://github.com/vasturiano/three-globe
+   - License: MIT License
+
+4. Leaflet & React-Leaflet
+   - Copyright (c) 2010-2026 Vladimir Agafonkin / Leaflet contributors
+   - Website: https://leafletjs.com/
+   - License: BSD 2-Clause License
+
+5. OpenStreetMap
+   - Map tiles and geographical data © OpenStreetMap contributors
+   - Website: https://www.openstreetmap.org/copyright
+   - License: Open Data Commons Open Database License (ODbL)
+
+6. CARTO (Dark Matter Map Tiles)
+   - Map tiles © CARTO (https://carto.com/attributions)
+   - License: Creative Commons Attribution (CC BY 4.0)
+
+7. IP Geolocation & ASN Enrichment
+   - Geolocation and network enrichment powered in part by IP-API (https://ip-api.com/)
+
+8. Lucide Icons
+   - Copyright (c) 2022-2026 Lucide Contributors
+   - Website: https://lucide.dev/
+   - License: ISC License
+
+9. Electron
+   - Copyright (c) OpenJS Foundation and Electron contributors
+   - Website: https://www.electronjs.org/
+   - License: MIT License
