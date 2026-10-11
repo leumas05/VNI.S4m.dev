@@ -68,11 +68,15 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
       if (coordCounts[key] > 1) {
         seenCoords[key] = (seenCoords[key] || 0) + 1;
         const count = seenCoords[key];
-        const angle = count * 2.2;
-        // Subtle offset radius so co-located nodes fan out into a clean cluster
-        const radius = 0.08 + (count * 0.04);
-        copy.geo.lat += Math.sin(angle) * radius;
-        copy.geo.lon += Math.cos(angle) * radius;
+        const total = coordCounts[key];
+        // Distribute evenly in a radial orbit around the hub
+        const angle = ((count - 1) / total) * (2 * Math.PI) + 0.35;
+        // Balanced spread: ~22-25 km radius so dots sit cleanly apart
+        const spreadRadius = 0.20 + (total > 4 ? 0.05 : 0);
+        // Correct for latitude distortion so circles don't turn into squashed ovals
+        const cosLat = Math.max(0.25, Math.cos(copy.geo.lat * Math.PI / 180));
+        copy.geo.lat += Math.sin(angle) * spreadRadius;
+        copy.geo.lon += (Math.cos(angle) * spreadRadius) / cosLat;
         copy.isClustered = true;
       }
       return copy;
@@ -119,8 +123,8 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
       list.push({
         lat: myLocation.lat,
         lng: myLocation.lon,
-        color: 'rgba(56, 189, 248, 0.32)',
-        radius: 1.15,
+        color: 'rgba(56, 189, 248, 0.28)',
+        radius: 0.35,
         altitude: 0.006,
         label: tooltip,
         hopData: null
@@ -131,7 +135,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         lat: myLocation.lat,
         lng: myLocation.lon,
         color: '#38bdf8',
-        radius: 0.55,
+        radius: 0.16,
         altitude: 0.009,
         label: tooltip,
         hopData: null
@@ -144,7 +148,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
       const isLast = idx === processedHops.length - 1;
 
       const themeColor = isSelected ? '#fbbf24' : (isLast ? '#34d399' : '#10b981');
-      const haloColor = isSelected ? 'rgba(251, 191, 36, 0.42)' : (isLast ? 'rgba(52, 211, 153, 0.35)' : 'rgba(16, 185, 129, 0.28)');
+      const haloColor = isSelected ? 'rgba(251, 191, 36, 0.45)' : (isLast ? 'rgba(52, 211, 153, 0.35)' : 'rgba(16, 185, 129, 0.25)');
 
       const tooltip = getTooltip({
         title: `Hop #${hop.hop}`,
@@ -159,7 +163,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         lat: hop.geo.lat,
         lng: hop.geo.lon,
         color: haloColor,
-        radius: isSelected ? 1.5 : (isLast ? 1.25 : 1.05),
+        radius: isSelected ? 0.48 : (isLast ? 0.38 : 0.28),
         altitude: 0.006,
         label: tooltip,
         hopData: hop
@@ -170,7 +174,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         lat: hop.geo.lat,
         lng: hop.geo.lon,
         color: themeColor,
-        radius: isSelected ? 0.75 : (isLast ? 0.6 : 0.48),
+        radius: isSelected ? 0.22 : (isLast ? 0.18 : 0.13),
         altitude: 0.009,
         label: tooltip,
         hopData: hop
@@ -180,21 +184,42 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     return list;
   }, [processedHops, selectedHop, hoveredHop, myLocation]);
 
-  // Trace Arcs: Pure WebGL glowing laser lines (stroke=null uses THREE.Line!)
+  // Trace Arcs: Pure WebGL glowing laser lines with dynamic directional pulses
   const arcsData = useMemo(() => {
     const arcs = [];
     let prevPoint = null;
 
     if (myLocation?.lat && myLocation?.lon && processedHops.length > 0) {
-      prevPoint = { lat: myLocation.lat, lng: myLocation.lon };
+      prevPoint = { lat: myLocation.lat, lng: myLocation.lon, isMe: true };
     }
 
-    processedHops.forEach(hop => {
-      const currentPoint = { lat: hop.geo.lat, lng: hop.geo.lon };
+    processedHops.forEach((hop, idx) => {
+      const currentPoint = { lat: hop.geo.lat, lng: hop.geo.lon, hop };
       if (prevPoint) {
         const distKm = getDistanceKm(prevPoint.lat, prevPoint.lng, currentPoint.lat, currentPoint.lng);
-        // Dynamic arc height: even short hops arch gracefully above the surface
-        const arcAlt = Math.max(0.045, Math.min(0.28, distKm * 0.000045));
+        // Dynamic arc height: smooth power curve so local hops don't shoot into orbit, but long hops arch gracefully
+        const arcAlt = Math.max(0.012, Math.min(0.28, Math.pow(distKm / 10000, 0.55) * 0.24));
+
+        const isCurrentSelected = (selectedHop && selectedHop.hop === hop.hop) || (hoveredHop && hoveredHop.hop === hop.hop);
+        const isPrevSelected = prevPoint.hop && ((selectedHop && selectedHop.hop === prevPoint.hop.hop) || (hoveredHop && hoveredHop.hop === prevPoint.hop.hop));
+        const isHighlight = isCurrentSelected || isPrevSelected;
+        const isFirst = !!prevPoint.isMe;
+        const isLast = idx === processedHops.length - 1;
+
+        // Visual progression: Gateway (cyan) -> Hop 1 -> ... -> Destination (mint)
+        let strokeColor;
+        if (isHighlight) {
+          strokeColor = isPrevSelected 
+            ? ['rgba(251, 191, 36, 0.95)', 'rgba(52, 211, 153, 0.85)'] 
+            : ['rgba(16, 185, 129, 0.85)', 'rgba(251, 191, 36, 0.95)'];
+        } else if (isFirst) {
+          strokeColor = ['rgba(56, 189, 248, 0.95)', 'rgba(16, 185, 129, 0.95)'];
+        } else if (isLast) {
+          strokeColor = ['rgba(16, 185, 129, 0.7)', 'rgba(52, 211, 153, 1)'];
+        } else {
+          // Forward gradient pointing in direction of network packets
+          strokeColor = ['rgba(16, 185, 129, 0.45)', 'rgba(52, 211, 153, 0.95)'];
+        }
 
         arcs.push({
           startLat: prevPoint.lat,
@@ -202,7 +227,8 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
           endLat: currentPoint.lat,
           endLng: currentPoint.lng,
           altitude: arcAlt,
-          color: ['rgba(16, 185, 129, 0.45)', 'rgba(52, 211, 153, 0.95)'],
+          color: strokeColor,
+          stroke: isHighlight ? 0.26 : 0.14,
           name: `Hop ${hop.hop}`
         });
       }
@@ -210,7 +236,51 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     });
 
     return arcs;
-  }, [processedHops, myLocation]);
+  }, [processedHops, myLocation, selectedHop, hoveredHop]);
+
+  // 3D WebGL Vector Labels: Mark Start, Destination, and Selected Waypoint clearly
+  const labelsData = useMemo(() => {
+    const list = [];
+    if (myLocation?.lat && myLocation?.lon && processedHops.length > 0) {
+      list.push({
+        lat: myLocation.lat,
+        lng: myLocation.lon,
+        text: 'START',
+        color: '#38bdf8',
+        size: 0.36,
+        altitude: 0.016,
+      });
+    }
+
+    if (processedHops.length > 0) {
+      const last = processedHops[processedHops.length - 1];
+      list.push({
+        lat: last.geo.lat,
+        lng: last.geo.lon,
+        text: 'TARGET',
+        color: '#34d399',
+        size: 0.36,
+        altitude: 0.016,
+      });
+    }
+
+    if (selectedHop?.geo?.lat && selectedHop?.geo?.lon) {
+      const matched = processedHops.find(h => h.hop === selectedHop.hop) || selectedHop;
+      const isLast = processedHops.length > 0 && matched.hop === processedHops[processedHops.length - 1].hop;
+      if (!isLast) {
+        list.push({
+          lat: matched.geo.lat,
+          lng: matched.geo.lon,
+          text: `#${matched.hop}`,
+          color: '#fbbf24',
+          size: 0.40,
+          altitude: 0.02,
+        });
+      }
+    }
+
+    return list;
+  }, [processedHops, myLocation, selectedHop]);
 
   // Subtle pulsing radar ripples for user, destination, and selected hop
   const ringsData = useMemo(() => {
@@ -221,9 +291,9 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         lat: myLocation.lat,
         lng: myLocation.lon,
         color: () => (t) => `rgba(56, 189, 248, ${Math.max(0, 0.75 * (1 - t))})`,
-        maxR: 2.6,
-        propagationSpeed: 1.2,
-        repeatPeriod: 2000,
+        maxR: 1.5,
+        propagationSpeed: 1.0,
+        repeatPeriod: 2200,
         altitude: 0.007
       });
     }
@@ -234,8 +304,8 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         lat: matched.geo.lat,
         lng: matched.geo.lon,
         color: () => (t) => `rgba(251, 191, 36, ${Math.max(0, 0.85 * (1 - t))})`,
-        maxR: 3.2,
-        propagationSpeed: 1.8,
+        maxR: 2.0,
+        propagationSpeed: 1.5,
         repeatPeriod: 1200,
         altitude: 0.007
       });
@@ -245,9 +315,9 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         lat: last.geo.lat,
         lng: last.geo.lon,
         color: () => (t) => `rgba(52, 211, 153, ${Math.max(0, 0.8 * (1 - t))})`,
-        maxR: 3.0,
-        propagationSpeed: 1.4,
-        repeatPeriod: 1500,
+        maxR: 1.8,
+        propagationSpeed: 1.2,
+        repeatPeriod: 1800,
         altitude: 0.007
       });
     }
@@ -267,7 +337,10 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     if (typeof globeRef.current.ringsData === 'function') {
       globeRef.current.ringsData(ringsData);
     }
-  }, [pointsData, arcsData, ringsData]);
+    if (typeof globeRef.current.labelsData === 'function') {
+      globeRef.current.labelsData(labelsData);
+    }
+  }, [pointsData, arcsData, ringsData, labelsData]);
 
   // Setup globe controls and orientation
   useEffect(() => {
@@ -375,7 +448,19 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
             }
           }}
 
-          /* Razor-thin glowing laser lines (THREE.Line) updating in real-time */
+          /* 3D WebGL Vector Labels for Start, Target, and Selected Waypoint */
+          labelsData={labelsData}
+          labelLat="lat"
+          labelLng="lng"
+          labelText="text"
+          labelColor="color"
+          labelSize="size"
+          labelAltitude="altitude"
+          labelIncludeDot={false}
+          labelResolution={2}
+          labelsTransitionDuration={0}
+
+          /* Glowing laser tubes with directional pulsing energy packets */
           arcsData={arcsData}
           arcStartLat="startLat"
           arcStartLng="startLng"
@@ -383,11 +468,11 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
           arcEndLng="endLng"
           arcAltitude="altitude"
           arcColor="color"
-          arcDashLength={0.4}
+          arcStroke="stroke"
+          arcDashLength={0.35}
           arcDashGap={0.2}
           arcDashInitialGap={0}
-          arcDashAnimateTime={1600}
-          arcStroke={null}
+          arcDashAnimateTime={1200}
           arcsTransitionDuration={0}
 
           /* Pulsing radar ripples */
@@ -400,6 +485,36 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
           ringRepeatPeriod="repeatPeriod"
           ringAltitude="altitude"
         />
+      )}
+
+      {/* Route Flow HUD Status */}
+      {processedHops.length > 0 && (
+        <div className="absolute top-6 left-6 z-20 flex flex-col gap-1.5 pointer-events-none select-none">
+          <div className="flex items-center gap-2 bg-gray-900/85 border border-gray-700/80 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto">
+            <div className="flex items-center gap-1.5 text-sky-400 font-semibold" title={myLocation?.city}>
+              <span className="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
+              <span>{myLocation?.city || 'Gateway'}</span>
+            </div>
+            <span className="text-gray-500 font-bold">➔</span>
+            <span className="text-gray-400 px-1 py-0.5 bg-gray-800/80 rounded text-[11px]">
+              {processedHops.length} {processedHops.length === 1 ? 'hop' : 'hops'}
+            </span>
+            <span className="text-gray-500 font-bold">➔</span>
+            <div className="flex items-center gap-1.5 text-emerald-400 font-semibold" title={processedHops[processedHops.length - 1].geo.city}>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#10b981]"></span>
+              <span>{processedHops[processedHops.length - 1].geo.city || processedHops[processedHops.length - 1].geo.country || 'Target'}</span>
+            </div>
+          </div>
+
+          {selectedHop && (
+            <div className="flex items-center gap-2 bg-amber-950/70 border border-amber-500/40 rounded-lg px-3 py-1.5 backdrop-blur-md shadow-xl text-xs font-mono text-amber-300 pointer-events-auto">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+              <span className="font-bold">Hop #{selectedHop.hop}:</span>
+              <span>{selectedHop.geo?.city || 'Unknown'}, {selectedHop.geo?.country || ''}</span>
+              {selectedHop.rtt && <span className="text-amber-400/80 font-semibold">({selectedHop.rtt}ms)</span>}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Globe Floating Controls */}
