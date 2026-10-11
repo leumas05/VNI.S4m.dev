@@ -204,10 +204,17 @@ export default function LanTopologyView({
 
       const total = allClients.length;
       if (total > 0) {
-        const cols = Math.min(total, total <= 6 ? total : (total <= 12 ? Math.ceil(total / 2) : Math.ceil(total / 3)));
+        // Balanced columns so cards NEVER overlap
+        // Target balanced rows with 4 to 5 cards per row
+        const targetRowCount = Math.max(1, Math.ceil(total / 5));
+        const cols = Math.ceil(total / targetRowCount);
         const rows = Math.ceil(total / cols);
-        const colSpacing = Math.min(190, Math.max(140, (width - 160) / (cols || 1)));
-        const startY = 330;
+
+        const CARD_WIDTH = 188;
+        const MIN_GAP_X = 28;
+        // Guaranteed minimum spacing (216px) ensures cards NEVER touch or overlap
+        const colSpacing = Math.max(CARD_WIDTH + MIN_GAP_X, Math.min(240, (width - 120) / (cols || 1)));
+        const startY = 320;
         const rowSpacing = 135;
 
         allClients.forEach((dev, idx) => {
@@ -226,8 +233,8 @@ export default function LanTopologyView({
 
           // Link: Router -> Client
           links.push({
-            from: { x: centerX, y: routerY + 30 },
-            to: { x: nodeX, y: nodeY - 26 },
+            from: { x: centerX, y: routerY + 35 },
+            to: { x: nodeX, y: nodeY - 35 },
             color: getDeviceColor(dev.deviceType, dev.isThisDevice, dev.isGateway),
             isThisDevice: dev.isThisDevice,
             isAlive: dev.isAlive
@@ -260,7 +267,7 @@ export default function LanTopologyView({
       });
 
       links.push({
-        from: { x: centerX, y: centerY - 30 },
+        from: { x: centerX, y: centerY - 35 },
         to: { x: centerX, y: centerY - wanDist + 25 },
         color: '#6366f1',
         isMainTrunk: true,
@@ -272,12 +279,17 @@ export default function LanTopologyView({
       clientDevices.forEach(d => allClients.push(d));
 
       const total = allClients.length;
-      const radius = Math.min(width * 0.38, Math.max(190, 240 + total * 4));
+      const useDualOrbit = total > 8;
+      const baseRadius = Math.max(260, Math.min(340, width * 0.28));
 
       allClients.forEach((dev, idx) => {
-        const angle = (idx / (total || 1)) * (2 * Math.PI) + 0.35;
-        const nodeX = centerX + Math.cos(angle) * radius;
-        const nodeY = centerY + Math.sin(angle) * (radius * 0.75);
+        const isOuter = useDualOrbit && (idx % 2 === 1);
+        const radiusX = isOuter ? baseRadius + 160 : baseRadius;
+        const radiusY = isOuter ? (baseRadius + 160) * 0.76 : baseRadius * 0.76;
+
+        const angle = (idx / (total || 1)) * (2 * Math.PI) - Math.PI / 2 + 0.25;
+        const nodeX = centerX + Math.cos(angle) * radiusX;
+        const nodeY = centerY + Math.sin(angle) * radiusY;
 
         nodes.push({
           ...dev,
@@ -390,7 +402,7 @@ export default function LanTopologyView({
           const IconComponent = isCloud ? Cloud : getDeviceIcon(node.deviceType);
           const devColor = isCloud ? '#6366f1' : getDeviceColor(node.deviceType, node.isThisDevice, node.isGateway);
 
-          const cardWidth = isCloud ? 140 : 180;
+          const cardWidth = isCloud ? 140 : (node.isGateway ? 204 : 188);
           const cardHeight = isCloud ? 50 : 70;
           const nodeNick = !isCloud ? (nicknames[node.mac] || nicknames[node.ip]) : null;
           const displaySubtitle = isCloud
@@ -426,22 +438,22 @@ export default function LanTopologyView({
               />
 
               {/* Icon Disc */}
-              <g transform={`translate(${-cardWidth / 2 + 20}, 0)`}>
+              <g transform={`translate(${-cardWidth / 2 + 18}, 0)`}>
                 <circle
                   cx={0}
                   cy={0}
-                  r={14}
+                  r={13}
                   fill={`${devColor}22`}
                   stroke={devColor}
                   strokeWidth={1}
                 />
-                <g transform="translate(-7, -7)">
-                  <IconComponent size={14} color={devColor} />
+                <g transform="translate(-6.5, -6.5)">
+                  <IconComponent size={13} color={devColor} />
                 </g>
               </g>
 
               {/* Text Information */}
-              <g transform={`translate(${-cardWidth / 2 + 42}, -10)`}>
+              <g transform={`translate(${-cardWidth / 2 + 38}, -11)`}>
                 <text
                   x={0}
                   y={0}
@@ -451,24 +463,23 @@ export default function LanTopologyView({
                   fontFamily="ui-monospace, monospace"
                 >
                   {isCloud ? node.title : node.ip}
+                  {node.isThisDevice && (
+                    <tspan
+                      fill="#38bdf8"
+                      fontSize={8.5}
+                      fontWeight="800"
+                      fontFamily="system-ui, sans-serif"
+                      dx={7}
+                    >
+                      ⭐ DU
+                    </tspan>
+                  )}
                 </text>
-                {node.isThisDevice && (
-                  <text
-                    x={88}
-                    y={-1}
-                    fill="#38bdf8"
-                    fontSize={8}
-                    fontWeight="800"
-                    fontFamily="system-ui, sans-serif"
-                  >
-                    ⭐ DU
-                  </text>
-                )}
               </g>
 
               <text
-                x={-cardWidth / 2 + 42}
-                y={7}
+                x={-cardWidth / 2 + 38}
+                y={6}
                 fill={nodeNick ? '#fbbf24' : devColor}
                 fontSize={9.5}
                 fontWeight="600"
@@ -480,10 +491,10 @@ export default function LanTopologyView({
               {/* Full Clear MAC & Latency */}
               {!isCloud && node.mac && (
                 <text
-                  x={-cardWidth / 2 + 42}
-                  y={22}
+                  x={-cardWidth / 2 + 38}
+                  y={21}
                   fill="#94a3b8"
-                  fontSize={9}
+                  fontSize={8.5}
                   fontWeight="600"
                   fontFamily="ui-monospace, monospace"
                 >
@@ -504,8 +515,8 @@ export default function LanTopologyView({
               {/* Latency badge on bottom right */}
               {!isCloud && node.latency !== null && (
                 <text
-                  x={cardWidth / 2 - 10}
-                  y={22}
+                  x={cardWidth / 2 - 8}
+                  y={21}
                   textAnchor="end"
                   fill="#34d399"
                   fontSize={8.5}
@@ -519,7 +530,7 @@ export default function LanTopologyView({
               {/* Pulsing indicator if alive */}
               {!isCloud && node.isAlive && (
                 <circle
-                  cx={cardWidth / 2 - 10}
+                  cx={cardWidth / 2 - 8}
                   cy={-cardHeight / 2 + 10}
                   r={3.5}
                   fill="#10b981"
