@@ -40,6 +40,26 @@ function extractDomainLevels(hostname) {
   return Array.from(new Set(levels));
 }
 
+function formatTtl(ttl) {
+  if (ttl === undefined || ttl === null || isNaN(ttl)) return '--';
+  const val = Number(ttl);
+  if (val < 0) return '--';
+  if (val < 60) return `${val}s`;
+
+  const hours = Math.floor(val / 3600);
+  const minutes = Math.floor((val % 3600) / 60);
+  const seconds = val % 60;
+
+  if (hours > 0) {
+    if (minutes === 0 && seconds === 0) return `${hours} tim`;
+    if (seconds === 0) return `${hours}h ${minutes}m`;
+    return `${hours}h ${minutes}m`;
+  }
+
+  if (seconds === 0) return `${minutes} min`;
+  return `${minutes}m ${seconds}s`;
+}
+
 export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
   const initialTarget = hop?.hostname && hop.hostname !== hop?.ip ? hop.hostname : (hop?.ip || '');
   const [target, setTarget] = useState(initialTarget);
@@ -540,8 +560,11 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
                               {rec.type}
                             </span>
                           </div>
-                          <div className="col-span-2 text-center text-gray-500 font-mono">
-                            {rec.ttl !== undefined ? `${rec.ttl}s` : '--'}
+                          <div 
+                            className="col-span-2 text-center text-gray-400 font-mono"
+                            title={rec.ttl !== undefined ? `${Number(rec.ttl).toLocaleString()} sekunder` : undefined}
+                          >
+                            <span className="text-gray-300 font-medium">{formatTtl(rec.ttl)}</span>
                           </div>
                           <div className="col-span-4 flex items-center justify-between text-gray-200 font-mono overflow-hidden">
                             <span className="truncate pr-2" title={rec.data}>
