@@ -11,8 +11,8 @@ export default function PingModal({ hop, onClose, apiBase }) {
   
   const eventSourceRef = useRef(null);
 
-  const targetIp = hop?.ip;
-  const targetHost = hop?.hostname && hop?.hostname !== hop?.ip ? hop.hostname : null;
+  const targetIp = typeof hop === 'string' ? hop : (hop?.ip || hop?.target || '');
+  const targetHost = typeof hop === 'object' && hop?.hostname && hop?.hostname !== targetIp ? hop.hostname : null;
 
   // Setup EventSource for continuous real-time pinging
   useEffect(() => {

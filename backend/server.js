@@ -40,18 +40,29 @@ function pingHost(target, callback) {
     child.stderr.on('data', (d) => { output += d.toString(); });
 
     child.on('close', (code) => {
-        const timeMatch = output.match(/time[=<](\d+(?:\.\d+)?) ?ms/i);
+        const timeMatch = output.match(/(?:time|tid)[=<](\d+(?:\.\d+)?) ?ms/i);
         const ttlMatch = output.match(/TTL=(\d+)/i);
+        const isLess1ms = /(?:time|tid)<1\s*ms/i.test(output);
 
-        if (timeMatch) {
-            const timeVal = parseFloat(timeMatch[1]);
+        if (timeMatch || isLess1ms || (ttlMatch && code === 0)) {
+            let finalTime = 1;
+            if (timeMatch) {
+                const timeVal = parseFloat(timeMatch[1]);
+                finalTime = isLess1ms ? 1 : Math.round(timeVal);
+            }
             callback(null, {
                 status: 'success',
-                time: output.includes('time<1ms') ? 1 : Math.round(timeVal),
-                rawTime: timeVal,
+                time: finalTime,
+                rawTime: timeMatch ? parseFloat(timeMatch[1]) : 1,
                 ttl: ttlMatch ? parseInt(ttlMatch[1], 10) : null
             });
-        } else if (output.toLowerCase().includes('timed out') || output.toLowerCase().includes('unreachable') || code !== 0) {
+        } else if (
+            output.toLowerCase().includes('timed out') ||
+            output.toLowerCase().includes('timeout') ||
+            output.toLowerCase().includes('unreachable') ||
+            output.toLowerCase().includes('inte nås') ||
+            code !== 0
+        ) {
             callback(null, {
                 status: 'timeout',
                 time: null,
@@ -180,7 +191,7 @@ app.get('/api/netstat', async (req, res) => {
 
 app.get('/api/lan-scan', async (req, res) => {
     try {
-        const sweep = req.query.sweep === 'true' || req.query.sweep === '1';
+        const sweep = req.query.sweep !== 'false' && req.query.sweep !== '0';
         const result = await scanLan({ sweep });
         res.json(result);
     } catch (err) {

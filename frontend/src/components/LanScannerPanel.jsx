@@ -5,7 +5,6 @@ import {
   Search,
   Zap,
   Activity,
-  ShieldCheck,
   Globe,
   Copy,
   Check,
@@ -16,7 +15,9 @@ import {
   Tv,
   Server,
   Wifi,
-  Radio
+  Radio,
+  Edit2,
+  ExternalLink
 } from 'lucide-react';
 
 function getDeviceIcon(type) {
@@ -75,6 +76,30 @@ export default function LanScannerPanel({
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [copiedId, setCopiedId] = useState(null);
+  const [nicknames, setNicknames] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('vni_lan_nicknames')) || {};
+    } catch (e) {
+      return {};
+    }
+  });
+  const [editingKey, setEditingKey] = useState(null);
+  const [editValue, setEditValue] = useState('');
+
+  const saveNickname = (key, val) => {
+    const trimmed = (val || '').trim();
+    setNicknames(prev => {
+      const next = { ...prev };
+      if (trimmed) {
+        next[key] = trimmed;
+      } else {
+        delete next[key];
+      }
+      localStorage.setItem('vni_lan_nicknames', JSON.stringify(next));
+      return next;
+    });
+    setEditingKey(null);
+  };
 
   const copyToClipboard = (text, id) => {
     if (!text) return;
@@ -95,7 +120,9 @@ export default function LanScannerPanel({
       }
       if (!search.trim()) return true;
       const s = search.toLowerCase();
+      const customName = nicknames[dev.mac] || nicknames[dev.ip] || '';
       return (
+        customName.toLowerCase().includes(s) ||
         (dev.ip || '').toLowerCase().includes(s) ||
         (dev.mac || '').toLowerCase().includes(s) ||
         (dev.vendor || '').toLowerCase().includes(s) ||
@@ -103,7 +130,7 @@ export default function LanScannerPanel({
         (dev.deviceType || '').toLowerCase().includes(s)
       );
     });
-  }, [devices, filterType, search]);
+  }, [devices, filterType, search, nicknames]);
 
   const activeCount = useMemo(() => {
     let count = 0;
@@ -278,40 +305,55 @@ export default function LanScannerPanel({
                 </div>
               </div>
 
-              <div className="flex flex-col items-end gap-1">
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+              <div className="flex flex-col items-end gap-1.5">
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
                   gateway.latency !== null
                     ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'
                     : 'bg-gray-800 text-gray-400'
                 }`}>
                   {gateway.latency !== null ? `${gateway.latency} ms` : 'offline'}
                 </span>
-                <span className="text-[10px] text-gray-500 font-mono">{gateway.mac}</span>
+                <div className="flex items-center gap-1 font-mono text-[10px] bg-gray-950/90 border border-gray-700/80 px-2 py-0.5 rounded text-gray-200">
+                  <span className="text-[9px] text-gray-400 font-bold">MAC:</span>
+                  <span className="font-bold tracking-wider text-emerald-400">{gateway.mac}</span>
+                </div>
               </div>
             </div>
 
             {/* Quick action bar */}
-            <div className="mt-2 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
+            <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
               <span className="text-gray-500 text-[10px]">Gateway • Subnet Hub</span>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     copyToClipboard(gateway.ip, `ip-${gateway.id}`);
                   }}
-                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition flex items-center gap-1"
-                  title="Copy IP"
+                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
+                  title="Copy IP Address"
                 >
                   {copiedId === `ip-${gateway.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
                   <span className="text-[10px]">IP</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyToClipboard(gateway.mac, `mac-${gateway.id}`);
+                  }}
+                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
+                  title="Copy MAC Address"
+                >
+                  {copiedId === `mac-${gateway.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                  <span className="text-[10px]">MAC</span>
                 </button>
                 {onPing && (
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onPing(gateway.ip);
+                      onPing({ ip: gateway.ip, hostname: 'Default Gateway (Router)', isPrivate: true });
                     }}
                     className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-emerald-400 hover:text-emerald-300 transition flex items-center gap-1"
                     title="Live Ping"
@@ -320,20 +362,18 @@ export default function LanScannerPanel({
                     <span className="text-[10px]">Ping</span>
                   </button>
                 )}
-                {onSslCheck && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSslCheck(gateway.ip, 443);
-                    }}
-                    className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-sky-400 hover:text-sky-300 transition flex items-center gap-1"
-                    title="Check Web Admin Port (SSL 443)"
-                  >
-                    <ShieldCheck size={11} />
-                    <span className="text-[10px]">SSL</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(`http://${gateway.ip}`, '_blank', 'noopener,noreferrer');
+                  }}
+                  className="px-2 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 hover:text-emerald-200 transition flex items-center gap-1"
+                  title="Open Router Web Admin Interface in browser"
+                >
+                  <ExternalLink size={11} />
+                  <span className="text-[10px] font-semibold">Web Admin</span>
+                </button>
               </div>
             </div>
           </div>
@@ -367,27 +407,43 @@ export default function LanScannerPanel({
                 </div>
               </div>
 
-              <div className="flex flex-col items-end gap-1">
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-950 text-sky-400 border border-sky-500/30">
+              <div className="flex flex-col items-end gap-1.5">
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-950 text-sky-400 border border-sky-500/30">
                   0 ms
                 </span>
-                <span className="text-[10px] text-gray-500 font-mono">{thisDevice.mac}</span>
+                <div className="flex items-center gap-1 font-mono text-[10px] bg-gray-950/90 border border-gray-700/80 px-2 py-0.5 rounded text-gray-200">
+                  <span className="text-[9px] text-gray-400 font-bold">MAC:</span>
+                  <span className="font-bold tracking-wider text-sky-400">{thisDevice.mac}</span>
+                </div>
               </div>
             </div>
 
-            <div className="mt-2 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
+            <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
               <span className="text-gray-500 text-[10px]">Local Host Adapter</span>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     copyToClipboard(thisDevice.ip, `ip-${thisDevice.id}`);
                   }}
-                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition flex items-center gap-1"
+                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
+                  title="Copy IP Address"
                 >
                   {copiedId === `ip-${thisDevice.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
                   <span className="text-[10px]">IP</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyToClipboard(thisDevice.mac, `mac-${thisDevice.id}`);
+                  }}
+                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
+                  title="Copy MAC Address"
+                >
+                  {copiedId === `mac-${thisDevice.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                  <span className="text-[10px]">MAC</span>
                 </button>
               </div>
             </div>
@@ -414,6 +470,9 @@ export default function LanScannerPanel({
             const IconComponent = getDeviceIcon(dev.deviceType);
             const devColor = getDeviceColor(dev.deviceType, false, false);
             const isSelected = selectedDevice?.id === dev.id;
+            const customName = nicknames[dev.mac] || nicknames[dev.ip];
+            const devTitle = customName || dev.hostname || dev.friendlyName || dev.vendor || dev.ip;
+            const isEditing = editingKey === dev.mac || editingKey === dev.ip;
 
             return (
               <div
@@ -445,49 +504,123 @@ export default function LanScannerPanel({
                             PRIVATE MAC
                           </span>
                         )}
+                        {customName && (
+                          <span className="px-1 py-0.2 rounded text-[8px] bg-amber-950/80 border border-amber-500/40 text-amber-300">
+                            NICKNAME
+                          </span>
+                        )}
                       </div>
-                      <div className="text-[11px] text-gray-400 font-medium truncate">
-                        {dev.vendor}
-                      </div>
+
+                      {isEditing ? (
+                        <div className="flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            autoFocus
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveNickname(dev.mac || dev.ip, editValue);
+                              if (e.key === 'Escape') setEditingKey(null);
+                            }}
+                            placeholder="Enter device nickname..."
+                            className="px-1.5 py-0.5 rounded bg-gray-950 border border-amber-500 text-xs text-white focus:outline-none w-36 font-sans"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => saveNickname(dev.mac || dev.ip, editValue)}
+                            className="p-1 rounded bg-amber-600 hover:bg-amber-500 text-white"
+                            title="Save Nickname"
+                          >
+                            <Check size={11} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingKey(null)}
+                            className="p-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-400"
+                            title="Cancel"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[11px] text-gray-300 font-medium truncate max-w-[160px]" title={devTitle}>
+                            {devTitle}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingKey(dev.mac || dev.ip);
+                              setEditValue(customName || dev.hostname || '');
+                            }}
+                            className="text-gray-500 hover:text-amber-400 transition p-0.5"
+                            title="Set custom nickname"
+                          >
+                            <Edit2 size={10} />
+                          </button>
+                        </div>
+                      )}
+
+                      {customName && !isEditing && (
+                        <div className="text-[10px] text-gray-500 truncate">
+                          {dev.vendor}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
                       dev.latency !== null
                         ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'
                         : 'bg-gray-800 text-gray-500'
                     }`}>
                       {dev.latency !== null ? `${dev.latency} ms` : (dev.isAlive ? 'online' : 'silent')}
                     </span>
-                    <span className="text-[10px] text-gray-500 font-mono">{dev.mac}</span>
+                    <div className="flex items-center gap-1 font-mono text-[10px] bg-gray-950/90 border border-gray-700/80 px-2 py-0.5 rounded text-gray-200">
+                      <span className="text-[9px] text-gray-400 font-bold">MAC:</span>
+                      <span className="font-bold tracking-wider text-amber-300/90">{dev.mac}</span>
+                    </div>
                   </div>
                 </div>
 
                 {/* Bottom Action strip */}
-                <div className="mt-2 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
+                <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
                   <span className="text-gray-500 text-[10px] capitalize">
                     {dev.deviceType} • {dev.type}
                   </span>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         copyToClipboard(dev.ip, `ip-${dev.id}`);
                       }}
-                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition flex items-center gap-1"
-                      title="Copy IP"
+                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
+                      title="Copy IP Address"
                     >
                       {copiedId === `ip-${dev.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
                       <span className="text-[10px]">IP</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyToClipboard(dev.mac, `mac-${dev.id}`);
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
+                      title="Copy MAC Address"
+                    >
+                      {copiedId === `mac-${dev.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                      <span className="text-[10px]">MAC</span>
                     </button>
                     {onPing && (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onPing(dev.ip);
+                          onPing({ ip: dev.ip, hostname: devTitle, isPrivate: true });
                         }}
                         className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-emerald-400 hover:text-emerald-300 transition flex items-center gap-1"
                         title="Live Ping test"
@@ -496,34 +629,19 @@ export default function LanScannerPanel({
                         <span className="text-[10px]">Ping</span>
                       </button>
                     )}
-                    {onDig && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDig(dev.ip);
-                        }}
-                        className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-purple-400 hover:text-purple-300 transition flex items-center gap-1"
-                        title="Reverse DNS Lookup"
-                      >
-                        <Globe size={11} />
-                        <span className="text-[10px]">PTR</span>
-                      </button>
-                    )}
-                    {onSslCheck && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSslCheck(dev.ip, 443);
-                        }}
-                        className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-sky-400 hover:text-sky-300 transition flex items-center gap-1"
-                        title="Check HTTPS Web Service"
-                      >
-                        <ShieldCheck size={11} />
-                        <span className="text-[10px]">SSL</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingKey(dev.mac || dev.ip);
+                        setEditValue(customName || dev.hostname || '');
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-amber-300 transition flex items-center gap-1"
+                      title="Set custom nickname"
+                    >
+                      <Edit2 size={11} />
+                      <span className="text-[10px]">Name</span>
+                    </button>
                   </div>
                 </div>
               </div>

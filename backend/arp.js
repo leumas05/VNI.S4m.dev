@@ -1,7 +1,8 @@
 const { exec, spawn } = require('child_process');
 const os = require('os');
+const dgram = require('dgram');
 
-// Common MAC OUI database for instant offline vendor recognition
+// Comprehensive MAC OUI database for instant offline vendor & device recognition
 // Format: 6-char hex prefix without delimiters (lowercase)
 const OUI_DATABASE = {
   // Apple
@@ -11,11 +12,9 @@ const OUI_DATABASE = {
   '001e52': 'Apple', '001ec2': 'Apple', '001f5b': 'Apple', '001ff3': 'Apple', '0021e9': 'Apple',
   '002241': 'Apple', '002312': 'Apple', '002332': 'Apple', '00236c': 'Apple', '0023df': 'Apple',
   '002436': 'Apple', '002500': 'Apple', '00254b': 'Apple', '0025bc': 'Apple', '002608': 'Apple',
-  '00264a': 'Apple', '0026b0': 'Apple', '0026bb': 'Apple', '040cce': 'Apple', '041552': 'Apple',
-  '042665': 'Apple', '04489a': 'Apple', '044b80': 'Apple', '0452f3': 'Apple', '045453': 'Apple',
-  '04d3cf': 'Apple', '04db56': 'Apple', '04e536': 'Apple', '086698': 'Apple', '087045': 'Apple',
-  '087402': 'Apple', '08e689': 'Apple', '08f4ab': 'Apple', '0c1539': 'Apple', '0c3021': 'Apple',
-  '0c4de9': 'Apple', '0c74c2': 'Apple', '0c771a': 'Apple', '0cb319': 'Apple', '0cd746': 'Apple',
+  '040cce': 'Apple', '041552': 'Apple', '042665': 'Apple', '04489a': 'Apple', '044b80': 'Apple',
+  '0452f3': 'Apple', '045453': 'Apple', '04d3cf': 'Apple', '04db56': 'Apple', '04e536': 'Apple',
+  '086698': 'Apple', '087045': 'Apple', '087402': 'Apple', '08e689': 'Apple', '08f4ab': 'Apple',
   '101c0c': 'Apple', '1040f3': 'Apple', '109add': 'Apple', '10ddb1': 'Apple', '14109f': 'Apple',
   '14205e': 'Apple', '145a05': 'Apple', '148f21': 'Apple', '1499e2': 'Apple', '14c213': 'Apple',
   '18af61': 'Apple', '18e728': 'Apple', '1c1abb': 'Apple', '207d74': 'Apple', '20a2e4': 'Apple',
@@ -24,39 +23,49 @@ const OUI_DATABASE = {
   '34159e': 'Apple', '34363b': 'Apple', '38ca84': 'Apple', '3c0754': 'Apple', '3c15c2': 'Apple',
   '3cd0f8': 'Apple', '404d7f': 'Apple', '406c8f': 'Apple', '40a6d9': 'Apple', '442a60': 'Apple',
   '48437c': 'Apple', '4c57ca': 'Apple', '50ea9c': 'Apple', '542696': 'Apple', '5855ca': 'Apple',
-  '5c879c': 'Apple', '600308': 'Apple', '64bb1e': 'Apple', '68a86d': 'Apple', '6c4008': 'Apple',
+  '5c879c': 'Apple', '600308': 'Apple', '64bb1e': 'Apple (TV / Device)', '68a86d': 'Apple', '6c4008': 'Apple',
   '701124': 'Apple', '748114': 'Apple', '784f43': 'Apple', '7cd1c3': 'Apple', '804971': 'Apple',
   '843835': 'Apple', '88665a': 'Apple', '8c8590': 'Apple', '907240': 'Apple', '949426': 'Apple',
-  '9801a7': 'Apple', '9cb1dc': 'Apple', 'a45e60': 'Apple', 'a808cf': 'Apple', 'acbc32': 'Apple',
-  'b065bd': 'Apple', 'b418d1': 'Apple', 'b8e856': 'Apple', 'bc52b7': 'Apple', 'c09a42': 'Apple',
-  'c4b301': 'Apple', 'c869cd': 'Apple', 'cc29f5': 'Apple', 'd023db': 'Apple', 'd4619d': 'Apple',
-  'd8004d': 'Apple', 'dc2b61': 'Apple', 'e0b55f': 'Apple', 'e4e4ab': 'Apple', 'e8040b': 'Apple',
-  'ec3586': 'Apple', 'f01898': 'Apple', 'f45c89': 'Apple', 'f82793': 'Apple', 'fc253f': 'Apple',
+  '9801a7': 'Apple', '9cb1dc': 'Apple (TV / Device)', 'a45e60': 'Apple', 'a808cf': 'Apple (TV / Device)',
+  'acbc32': 'Apple', 'b065bd': 'Apple', 'b418d1': 'Apple', 'b8e856': 'Apple', 'bc52b7': 'Apple',
+  'c09a42': 'Apple', 'c4b301': 'Apple', 'c869cd': 'Apple', 'cc29f5': 'Apple', 'd023db': 'Apple',
+  'd4619d': 'Apple', 'd8004d': 'Apple', 'dc2b61': 'Apple', 'e0b55f': 'Apple', 'e4e4ab': 'Apple',
+  'e8040b': 'Apple', 'ec3586': 'Apple', 'f01898': 'Apple', 'f45c89': 'Apple', 'f82793': 'Apple',
 
   // Google / Nest
   '001a11': 'Google', '089e08': 'Google', '18d6c7': 'Google', '20dfb9': 'Google', '30fd38': 'Google',
-  '3cf7a4': 'Google', '48d6d5': 'Google', '4ccd86': 'Google', '4ccdb6': 'Google', '546009': 'Google',
-  '641666': 'Google', '70ee50': 'Google', '94ebcd': 'Google', 'a47733': 'Google', 'b827eb': 'Google',
-  'd86c63': 'Google', 'e03f49': 'Google', 'f40343': 'Google', 'f88f12': 'Google',
+  '3cf7a4': 'Google', '48d6d5': 'Google', '4ccd86': 'Google', '4ccdb6': 'Google (Nest / Smart Device)',
+  '546009': 'Google', '641666': 'Google', '70ee50': 'Google', '94ebcd': 'Google', 'a47733': 'Google',
+  'b827eb': 'Google', 'd86c63': 'Google', 'e03f49': 'Google', 'f40343': 'Google', 'f88f12': 'Google',
 
   // Samsung
   '0007ab': 'Samsung', '001247': 'Samsung', '001599': 'Samsung', '0016db': 'Samsung', '001a80': 'Samsung',
   '002119': 'Samsung', '0023d7': 'Samsung', '0808c2': 'Samsung', '1449e0': 'Samsung', '14f42a': 'Samsung',
   '18227e': 'Samsung', '1867b0': 'Samsung', '244bfe': 'Samsung', '2c088c': 'Samsung', '30074d': 'Samsung',
   '3423ba': 'Samsung', '380195': 'Samsung', '4844f7': 'Samsung', '4c3cb7': 'Samsung', '50c8e5': 'Samsung',
-  '5492be': 'Samsung', '58c38b': 'Samsung', '5c0a5b': 'Samsung', '68ebae': 'Samsung', '78471d': 'Samsung',
-  '8425db': 'Samsung', '887598': 'Samsung', '8c7712': 'Samsung', '9463d1': 'Samsung', 'a0821f': 'Samsung',
-  'a87b39': 'Samsung', 'b07994': 'Samsung', 'b479a7': 'Samsung', 'bc20a4': 'Samsung', 'c0a810': 'Samsung',
-  'cc07ab': 'Samsung', 'd022be': 'Samsung', 'd857ef': 'Samsung', 'e432cb': 'Samsung', 'f409d8': 'Samsung',
+  '50fdd5': 'Samsung (Smart Oven / Appliance)', '5492be': 'Samsung', '58c38b': 'Samsung', '5c0a5b': 'Samsung',
+  '68ebae': 'Samsung', '78471d': 'Samsung', '8425db': 'Samsung', '887598': 'Samsung', '8c7712': 'Samsung',
+  '9463d1': 'Samsung', 'a0821f': 'Samsung', 'a87b39': 'Samsung', 'a8ba69': 'Samsung (Galaxy Phone)',
+  'b07994': 'Samsung', 'b479a7': 'Samsung', 'bc20a4': 'Samsung', 'c0a810': 'Samsung', 'cc07ab': 'Samsung',
+  'd022be': 'Samsung', 'd857ef': 'Samsung', 'e432cb': 'Samsung', 'f409d8': 'Samsung',
 
-  // TP-Link
+  // Zaptec (EV Chargers & Energy Management)
+  '28562f': 'Zaptec (EV Charger)',
+  '841fe8': 'Zaptec (EV Charger)',
+  '30c922': 'Zaptec (Energy Balancer)',
+
+  // Solar & Energy Storage
+  'ece334': 'Solar Panels / Battery Inverter',
+
+  // TP-Link & Deco Mesh
   '0019e0': 'TP-Link', '002127': 'TP-Link', '14cc20': 'TP-Link', '1c3bf3': 'TP-Link', '30b5c2': 'TP-Link',
   '30de4b': 'TP-Link', '50c7bf': 'TP-Link', '54c80f': 'TP-Link', '6032b1': 'TP-Link', '645601': 'TP-Link',
-  '6c4cbc': 'TP-Link', '704f57': 'TP-Link', '784476': 'TP-Link', '8416f9': 'TP-Link', '984827': 'TP-Link',
-  'a42bb0': 'TP-Link', 'ac84c6': 'TP-Link', 'b04e26': 'TP-Link', 'c025e9': 'TP-Link', 'c0a5dd': 'TP-Link',
-  'c46e1f': 'TP-Link', 'd807b6': 'TP-Link', 'e4c32a': 'TP-Link', 'e848b8': 'TP-Link', 'f4ec38': 'TP-Link',
+  '6c4cbc': 'TP-Link (Deco Router)', '704f57': 'TP-Link', '784476': 'TP-Link', '8416f9': 'TP-Link',
+  '984827': 'TP-Link', 'a42bb0': 'TP-Link', 'ac84c6': 'TP-Link', 'b04e26': 'TP-Link', 'c025e9': 'TP-Link',
+  'c0a5dd': 'TP-Link', 'c46e1f': 'TP-Link', 'd807b6': 'TP-Link', 'e4c32a': 'TP-Link',
+  'e848b8': 'TP-Link (Deco Mesh Node)', 'f4ec38': 'TP-Link',
 
-  // Intel
+  // Intel & Motherboards
   '0002b3': 'Intel', '000347': 'Intel', '000423': 'Intel', '0007e9': 'Intel', '000e0c': 'Intel',
   '001111': 'Intel', '001302': 'Intel', '001320': 'Intel', '0013e8': 'Intel', '001500': 'Intel',
   '001676': 'Intel', '0018de': 'Intel', '0019d1': 'Intel', '001b21': 'Intel', '001cbf': 'Intel',
@@ -74,9 +83,10 @@ const OUI_DATABASE = {
   '3c71bf': 'Espressif (IoT)', '40f520': 'Espressif (IoT)', '483fda': 'Espressif (IoT)', '485519': 'Espressif (IoT)',
   '545a16': 'Espressif (IoT)', '5ccf7f': 'Espressif (IoT)', '600194': 'Espressif (IoT)', '68c63a': 'Espressif (IoT)',
   '807d3a': 'Espressif (IoT)', '840d8e': 'Espressif (IoT)', '84f3eb': 'Espressif (IoT)', '9097d5': 'Espressif (IoT)',
-  '94b97e': 'Espressif (IoT)', 'a020a6': 'Espressif (IoT)', 'ac67b2': 'Espressif (IoT)', 'b00cd1': 'Espressif (IoT)',
-  'b4e62d': 'Espressif (IoT)', 'bcddc2': 'Espressif (IoT)', 'c44f33': 'Espressif (IoT)', 'cc50e3': 'Espressif (IoT)',
-  'd8a01d': 'Espressif (IoT)', 'dc4f22': 'Espressif (IoT)', 'e09806': 'Espressif (IoT)', 'e8db84': 'Espressif (IoT)',
+  '94b97e': 'Espressif (IoT)', 'a020a6': 'Espressif (IoT)', 'ac67b2': 'Espressif (IoT)',
+  'b00cd1': 'HP / Espressif (Printer / IoT)', 'b4e62d': 'Espressif (IoT)', 'bcddc2': 'Espressif (IoT)',
+  'c44f33': 'Espressif (IoT)', 'cc50e3': 'Espressif (IoT)', 'd8a01d': 'Espressif (IoT)', 'dc4f22': 'Espressif (IoT)',
+  'e09806': 'Espressif (IoT)', 'e8db84': 'Espressif (IoT)',
 
   // Amazon (Echo / FireTV / Kindle / Ring)
   '00376d': 'Amazon', '00fc8b': 'Amazon', '18742e': 'Amazon', '240588': 'Amazon', '2c0406': 'Amazon',
@@ -131,10 +141,14 @@ const OUI_DATABASE = {
   '000732': 'Realtek', '000ee8': 'Realtek', '00e04c': 'Realtek', '525400': 'QEMU / KVM Virtual'
 };
 
-// Helper to normalize MAC address string to standard lowercase format (e.g. "6c-4c-bc-0b-7a-ac" -> "6c:4c:bc:0b:7a:ac")
-function normalizeMac(mac) {
+// Format MAC address clearly in uppercase hyphen notation (e.g. 6C-4C-BC-0B-7A-AC)
+function formatMac(mac) {
   if (!mac) return '';
-  return mac.trim().toLowerCase().replace(/[:-]/g, ':');
+  const clean = mac.toUpperCase().replace(/[^0-9A-F]/g, '');
+  if (clean.length === 12) {
+    return clean.match(/.{1,2}/g).join('-');
+  }
+  return mac.toUpperCase().replace(/:/g, '-');
 }
 
 // Detect Vendor and whether the device is using a randomized/private MAC address
@@ -154,24 +168,32 @@ function lookupVendor(mac) {
   }
 
   if (isRandomized) {
-    return { vendor: 'Private MAC (Mobile / Tablet)', isRandomized: true };
+    return { vendor: 'Private MAC (Randomized Wi-Fi)', isRandomized: true };
   }
 
   return { vendor: 'Generic Device', isRandomized: false };
 }
 
 // Guess human-friendly device type based on vendor, role, and hostname
-function guessDeviceType({ vendor, isGateway, isThisDevice, ip }) {
+function guessDeviceType({ vendor, isGateway, isThisDevice, hostname }) {
   if (isGateway) return 'router';
   if (isThisDevice) return 'desktop';
 
   const v = (vendor || '').toLowerCase();
-  if (v.includes('apple') || v.includes('samsung') || v.includes('private mac')) return 'mobile';
-  if (v.includes('playstation') || v.includes('sony') || v.includes('xbox') || v.includes('nintendo')) return 'console';
-  if (v.includes('espressif') || v.includes('philips') || v.includes('iot') || v.includes('hue') || v.includes('sonos') || v.includes('nest') || v.includes('amazon')) return 'iot';
+  const h = (hostname || '').toLowerCase();
+
+  if (v.includes('charger') || v.includes('zaptec') || h.includes('laddare') || h.includes('zaptec')) return 'ev_charger';
+  if (v.includes('solar') || v.includes('battery') || h.includes('solpanel') || h.includes('batteri')) return 'solar';
+  if (v.includes('oven') || v.includes('appliance') || h.includes('oven') || h.includes('ugn')) return 'iot';
+  if (v.includes('printer') || h.includes('skrivare') || h.includes('printer')) return 'printer';
+  if (v.includes('mesh') || v.includes('deco') || h.includes('deco')) return 'mesh_node';
+  if (v.includes('tv') || h.includes('tv') || h.includes('chromecast')) return 'tv';
+  if (v.includes('playstation') || v.includes('sony') || v.includes('xbox') || v.includes('nintendo') || h.includes('playstation') || h.includes('xbox')) return 'console';
+  if (v.includes('espressif') || v.includes('philips') || v.includes('iot') || v.includes('hue') || v.includes('sonos') || v.includes('nest') || v.includes('amazon') || h.includes('iot')) return 'iot';
   if (v.includes('tp-link') || v.includes('netgear') || v.includes('asus') || v.includes('cisco') || v.includes('ubiquiti') || v.includes('linksys')) return 'network';
-  if (v.includes('nas') || v.includes('synology') || v.includes('qnap')) return 'server';
-  if (v.includes('intel') || v.includes('realtek') || v.includes('msi') || v.includes('dell') || v.includes('hp') || v.includes('lenovo')) return 'computer';
+  if (v.includes('nas') || v.includes('synology') || v.includes('qnap') || h.includes('nas') || h.includes('server')) return 'server';
+  if (v.includes('apple') || v.includes('samsung') || v.includes('galaxy') || v.includes('private mac') || h.includes('iphone') || h.includes('s23') || h.includes('a55') || h.includes('mobil')) return 'mobile';
+  if (v.includes('intel') || v.includes('realtek') || v.includes('msi') || v.includes('dell') || v.includes('hp') || v.includes('lenovo') || h.includes('dator') || h.includes('pc')) return 'computer';
 
   return 'device';
 }
@@ -183,7 +205,6 @@ function getDefaultGateway() {
     if (isWin) {
       exec('route print 0.0.0.0', { timeout: 3500 }, (err, stdout) => {
         if (err || !stdout) return resolve(null);
-        // Look for: 0.0.0.0 0.0.0.0 <gateway-ip> <interface-ip>
         const match = stdout.match(/0\.0\.0\.0\s+0\.0\.0\.0\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/);
         if (match) {
           resolve({
@@ -195,7 +216,6 @@ function getDefaultGateway() {
         }
       });
     } else {
-      // macOS / Linux
       exec("ip route show default || netstat -nr | grep default", { timeout: 3500 }, (err, stdout) => {
         if (err || !stdout) return resolve(null);
         const match = stdout.match(/default\s+(?:via\s+)?([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)/);
@@ -210,7 +230,7 @@ function getDefaultGateway() {
 }
 
 // Quick parallel ping to measure latency to an IP
-function measurePing(ip, timeoutMs = 800) {
+function measurePing(ip, timeoutMs = 600) {
   const isWin = os.platform() === 'win32';
   const args = isWin ? ['-n', '1', '-w', String(timeoutMs), ip] : ['-c', '1', '-W', '1', ip];
   return new Promise((resolve) => {
@@ -219,12 +239,17 @@ function measurePing(ip, timeoutMs = 800) {
     child.stdout.on('data', d => { output += d.toString(); });
     child.stderr.on('data', d => { output += d.toString(); });
     child.on('close', code => {
-      const timeMatch = output.match(/time[=<](\d+(?:\.\d+)?) ?ms/i);
-      if (timeMatch) {
-        const val = parseFloat(timeMatch[1]);
-        resolve({ alive: true, latency: output.includes('time<1ms') ? 1 : Math.round(val) });
+      const timeMatch = output.match(/(?:time|tid)[=<](\d+(?:\.\d+)?) ?ms/i);
+      const isLess1ms = /(?:time|tid)<1\s*ms/i.test(output);
+      const ttlMatch = output.match(/TTL=/i);
+
+      if (timeMatch || isLess1ms) {
+        const val = timeMatch ? parseFloat(timeMatch[1]) : 1;
+        resolve({ alive: true, latency: isLess1ms ? 1 : Math.round(val) });
+      } else if (ttlMatch && code === 0) {
+        resolve({ alive: true, latency: 1 });
       } else {
-        resolve({ alive: code === 0, latency: null });
+        resolve({ alive: code === 0 && !output.toLowerCase().includes('unreachable') && !output.toLowerCase().includes('inte nås'), latency: null });
       }
     });
     child.on('error', () => resolve({ alive: false, latency: null }));
@@ -237,7 +262,7 @@ function sweepSubnet(subnetPrefix, start = 1, end = 254) {
     const isWin = os.platform() === 'win32';
     const total = Math.min(254, end) - Math.max(1, start) + 1;
     let finished = 0;
-    const maxConcurrent = 40;
+    const maxConcurrent = 60;
     let index = start;
 
     const launchNext = () => {
@@ -268,10 +293,10 @@ function sweepSubnet(subnetPrefix, start = 1, end = 254) {
       launchNext();
     }
 
-    // Hard ceiling safety timeout: max 4.5 seconds for sweep
+    // Safety timeout ceiling: max 3.5 seconds
     setTimeout(() => {
       resolve();
-    }, 4500);
+    }, 3500);
   });
 }
 
@@ -284,20 +309,19 @@ function getArpTable() {
       const entries = [];
 
       for (const line of lines) {
-        // Matches: 192.168.1.1   00-11-22-33-44-55   dynamic/static
         const match = line.trim().match(/([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})\s+([0-9a-fA-F[:-]{11,17})\s+([a-zA-Z]+)/);
         if (match) {
           const ip = match[1];
-          const mac = normalizeMac(match[2]);
+          const rawMac = match[2];
+          const mac = formatMac(rawMac);
           const type = match[3].toLowerCase();
 
-          // Filter out multicast and broadcast addresses
           const parts = ip.split('.').map(Number);
-          const isBroadcast = parts[3] === 255 || mac === 'ff:ff:ff:ff:ff:ff';
+          const isBroadcast = parts[3] === 255 || mac === 'FF-FF-FF-FF-FF-FF';
           const isMulticast = parts[0] >= 224 && parts[0] <= 239;
           const isLoopback = parts[0] === 127;
 
-          if (!isBroadcast && !isMulticast && !isLoopback && mac !== '00:00:00:00:00:00') {
+          if (!isBroadcast && !isMulticast && !isLoopback && mac !== '00-00-00-00-00-00') {
             entries.push({ ip, mac, type });
           }
         }
@@ -307,8 +331,65 @@ function getArpTable() {
   });
 }
 
+// SSDP UPnP device friendlyName discovery
+function discoverSsdpNames(timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    let client;
+    try {
+      client = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    } catch (e) {
+      return resolve({});
+    }
+
+    const discovered = {};
+
+    client.on('message', (msg, rinfo) => {
+      const text = msg.toString();
+      const locMatch = text.match(/LOCATION:\s*([^\r\n]+)/i);
+      if (locMatch && !discovered[rinfo.address]) {
+        discovered[rinfo.address] = locMatch[1].trim();
+      }
+    });
+
+    client.on('error', () => {
+      try { client.close(); } catch (e) {}
+      resolve({});
+    });
+
+    client.bind(0, () => {
+      const query = 'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: ssdp:all\r\n\r\n';
+      client.send(Buffer.from(query), 1900, '239.255.255.250');
+    });
+
+    setTimeout(async () => {
+      try { client.close(); } catch (e) {}
+      const results = {};
+      await Promise.all(
+        Object.entries(discovered).map(async ([ip, locUrl]) => {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 1000);
+            const res = await fetch(locUrl, { signal: controller.signal });
+            clearTimeout(timer);
+            const xml = await res.text();
+            const fnMatch = xml.match(/<friendlyName>([^<]+)<\/friendlyName>/i);
+            const mnMatch = xml.match(/<modelName>([^<]+)<\/modelName>/i);
+            if (fnMatch) {
+              results[ip] = {
+                name: fnMatch[1].trim(),
+                model: mnMatch ? mnMatch[1].trim() : null
+              };
+            }
+          } catch (e) {}
+        })
+      );
+      resolve(results);
+    }, timeoutMs);
+  });
+}
+
 // Main function to scan LAN and produce enriched device tree
-async function scanLan(options = { sweep: false }) {
+async function scanLan(options = { sweep: true }) {
   const startTime = Date.now();
 
   // 1. Detect local network interfaces
@@ -323,7 +404,7 @@ async function scanLan(options = { sweep: false }) {
       if (iface.family === 'IPv4' && !iface.internal) {
         localIface = name;
         localIp = iface.address;
-        localMac = normalizeMac(iface.mac);
+        localMac = formatMac(iface.mac);
         subnetMask = iface.netmask;
         break;
       }
@@ -335,10 +416,15 @@ async function scanLan(options = { sweep: false }) {
   const gwInfo = await getDefaultGateway();
   const gatewayIp = gwInfo?.gatewayIp || (localIp !== '127.0.0.1' ? `${localIp.split('.').slice(0, 3).join('.')}.1` : '192.168.1.1');
 
-  // 3. Optional sweep if requested (or on manual scan refresh)
-  if (options.sweep && localIp !== '127.0.0.1') {
+  // 3. Sweep subnet and discover SSDP in parallel
+  let ssdpMap = {};
+  if (options.sweep !== false && localIp !== '127.0.0.1') {
     const subnetPrefix = localIp.split('.').slice(0, 3).join('.');
-    await sweepSubnet(subnetPrefix, 1, 254);
+    const [_, ssdpResult] = await Promise.all([
+      sweepSubnet(subnetPrefix, 1, 254),
+      discoverSsdpNames(1500)
+    ]);
+    ssdpMap = ssdpResult || {};
   }
 
   // 4. Read ARP table
@@ -358,7 +444,7 @@ async function scanLan(options = { sweep: false }) {
     ip: gatewayIp,
     mac: gatewayMac || 'Unknown',
     vendor: gwVendor !== 'Unknown' ? gwVendor : 'Router / Gateway',
-    hostname: 'Default Gateway',
+    hostname: 'Default Gateway (Router)',
     deviceType: 'router',
     isGateway: true,
     isThisDevice: false,
@@ -390,14 +476,27 @@ async function scanLan(options = { sweep: false }) {
     seenIps.add(entry.ip);
 
     const { vendor, isRandomized } = lookupVendor(entry.mac);
-    const dType = guessDeviceType({ vendor, isGateway: false, isThisDevice: false, ip: entry.ip });
+    const ssdpInfo = ssdpMap[entry.ip];
+    const friendlyName = ssdpInfo?.name || null;
+    const dType = guessDeviceType({ vendor, isGateway: false, isThisDevice: false, hostname: friendlyName });
+
+    // Derive display hostname
+    let displayHostname = friendlyName || entry.ip;
+    if (!friendlyName) {
+      if (vendor.includes('Zaptec')) displayHostname = 'Zaptec Go (EV Charger)';
+      else if (vendor.includes('Solar')) displayHostname = 'Solar Panels / Inverter';
+      else if (vendor.includes('Deco Mesh Node')) displayHostname = 'TP-Link Deco Mesh Node';
+      else if (vendor.includes('Samsung (Smart Oven')) displayHostname = 'Samsung Smart Oven';
+      else if (vendor.includes('Printer')) displayHostname = 'Network Printer';
+    }
 
     clientDevices.push({
       id: `dev-${entry.ip.replace(/\./g, '-')}`,
       ip: entry.ip,
       mac: entry.mac,
       vendor: isRandomized ? `${vendor} (Randomized)` : vendor,
-      hostname: entry.ip,
+      hostname: displayHostname,
+      friendlyName,
       deviceType: dType,
       isGateway: false,
       isThisDevice: false,
@@ -438,7 +537,7 @@ async function scanLan(options = { sweep: false }) {
     gateway: gatewayDevice,
     thisDevice,
     devices: clientDevices,
-    totalDevices: clientDevices.length + 2, // Gateway + ThisDevice + Clients
+    totalDevices: clientDevices.length + 2,
     network: {
       interface: localIface || 'LAN',
       localIp,
@@ -454,6 +553,5 @@ module.exports = {
   scanLan,
   measurePing,
   lookupVendor,
-  normalizeMac
+  formatMac
 };
-

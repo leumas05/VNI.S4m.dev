@@ -126,7 +126,20 @@ function App() {
   const [lanAutoRefresh, setLanAutoRefresh] = useState(false);
   const [selectedLanDevice, setSelectedLanDevice] = useState(null);
 
-  const fetchLanData = useCallback(async (sweep = false) => {
+  const handlePing = useCallback((target) => {
+    if (!target) return;
+    if (typeof target === 'string') {
+      setPingingHop({ ip: target, hostname: target, isPrivate: true });
+    } else if (typeof target === 'object') {
+      setPingingHop({
+        ip: target.ip || target.target || '',
+        hostname: target.hostname || target.vendor || target.ip || '',
+        isPrivate: target.isPrivate !== undefined ? target.isPrivate : true
+      });
+    }
+  }, []);
+
+  const fetchLanData = useCallback(async (sweep = true) => {
     try {
       if (sweep) setLanSweepLoading(true);
       else setLanLoading(true);
@@ -147,7 +160,7 @@ function App() {
   useEffect(() => {
     if (activeMode !== 'lan') return;
     if (!lanData) {
-      fetchLanData(false);
+      fetchLanData(true);
     }
     if (!lanAutoRefresh) return;
     const interval = setInterval(() => fetchLanData(false), 10000);
@@ -481,7 +494,7 @@ function App() {
                  compareHops={compareHops}
                  myLocation={myLocation}
                  openPrivacy={openPrivacy}
-                 onPing={setPingingHop}
+                 onPing={handlePing}
                  onDig={setDiggingHop}
                  onSslCheck={(ip) => setDiggingHop({ ip: typeof ip === 'object' ? ip.ip : ip, hostname: ip, initialTab: 'ssl' })}
                  activeMode={activeMode}
@@ -512,7 +525,7 @@ function App() {
               lanData={lanData}
               selectedDevice={selectedLanDevice}
               setSelectedDevice={setSelectedLanDevice}
-              onPing={(ip) => setPingingHop(typeof ip === 'object' ? ip : { ip, hostname: ip })}
+              onPing={handlePing}
               onDig={(ip) => setDiggingHop(typeof ip === 'object' ? ip : { ip, hostname: ip })}
               onSslCheck={(ip) => setDiggingHop({ ip: typeof ip === 'object' ? ip.ip : ip, hostname: ip, initialTab: 'ssl' })}
             />

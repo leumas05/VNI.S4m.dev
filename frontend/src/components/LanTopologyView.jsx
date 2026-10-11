@@ -12,12 +12,12 @@ import {
   ZoomOut,
   Compass,
   Activity,
-  ShieldCheck,
   Globe,
   Copy,
   Check,
   Share2,
-  CircleDot
+  CircleDot,
+  ExternalLink
 } from 'lucide-react';
 
 function getDeviceIcon(type) {
@@ -75,6 +75,24 @@ export default function LanTopologyView({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [copiedId, setCopiedId] = useState(null);
+  const [nicknames, setNicknames] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('vni_lan_nicknames')) || {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  // Listen for storage changes if nicknames are updated in sidebar panel
+  useEffect(() => {
+    const handleStorage = () => {
+      try {
+        setNicknames(JSON.parse(localStorage.getItem('vni_lan_nicknames')) || {});
+      } catch (e) {}
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   // Auto-measure container dimensions
   useEffect(() => {
@@ -370,8 +388,12 @@ export default function LanTopologyView({
           const IconComponent = isCloud ? Cloud : getDeviceIcon(node.deviceType);
           const devColor = isCloud ? '#6366f1' : getDeviceColor(node.deviceType, node.isThisDevice, node.isGateway);
 
-          const cardWidth = isCloud ? 140 : 154;
-          const cardHeight = isCloud ? 50 : 64;
+          const cardWidth = isCloud ? 140 : 180;
+          const cardHeight = isCloud ? 50 : 70;
+          const nodeNick = !isCloud ? (nicknames[node.mac] || nicknames[node.ip]) : null;
+          const displaySubtitle = isCloud
+            ? node.subtitle
+            : (nodeNick || node.vendor || (node.isGateway ? 'Router' : 'Device')).slice(0, 19);
 
           return (
             <g
@@ -393,10 +415,10 @@ export default function LanTopologyView({
                 height={cardHeight}
                 rx={10}
                 fill="#0b1120"
-                fillOpacity={0.92}
+                fillOpacity={0.94}
                 stroke={isSelected ? '#f59e0b' : devColor}
                 strokeWidth={isSelected ? 2 : (node.isThisDevice || node.isGateway ? 1.5 : 1)}
-                strokeOpacity={isSelected ? 1 : (node.isAlive !== false ? 0.8 : 0.4)}
+                strokeOpacity={isSelected ? 1 : (node.isAlive !== false ? 0.85 : 0.45)}
                 filter={isSelected ? 'url(#neon-glow)' : undefined}
                 className="transition-all duration-200 group-hover:stroke-white/80"
               />
@@ -419,7 +441,7 @@ export default function LanTopologyView({
               {/* Text Information */}
               <text
                 x={-cardWidth / 2 + 42}
-                y={-8}
+                y={-10}
                 fill="#ffffff"
                 fontSize={11}
                 fontWeight="700"
@@ -430,25 +452,41 @@ export default function LanTopologyView({
 
               <text
                 x={-cardWidth / 2 + 42}
-                y={8}
-                fill={devColor}
+                y={7}
+                fill={nodeNick ? '#fbbf24' : devColor}
                 fontSize={9.5}
                 fontWeight="600"
                 fontFamily="system-ui, sans-serif"
               >
-                {isCloud ? node.subtitle : (node.vendor || (node.isGateway ? 'Router' : 'Device')).slice(0, 16)}
+                {displaySubtitle}
               </text>
 
-              {/* Latency badge or MAC */}
-              {!isCloud && (
+              {/* Full Clear MAC & Latency */}
+              {!isCloud && node.mac && (
                 <text
                   x={-cardWidth / 2 + 42}
                   y={22}
-                  fill="#64748b"
-                  fontSize={8.5}
+                  fill="#94a3b8"
+                  fontSize={9}
+                  fontWeight="600"
                   fontFamily="ui-monospace, monospace"
                 >
-                  {node.latency !== null ? `${node.latency} ms • ` : ''}{node.mac ? node.mac.slice(0, 14) : ''}
+                  {node.mac}
+                </text>
+              )}
+
+              {/* Latency badge on top right */}
+              {!isCloud && node.latency !== null && (
+                <text
+                  x={cardWidth / 2 - 10}
+                  y={22}
+                  textAnchor="end"
+                  fill="#34d399"
+                  fontSize={8.5}
+                  fontWeight="700"
+                  fontFamily="ui-monospace, monospace"
+                >
+                  {node.latency}ms
                 </text>
               )}
 
@@ -489,66 +527,79 @@ export default function LanTopologyView({
 
         {/* Selected Device Floating Card */}
         {selectedDevice && (
-          <div className="flex items-center justify-between gap-3 bg-gray-950/95 border border-amber-500/70 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto max-w-md animate-in slide-in-from-top-1">
+          <div className="flex items-center justify-between gap-3 bg-gray-950/95 border border-amber-500/70 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto max-w-lg animate-in slide-in-from-top-1">
             <div className="flex items-center gap-2 truncate">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
               <div className="truncate">
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold text-amber-400">{selectedDevice.ip}</span>
-                  <span className="text-gray-400 text-[11px]">({selectedDevice.vendor || 'Device'})</span>
+                  <span className="text-gray-300 font-semibold text-[11px] truncate max-w-[150px]">
+                    {nicknames[selectedDevice.mac] || nicknames[selectedDevice.ip] || selectedDevice.hostname || selectedDevice.vendor || 'Device'}
+                  </span>
                 </div>
-                <div className="text-[10px] text-gray-500 truncate">
-                  MAC: {selectedDevice.mac} {selectedDevice.latency !== null ? `• Latency: ${selectedDevice.latency} ms` : ''}
+                <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-1 font-mono text-[10px] bg-gray-900 border border-gray-700/80 px-1.5 py-0.2 rounded text-gray-200">
+                    <span className="text-[9px] text-gray-500 font-bold">MAC:</span>
+                    <span className="font-bold tracking-wider text-amber-300">{selectedDevice.mac}</span>
+                  </div>
+                  {selectedDevice.latency !== null && (
+                    <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                      {selectedDevice.latency} ms
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => copyToClipboard(selectedDevice.ip, `pop-${selectedDevice.id}`)}
-                className="p-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition"
+                className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition text-[11px] font-mono flex items-center gap-1"
                 title="Copy IP"
               >
-                {copiedId === `pop-${selectedDevice.id}` ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                {copiedId === `pop-${selectedDevice.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                <span className="text-[10px]">IP</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(selectedDevice.mac, `pop-mac-${selectedDevice.id}`)}
+                className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition text-[11px] font-mono flex items-center gap-1"
+                title="Copy MAC Address"
+              >
+                {copiedId === `pop-mac-${selectedDevice.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                <span className="text-[10px]">MAC</span>
               </button>
               {onPing && (
                 <button
                   type="button"
-                  onClick={() => onPing(selectedDevice.ip)}
+                  onClick={() => onPing({
+                    ip: selectedDevice.ip,
+                    hostname: nicknames[selectedDevice.mac] || nicknames[selectedDevice.ip] || selectedDevice.hostname || selectedDevice.vendor,
+                    isPrivate: true
+                  })}
                   className="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-emerald-400 hover:text-emerald-300 transition text-[11px] font-bold flex items-center gap-1"
-                  title="Ping"
+                  title="Live Ping test"
                 >
                   <Activity size={12} />
                   <span>Ping</span>
                 </button>
               )}
-              {onDig && (
+              {selectedDevice.isGateway && (
                 <button
                   type="button"
-                  onClick={() => onDig(selectedDevice.ip)}
-                  className="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-purple-400 hover:text-purple-300 transition text-[11px] font-bold flex items-center gap-1"
-                  title="Reverse DNS"
+                  onClick={() => window.open(`http://${selectedDevice.ip}`, '_blank', 'noopener,noreferrer')}
+                  className="px-2 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 hover:text-emerald-200 transition text-[11px] font-semibold flex items-center gap-1"
+                  title="Open Router Web Admin"
                 >
-                  <Globe size={12} />
-                  <span>PTR</span>
-                </button>
-              )}
-              {onSslCheck && (
-                <button
-                  type="button"
-                  onClick={() => onSslCheck(selectedDevice.ip, 443)}
-                  className="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-sky-400 hover:text-sky-300 transition text-[11px] font-bold flex items-center gap-1"
-                  title="SSL Check"
-                >
-                  <ShieldCheck size={12} />
-                  <span>SSL</span>
+                  <ExternalLink size={12} />
+                  <span>Admin</span>
                 </button>
               )}
               <button
                 type="button"
                 onClick={() => setSelectedDevice && setSelectedDevice(null)}
-                className="text-gray-500 hover:text-white p-1 ml-1 cursor-pointer text-sm"
+                className="text-gray-500 hover:text-white p-1 ml-0.5 cursor-pointer text-sm"
                 title="Deselect"
               >
                 ✕
