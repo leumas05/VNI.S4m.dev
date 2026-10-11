@@ -191,6 +191,15 @@ async function fetchIpGeo(ip) {
     return null;
 }
 
+const SELF_PROCESS_KEYWORDS = ['electron', 'vni', 'node', 'agy', 'antigravity'];
+
+function isSelfConnection(procName, pid) {
+    if (pid && (pid === process.pid || pid === process.ppid)) return true;
+    if (!procName) return false;
+    const lower = procName.toLowerCase();
+    return SELF_PROCESS_KEYWORDS.some(kw => lower.includes(kw));
+}
+
 async function getLiveConnections() {
     const isWin = os.platform() === 'win32';
     const [rawConns, procMap] = await Promise.all([
@@ -208,9 +217,11 @@ async function getLiveConnections() {
         if (c.state !== 'ESTABLISHED') return;
 
         const processName = c.processName || (c.pid ? procMap.get(c.pid) : null) || 'Unknown';
+        const isSelf = isSelfConnection(processName, c.pid);
         validConns.push({
             ...c,
-            process: processName
+            process: processName,
+            isSelf
         });
         uniqueIps.add(ip);
     });
@@ -251,3 +262,4 @@ async function getLiveConnections() {
 module.exports = {
     getLiveConnections
 };
+

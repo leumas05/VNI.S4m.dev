@@ -26,7 +26,9 @@ export default function Sidebar({
   radarAutoRefresh,
   setRadarAutoRefresh,
   selectedRadarConn,
-  setSelectedRadarConn
+  setSelectedRadarConn,
+  hideSelfConnections,
+  onToggleHideSelf
 }) {
   const [input, setInput] = useState('');
   const [showHistory, setShowHistory] = useState(false);
@@ -190,6 +192,8 @@ export default function Sidebar({
           onSelectConn={setSelectedRadarConn}
           onPing={onPing}
           onDig={onDig}
+          hideSelfConnections={hideSelfConnections}
+          onToggleHideSelf={onToggleHideSelf}
         />
       ) : (
         <>

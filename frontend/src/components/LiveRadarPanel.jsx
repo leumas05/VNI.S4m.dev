@@ -36,7 +36,9 @@ export default function LiveRadarPanel({
   selectedConn,
   onSelectConn,
   onPing,
-  onDig
+  onDig,
+  hideSelfConnections,
+  onToggleHideSelf
 }) {
   const [search, setSearch] = useState('');
   const [activeProcess, setActiveProcess] = useState('ALL');
@@ -140,6 +142,32 @@ export default function LiveRadarPanel({
             </div>
           </div>
         </div>
+
+        {/* Toggle Hide Self (VNI / Node / Electron) */}
+        <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-gray-900 text-[11px]">
+          <div className="flex items-center gap-1.5 text-gray-400">
+            <ShieldCheck size={12} className={hideSelfConnections ? 'text-emerald-400' : 'text-gray-500'} />
+            <span>Exkludera detta program (VNI)</span>
+            {radarData?.hiddenSelfCount > 0 && hideSelfConnections && (
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-emerald-950/60 border border-emerald-500/30 text-emerald-300">
+                {radarData.hiddenSelfCount} dolda
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onToggleHideSelf}
+            className={`px-2 py-0.5 rounded-full border text-[10px] font-mono transition cursor-pointer flex items-center gap-1.5 ${
+              hideSelfConnections
+                ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-300 font-semibold shadow-sm'
+                : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-gray-200'
+            }`}
+            title={hideSelfConnections ? 'Klicka för att visa alla anslutningar inklusive VNIs egna (Node/Electron)' : 'Klicka för att dölja VNIs egna anslutningar'}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${hideSelfConnections ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'}`}></span>
+            <span>{hideSelfConnections ? 'Dolt' : 'Visas'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Search Input & Process Filter Chips */}
@@ -221,6 +249,11 @@ export default function LiveRadarPanel({
                     <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border truncate ${procClass}`}>
                       {conn.process}
                     </span>
+                    {conn.isSelf && (
+                      <span className="px-1 py-0.2 rounded text-[9px] font-mono font-bold border border-amber-500/40 text-amber-300 bg-amber-950/60 uppercase" title="Detta program (VNI / Engine)">
+                        VNI
+                      </span>
+                    )}
                     {conn.pid && (
                       <span className="text-[10px] text-gray-500 font-mono">
                         PID: {conn.pid}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Info, X, Activity, Globe, Map } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MapView from './components/Map';
@@ -76,6 +76,7 @@ function App() {
   const [radarLoading, setRadarLoading] = useState(false);
   const [radarAutoRefresh, setRadarAutoRefresh] = useState(true);
   const [selectedRadarConn, setSelectedRadarConn] = useState(null);
+  const [hideSelfConnections, setHideSelfConnections] = useState(() => localStorage.getItem('vni_radar_hide_self') !== 'false');
 
   const fetchRadarData = useCallback(async () => {
     try {
@@ -99,6 +100,48 @@ function App() {
     const interval = setInterval(fetchRadarData, 4000);
     return () => clearInterval(interval);
   }, [activeMode, radarAutoRefresh, fetchRadarData]);
+
+  const toggleHideSelfConnections = useCallback(() => {
+    setHideSelfConnections(prev => {
+      const next = !prev;
+      localStorage.setItem('vni_radar_hide_self', String(next));
+      return next;
+    });
+  }, []);
+
+  const displayRadarData = useMemo(() => {
+    if (!radarData) return null;
+    if (!hideSelfConnections) return radarData;
+
+    const filtered = (radarData.connections || []).filter(c => !c.isSelf);
+    const countryCounts = {};
+    const processCounts = {};
+    const uniqueIps = new Set();
+
+    filtered.forEach(c => {
+      if (c.geo?.countryCode) {
+        countryCounts[c.geo.countryCode] = (countryCounts[c.geo.countryCode] || 0) + 1;
+      }
+      if (c.process) {
+        processCounts[c.process] = (processCounts[c.process] || 0) + 1;
+      }
+      if (c.remoteIp) {
+        uniqueIps.add(c.remoteIp);
+      }
+    });
+
+    const hiddenCount = (radarData.connections || []).length - filtered.length;
+
+    return {
+      ...radarData,
+      internetCount: filtered.length,
+      uniqueIpsCount: uniqueIps.size,
+      countryCounts,
+      processCounts,
+      connections: filtered,
+      hiddenSelfCount: hiddenCount
+    };
+  }, [radarData, hideSelfConnections]);
   
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [privacyText, setPrivacyText] = useState('');
@@ -365,13 +408,15 @@ function App() {
                  onDig={setDiggingHop}
                  activeMode={activeMode}
                  setActiveMode={setActiveMode}
-                 radarData={radarData}
+                 radarData={displayRadarData}
                  radarLoading={radarLoading}
                  onRefreshRadar={fetchRadarData}
                  radarAutoRefresh={radarAutoRefresh}
                  setRadarAutoRefresh={setRadarAutoRefresh}
                  selectedRadarConn={selectedRadarConn}
                  setSelectedRadarConn={setSelectedRadarConn}
+                 hideSelfConnections={hideSelfConnections}
+                 onToggleHideSelf={toggleHideSelfConnections}
               />
            </div>
            <div className="w-full lg:w-3/5 h-[45%] lg:h-full relative z-0 flex-1">
@@ -389,7 +434,7 @@ function App() {
                 hoveredHop={hoveredHop} 
                 myLocation={myLocation}
                 activeMode={activeMode}
-                radarData={radarData}
+                radarData={displayRadarData}
                 selectedRadarConn={selectedRadarConn}
                 setSelectedRadarConn={setSelectedRadarConn}
               />
@@ -402,7 +447,7 @@ function App() {
               hoveredHop={hoveredHop} 
               myLocation={myLocation}
               activeMode={activeMode}
-              radarData={radarData}
+              radarData={displayRadarData}
               selectedRadarConn={selectedRadarConn}
               setSelectedRadarConn={setSelectedRadarConn}
             />
