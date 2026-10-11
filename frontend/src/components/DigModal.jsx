@@ -255,7 +255,17 @@ function formatSslDate(dateStr) {
   }
 }
 
-function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, onCopyField, copiedField }) {
+function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, onCopyField, copiedField, onSelectDomain }) {
+  const [sanFilter, setSanFilter] = useState('');
+  const [copiedSans, setCopiedSans] = useState(false);
+
+  const allSans = useMemo(() => sslData?.sans || [], [sslData]);
+  const filteredSans = useMemo(() => {
+    if (!sanFilter.trim()) return allSans;
+    const q = sanFilter.trim().toLowerCase();
+    return allSans.filter(name => name.toLowerCase().includes(q));
+  }, [allSans, sanFilter]);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-gray-500 gap-3">
@@ -475,27 +485,102 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
 
         {/* Card 3: SANs (Subject Alternative Names) */}
         <div className="p-3.5 rounded-xl bg-gray-950/80 border border-gray-800 md:col-span-2">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
-              <Globe size={14} className="text-indigo-400" /> Täckta domäner (SANs — Subject Alternative Names)
-            </span>
-            <span className="text-[10px] font-mono text-gray-500">
-              {sslData.sans?.length || 0} st domäner
-            </span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5 pb-2 border-b border-gray-900">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-gray-200 flex items-center gap-1.5">
+                <Globe size={14} className="text-indigo-400" /> Täckta domäner & underdomäner (SANs)
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-500/30 text-[10px] font-mono font-bold text-indigo-300">
+                {allSans.length} st domäner
+              </span>
+              {sslData.ctSans && sslData.ctSans.length > 0 && (
+                <span className="px-1.5 py-0.5 text-[9px] font-medium rounded bg-emerald-950/60 border border-emerald-500/30 text-emerald-400" title="Utökad med Certificate Transparency (CT)-loggar">
+                  CT-loggar aktiva
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {allSans.length > 4 && (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={sanFilter}
+                    onChange={(e) => setSanFilter(e.target.value)}
+                    placeholder="Filtrera domäner..."
+                    className="w-36 sm:w-44 px-2 py-1 pl-6 rounded bg-gray-900 border border-gray-800 text-[11px] text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500 font-mono transition"
+                  />
+                  <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                  {sanFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setSanFilter('')}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-[10px] cursor-pointer"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {allSans.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(allSans.join('\n'));
+                    setCopiedSans(true);
+                    setTimeout(() => setCopiedSans(false), 2000);
+                  }}
+                  className="px-2 py-1 rounded bg-gray-900 hover:bg-gray-800 border border-gray-800 text-[11px] text-gray-400 hover:text-sky-400 flex items-center gap-1 transition cursor-pointer shrink-0"
+                  title="Kopiera alla domännamn till urklipp"
+                >
+                  {copiedSans ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                  <span className="hidden sm:inline">{copiedSans ? 'Kopierade!' : 'Kopiera alla'}</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
-            {sslData.sans && sslData.sans.length > 0 ? (
-              sslData.sans.map((name, i) => (
-                <span 
-                  key={i} 
-                  className="px-2 py-0.5 rounded bg-gray-900 border border-gray-800 text-gray-300 font-mono text-[11px] hover:border-gray-700 transition"
-                >
-                  {name}
-                </span>
-              ))
+          <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+            {filteredSans.length > 0 ? (
+              filteredSans.map((name, i) => {
+                const cleanName = name.replace(/^\*\./, '');
+                const isCurrent = cleanName.toLowerCase() === target.trim().toLowerCase() || name.toLowerCase() === target.trim().toLowerCase();
+                const isWildcard = name.startsWith('*.');
+                const isCtOnly = sslData.ctSans && sslData.ctSans.includes(name) && (!sslData.directSans || !sslData.directSans.includes(name));
+
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => onSelectDomain ? onSelectDomain(cleanName) : onRefresh(cleanName, port)}
+                    className={`group px-2 py-0.5 rounded text-[11px] font-mono transition cursor-pointer flex items-center gap-1 border ${
+                      isCurrent
+                        ? 'bg-indigo-950 border-indigo-400/80 text-white font-semibold ring-1 ring-indigo-500/50'
+                        : isWildcard
+                        ? 'bg-gray-900/90 border-purple-500/30 text-purple-300 hover:border-purple-400 hover:bg-purple-950/40'
+                        : 'bg-gray-900 border-gray-800 text-gray-300 hover:border-indigo-500/50 hover:bg-indigo-950/30 hover:text-white'
+                    }`}
+                    title={`Klicka för att inspektera SSL för ${cleanName}${isCtOnly ? ' (hittad via CT-logg)' : ''}`}
+                  >
+                    <span>{name}</span>
+                    {isCurrent && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                    )}
+                  </button>
+                );
+              })
             ) : (
-              <span className="text-gray-500 italic">Inga alternativa namn listade</span>
+              <span className="text-gray-500 italic text-[11px] py-1">
+                {sanFilter ? `Inga domäner matchade "${sanFilter}"` : 'Inga alternativa namn listade'}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-2 pt-2 border-t border-gray-900/80 flex items-center justify-between text-[10px] text-gray-500 font-sans">
+            <span>Tips: Klicka på valfritt domännamn för att kontrollera dess SSL-certifikat direkt.</span>
+            {filteredSans.length !== allSans.length && (
+              <span>Visar {filteredSans.length} av {allSans.length}</span>
             )}
           </div>
         </div>
@@ -897,6 +982,14 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
     }
   };
 
+  const handleSelectSslDomain = useCallback((rawDomain) => {
+    const clean = rawDomain.replace(/^\*\./, '').trim();
+    if (!clean) return;
+    setTarget(clean);
+    targetRef.current = clean;
+    executeSslCheck(clean, sslPort);
+  }, [executeSslCheck, sslPort]);
+
   // Immediate search on clicking any quick target pill
   const handleSelectQuickTarget = (item) => {
     const val = item.value;
@@ -1216,6 +1309,7 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
               setPort={setSslPort}
               onCopyField={handleCopyField}
               copiedField={copiedField}
+              onSelectDomain={handleSelectSslDomain}
             />
           ) : loading ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500 gap-3">
