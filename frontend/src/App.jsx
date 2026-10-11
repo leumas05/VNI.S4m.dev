@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Info, X, Activity } from 'lucide-react';
+import { Info, X, Activity, Globe, Map } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MapView from './components/Map';
+const GlobeView = React.lazy(() => import('./components/GlobeView'));
 
 const getApiBaseUrl = () => {
     if (window.location.protocol === 'file:' || window.location.hostname === 'vni.s4m.dev' || window.location.hostname === 'localhost') {
@@ -48,6 +49,7 @@ function App() {
   const [showInfo, setShowInfo] = useState(false);
   const [myLocation, setMyLocation] = useState(null);
   const [backendStatus, setBackendStatus] = useState('checking');
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('vni_view_mode') || '2d');
   
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [privacyText, setPrivacyText] = useState('');
@@ -313,7 +315,64 @@ function App() {
               />
            </div>
            <div className="w-full lg:w-3/5 h-[45%] lg:h-full relative z-0 flex-1">
-          <MapView hops={hops} selectedHop={selectedHop} setSelectedHop={setSelectedHop} hoveredHop={hoveredHop} myLocation={myLocation} />
+          {viewMode === '3d' ? (
+            <React.Suspense fallback={
+              <div className="w-full h-full flex flex-col items-center justify-center bg-gray-950 text-emerald-400 font-mono text-sm gap-3">
+                <Activity className="animate-spin text-emerald-500" size={28} />
+                <span className="tracking-wide">Loading 3D Globe Engine...</span>
+              </div>
+            }>
+              <GlobeView 
+                hops={hops} 
+                selectedHop={selectedHop} 
+                setSelectedHop={setSelectedHop} 
+                hoveredHop={hoveredHop} 
+                myLocation={myLocation} 
+              />
+            </React.Suspense>
+          ) : (
+            <MapView 
+              hops={hops} 
+              selectedHop={selectedHop} 
+              setSelectedHop={setSelectedHop} 
+              hoveredHop={hoveredHop} 
+              myLocation={myLocation} 
+            />
+          )}
+
+          {/* 2D / 3D Mode Toggle Switch */}
+          <div className="absolute top-6 right-20 z-50 flex items-center bg-gray-900/80 border border-gray-700/80 rounded-full p-1 backdrop-blur-sm shadow-lg">
+            <button
+              onClick={() => {
+                setViewMode('2d');
+                localStorage.setItem('vni_view_mode', '2d');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                viewMode === '2d'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+              title="2D Map View"
+            >
+              <Map size={14} />
+              <span>2D Map</span>
+            </button>
+            <button
+              onClick={() => {
+                setViewMode('3d');
+                localStorage.setItem('vni_view_mode', '3d');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                viewMode === '3d'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+              title="3D Globe View"
+            >
+              <Globe size={14} />
+              <span>3D Globe</span>
+            </button>
+          </div>
           
           <button 
              onClick={() => setShowInfo(true)}
