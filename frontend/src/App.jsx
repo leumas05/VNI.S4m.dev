@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import MapView from './components/Map';
 import PingModal from './components/PingModal';
 import DigModal from './components/DigModal';
+import LanTopologyView from './components/LanTopologyView';
 const GlobeView = React.lazy(() => import('./components/GlobeView'));
 
 const getApiBaseUrl = () => {
@@ -108,13 +109,50 @@ function App() {
   const [pingingHop, setPingingHop] = useState(null);
   const [diggingHop, setDiggingHop] = useState(null);
 
+  // Active Mode: 'traceroute' | 'radar' | 'lan'
+  const [activeMode, setActiveMode] = useState('traceroute');
+
   // Live Radar State
-  const [activeMode, setActiveMode] = useState('traceroute'); // 'traceroute' | 'radar'
   const [radarData, setRadarData] = useState(null);
   const [radarLoading, setRadarLoading] = useState(false);
   const [radarAutoRefresh, setRadarAutoRefresh] = useState(true);
   const [selectedRadarConn, setSelectedRadarConn] = useState(null);
   const [hideSelfConnections, setHideSelfConnections] = useState(() => localStorage.getItem('vni_radar_hide_self') !== 'false');
+
+  // LAN Scanner State (ARP)
+  const [lanData, setLanData] = useState(null);
+  const [lanLoading, setLanLoading] = useState(false);
+  const [lanSweepLoading, setLanSweepLoading] = useState(false);
+  const [lanAutoRefresh, setLanAutoRefresh] = useState(false);
+  const [selectedLanDevice, setSelectedLanDevice] = useState(null);
+
+  const fetchLanData = useCallback(async (sweep = false) => {
+    try {
+      if (sweep) setLanSweepLoading(true);
+      else setLanLoading(true);
+
+      const res = await fetch(`${API_BASE}/api/lan-scan?sweep=${sweep ? 'true' : 'false'}`, { cache: 'no-cache' });
+      if (res.ok) {
+        const data = await res.json();
+        setLanData(data);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch LAN devices (ARP):', e);
+    } finally {
+      if (sweep) setLanSweepLoading(false);
+      else setLanLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeMode !== 'lan') return;
+    if (!lanData) {
+      fetchLanData(false);
+    }
+    if (!lanAutoRefresh) return;
+    const interval = setInterval(() => fetchLanData(false), 10000);
+    return () => clearInterval(interval);
+  }, [activeMode, lanAutoRefresh, lanData, fetchLanData]);
 
   const fetchRadarData = useCallback(async () => {
     try {
@@ -445,6 +483,7 @@ function App() {
                  openPrivacy={openPrivacy}
                  onPing={setPingingHop}
                  onDig={setDiggingHop}
+                 onSslCheck={(ip) => setDiggingHop({ ip: typeof ip === 'object' ? ip.ip : ip, hostname: ip, initialTab: 'ssl' })}
                  activeMode={activeMode}
                  setActiveMode={setActiveMode}
                  radarData={displayRadarData}
@@ -456,18 +495,50 @@ function App() {
                  setSelectedRadarConn={setSelectedRadarConn}
                  hideSelfConnections={hideSelfConnections}
                  onToggleHideSelf={toggleHideSelfConnections}
+                 lanData={lanData}
+                 lanLoading={lanLoading}
+                 lanSweepLoading={lanSweepLoading}
+                 onRefreshLan={() => fetchLanData(false)}
+                 onDeepSweepLan={() => fetchLanData(true)}
+                 lanAutoRefresh={lanAutoRefresh}
+                 setLanAutoRefresh={setLanAutoRefresh}
+                 selectedLanDevice={selectedLanDevice}
+                 setSelectedLanDevice={setSelectedLanDevice}
               />
            </div>
            <div className="w-full lg:w-3/5 h-[45%] lg:h-full relative z-0 flex-1">
-          <ErrorBoundary>
-            {viewMode === '3d' ? (
-              <React.Suspense fallback={
-                <div className="w-full h-full flex flex-col items-center justify-center bg-gray-950 text-emerald-400 font-mono text-sm gap-3">
-                  <Activity className="animate-spin text-emerald-500" size={28} />
-                  <span className="tracking-wide">Loading 3D Globe Engine...</span>
-                </div>
-              }>
-                <GlobeView
+          {activeMode === 'lan' ? (
+            <LanTopologyView
+              lanData={lanData}
+              selectedDevice={selectedLanDevice}
+              setSelectedDevice={setSelectedLanDevice}
+              onPing={(ip) => setPingingHop(typeof ip === 'object' ? ip : { ip, hostname: ip })}
+              onDig={(ip) => setDiggingHop(typeof ip === 'object' ? ip : { ip, hostname: ip })}
+              onSslCheck={(ip) => setDiggingHop({ ip: typeof ip === 'object' ? ip.ip : ip, hostname: ip, initialTab: 'ssl' })}
+            />
+          ) : (
+            <ErrorBoundary>
+              {viewMode === '3d' ? (
+                <React.Suspense fallback={
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-gray-950 text-emerald-400 font-mono text-sm gap-3">
+                    <Activity className="animate-spin text-emerald-500" size={28} />
+                    <span className="tracking-wide">Loading 3D Globe Engine...</span>
+                  </div>
+                }>
+                  <GlobeView
+                    hops={hops}
+                    selectedHop={selectedHop}
+                    setSelectedHop={setSelectedHop}
+                    hoveredHop={hoveredHop}
+                    myLocation={myLocation}
+                    activeMode={activeMode}
+                    radarData={displayRadarData}
+                    selectedRadarConn={selectedRadarConn}
+                    setSelectedRadarConn={setSelectedRadarConn}
+                  />
+                </React.Suspense>
+              ) : (
+                <MapView
                   hops={hops}
                   selectedHop={selectedHop}
                   setSelectedHop={setSelectedHop}
@@ -478,56 +549,46 @@ function App() {
                   selectedRadarConn={selectedRadarConn}
                   setSelectedRadarConn={setSelectedRadarConn}
                 />
-              </React.Suspense>
-            ) : (
-              <MapView
-                hops={hops}
-                selectedHop={selectedHop}
-                setSelectedHop={setSelectedHop}
-                hoveredHop={hoveredHop}
-                myLocation={myLocation}
-                activeMode={activeMode}
-                radarData={displayRadarData}
-                selectedRadarConn={selectedRadarConn}
-                setSelectedRadarConn={setSelectedRadarConn}
-              />
-            )}
-          </ErrorBoundary>
+              )}
+            </ErrorBoundary>
+          )}
 
           {/* Top-Right Floating Controls (2D/3D Toggle, GitHub, Info) */}
           <div className="absolute top-6 right-6 z-50 flex items-center gap-2.5">
-            <div className="flex items-center bg-gray-900/80 border border-gray-700/80 rounded-full p-1 backdrop-blur-sm shadow-lg">
-              <button
-                onClick={() => {
-                  setViewMode('2d');
-                  localStorage.setItem('vni_view_mode', '2d');
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                  viewMode === '2d'
-                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950'
-                    : 'text-gray-400 hover:text-gray-200'
-                }`}
-                title="2D Map View"
-              >
-                <Map size={14} />
-                <span>2D Map</span>
-              </button>
-              <button
-                onClick={() => {
-                  setViewMode('3d');
-                  localStorage.setItem('vni_view_mode', '3d');
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                  viewMode === '3d'
-                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950'
-                    : 'text-gray-400 hover:text-gray-200'
-                }`}
-                title="3D Globe View"
-              >
-                <Globe size={14} />
-                <span>3D Globe</span>
-              </button>
-            </div>
+            {activeMode !== 'lan' && (
+              <div className="flex items-center bg-gray-900/80 border border-gray-700/80 rounded-full p-1 backdrop-blur-sm shadow-lg">
+                <button
+                  onClick={() => {
+                    setViewMode('2d');
+                    localStorage.setItem('vni_view_mode', '2d');
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    viewMode === '2d'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                  title="2D Map View"
+                >
+                  <Map size={14} />
+                  <span>2D Map</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setViewMode('3d');
+                    localStorage.setItem('vni_view_mode', '3d');
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    viewMode === '3d'
+                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                  title="3D Globe View"
+                >
+                  <Globe size={14} />
+                  <span>3D Globe</span>
+                </button>
+              </div>
+            )}
 
             <a
               href="https://github.com/leumas05/VNI.S4m.dev"

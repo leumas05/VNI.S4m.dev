@@ -1,0 +1,627 @@
+import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import {
+  Router,
+  Laptop,
+  Smartphone,
+  Cpu,
+  Tv,
+  Server,
+  Wifi,
+  Cloud,
+  ZoomIn,
+  ZoomOut,
+  Compass,
+  Activity,
+  ShieldCheck,
+  Globe,
+  Copy,
+  Check,
+  Share2,
+  CircleDot
+} from 'lucide-react';
+
+function getDeviceIcon(type) {
+  switch (type) {
+    case 'router':
+      return Router;
+    case 'desktop':
+    case 'computer':
+      return Laptop;
+    case 'mobile':
+      return Smartphone;
+    case 'iot':
+      return Cpu;
+    case 'console':
+      return Tv;
+    case 'server':
+      return Server;
+    default:
+      return Wifi;
+  }
+}
+
+function getDeviceColor(type, isThisDevice, isGateway) {
+  if (isGateway) return '#10b981'; // Emerald
+  if (isThisDevice) return '#38bdf8'; // Sky blue
+  switch (type) {
+    case 'mobile':
+      return '#ec4899'; // Pink
+    case 'iot':
+      return '#f59e0b'; // Amber
+    case 'console':
+      return '#a855f7'; // Purple
+    case 'server':
+      return '#6366f1'; // Indigo
+    case 'computer':
+      return '#06b6d4'; // Cyan
+    default:
+      return '#94a3b8'; // Slate
+  }
+}
+
+export default function LanTopologyView({
+  lanData,
+  selectedDevice,
+  setSelectedDevice,
+  onPing,
+  onDig,
+  onSslCheck
+}) {
+  const containerRef = useRef(null);
+  const [dimensions, setDimensions] = useState({ width: 1000, height: 700 });
+  const [layoutMode, setLayoutMode] = useState('tree'); // 'tree' | 'radial'
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [copiedId, setCopiedId] = useState(null);
+
+  // Auto-measure container dimensions
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const updateSize = () => {
+      if (containerRef.current) {
+        setDimensions({
+          width: containerRef.current.clientWidth || 1000,
+          height: containerRef.current.clientHeight || 700
+        });
+      }
+    };
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // Pan interaction
+  const handleMouseDown = (e) => {
+    if (e.button !== 0) return; // Only left-click
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+  };
+
+  const handleMouseMove = useCallback((e) => {
+    if (!isDragging) return;
+    setPan({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    });
+  }, [isDragging, dragStart]);
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 1.12 : 0.88;
+    setZoom((prev) => Math.min(2.5, Math.max(0.4, prev * delta)));
+  };
+
+  const handleResetView = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  const copyToClipboard = (text, id) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 1800);
+  };
+
+  const gateway = lanData?.gateway;
+  const thisDevice = lanData?.thisDevice;
+  const clientDevices = useMemo(() => lanData?.devices || [], [lanData]);
+
+  // Calculate layout coordinates for nodes
+  const layoutNodes = useMemo(() => {
+    const { width, height } = dimensions;
+    const centerX = width / 2;
+    const nodes = [];
+    const links = [];
+
+    if (!gateway) return { nodes: [], links: [] };
+
+    if (layoutMode === 'tree') {
+      // 1. WAN Cloud (Root Top)
+      const wanY = 70;
+      nodes.push({
+        id: 'wan-cloud',
+        x: centerX,
+        y: wanY,
+        type: 'cloud',
+        title: 'Internet (WAN)',
+        subtitle: 'Global Uplink',
+        color: '#6366f1',
+        icon: Cloud
+      });
+
+      // 2. Router / Gateway (Tier 1)
+      const routerY = 175;
+      nodes.push({
+        ...gateway,
+        x: centerX,
+        y: routerY,
+        isGateway: true
+      });
+
+      // Link: WAN -> Router
+      links.push({
+        from: { x: centerX, y: wanY + 25 },
+        to: { x: centerX, y: routerY - 30 },
+        color: '#6366f1',
+        isMainTrunk: true
+      });
+
+      // 3. Client devices & This Device arrayed in tiers
+      const allClients = [];
+      if (thisDevice) allClients.push(thisDevice);
+      clientDevices.forEach(d => allClients.push(d));
+
+      const total = allClients.length;
+      if (total > 0) {
+        // Distribute across rows (max 6-7 nodes per row for elegance)
+        const cols = Math.min(total, total <= 6 ? total : (total <= 12 ? Math.ceil(total / 2) : Math.ceil(total / 3)));
+        const rows = Math.ceil(total / cols);
+        const colSpacing = Math.min(180, Math.max(140, (width - 160) / (cols || 1)));
+        const startY = 330;
+        const rowSpacing = 135;
+
+        allClients.forEach((dev, idx) => {
+          const row = Math.floor(idx / cols);
+          const colInRow = idx % cols;
+          const itemsInThisRow = (row === rows - 1 && total % cols !== 0) ? (total % cols) : cols;
+          const rowStartX = centerX - ((itemsInThisRow - 1) * colSpacing) / 2;
+          const nodeX = rowStartX + colInRow * colSpacing;
+          const nodeY = startY + row * rowSpacing;
+
+          nodes.push({
+            ...dev,
+            x: nodeX,
+            y: nodeY
+          });
+
+          // Link: Router -> Client
+          links.push({
+            from: { x: centerX, y: routerY + 30 },
+            to: { x: nodeX, y: nodeY - 26 },
+            color: getDeviceColor(dev.deviceType, dev.isThisDevice, dev.isGateway),
+            isThisDevice: dev.isThisDevice,
+            isAlive: dev.isAlive
+          });
+        });
+      }
+    } else {
+      // Radial Hub-and-Spoke Layout
+      const centerY = height / 2;
+
+      // Router in center
+      nodes.push({
+        ...gateway,
+        x: centerX,
+        y: centerY,
+        isGateway: true
+      });
+
+      // WAN Cloud placed above
+      const wanDist = 180;
+      nodes.push({
+        id: 'wan-cloud',
+        x: centerX,
+        y: centerY - wanDist,
+        type: 'cloud',
+        title: 'Internet (WAN)',
+        subtitle: 'Global Uplink',
+        color: '#6366f1',
+        icon: Cloud
+      });
+
+      links.push({
+        from: { x: centerX, y: centerY - 30 },
+        to: { x: centerX, y: centerY - wanDist + 25 },
+        color: '#6366f1',
+        isMainTrunk: true
+      });
+
+      const allClients = [];
+      if (thisDevice) allClients.push(thisDevice);
+      clientDevices.forEach(d => allClients.push(d));
+
+      const total = allClients.length;
+      const radius = Math.min(width * 0.38, Math.max(190, 240 + total * 4));
+
+      allClients.forEach((dev, idx) => {
+        // Orbit starting from angle 0.35 (avoiding directly top where WAN is)
+        const angle = (idx / (total || 1)) * (2 * Math.PI) + 0.35;
+        const nodeX = centerX + Math.cos(angle) * radius;
+        const nodeY = centerY + Math.sin(angle) * (radius * 0.75); // slight elliptical perspective
+
+        nodes.push({
+          ...dev,
+          x: nodeX,
+          y: nodeY
+        });
+
+        links.push({
+          from: { x: centerX, y: centerY },
+          to: { x: nodeX, y: nodeY },
+          color: getDeviceColor(dev.deviceType, dev.isThisDevice, dev.isGateway),
+          isThisDevice: dev.isThisDevice,
+          isAlive: dev.isAlive
+        });
+      });
+    }
+
+    return { nodes, links };
+  }, [dimensions, layoutMode, gateway, thisDevice, clientDevices]);
+
+  return (
+    <div
+      ref={containerRef}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onWheel={handleWheel}
+      className="relative w-full h-full bg-[#070b14] overflow-hidden select-none cursor-grab active:cursor-grabbing"
+      style={{
+        backgroundImage: `
+          radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.05) 0%, transparent 60%),
+          linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px)
+        `,
+        backgroundSize: '100% 100%, 40px 40px, 40px 40px'
+      }}
+    >
+      {/* SVG Canvas for Topology Graph */}
+      <svg
+        className="w-full h-full pointer-events-auto"
+        style={{
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: 'center center',
+          transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+        }}
+      >
+        <defs>
+          {/* Glowing filters */}
+          <filter id="neon-glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
+        {/* Ambient radial rings if in radial mode */}
+        {layoutMode === 'radial' && (
+          <g opacity={0.15}>
+            <circle cx={dimensions.width / 2} cy={dimensions.height / 2} r={120} fill="none" stroke="#10b981" strokeWidth="1" strokeDasharray="4 6" />
+            <circle cx={dimensions.width / 2} cy={dimensions.height / 2} r={220} fill="none" stroke="#38bdf8" strokeWidth="1" strokeDasharray="6 8" />
+            <circle cx={dimensions.width / 2} cy={dimensions.height / 2} r={320} fill="none" stroke="#6366f1" strokeWidth="1" strokeDasharray="8 10" />
+          </g>
+        )}
+
+        {/* Connection Links (Cables / Lasers) */}
+        {layoutNodes.links.map((link, idx) => {
+          const isSelected = selectedDevice && (
+            (link.from.devId === selectedDevice.id) ||
+            (link.to.devId === selectedDevice.id)
+          );
+
+          // Calculate cubic bezier control curve
+          const dx = link.to.x - link.from.x;
+          const dy = link.to.y - link.from.y;
+          const midY = (link.from.y + link.to.y) / 2;
+          const pathD = layoutMode === 'tree'
+            ? `M ${link.from.x} ${link.from.y} C ${link.from.x} ${midY}, ${link.to.x} ${midY}, ${link.to.x} ${link.to.y}`
+            : `M ${link.from.x} ${link.from.y} Q ${link.from.x + dx * 0.5} ${link.from.y + dy * 0.5}, ${link.to.x} ${link.to.y}`;
+
+          const linkColor = isSelected ? '#f59e0b' : (link.color || '#3b82f6');
+          const strokeWidth = link.isMainTrunk ? 3 : (link.isThisDevice ? 2.5 : 1.8);
+
+          return (
+            <g key={`link-${idx}`}>
+              {/* Outer soft glow line */}
+              <path
+                d={pathD}
+                fill="none"
+                stroke={linkColor}
+                strokeWidth={strokeWidth + 3}
+                strokeOpacity={isSelected ? 0.45 : (link.isAlive ? 0.18 : 0.08)}
+              />
+              {/* Crisp core line */}
+              <path
+                d={pathD}
+                fill="none"
+                stroke={linkColor}
+                strokeWidth={strokeWidth}
+                strokeOpacity={isSelected ? 0.95 : (link.isAlive ? 0.75 : 0.35)}
+                strokeDasharray={link.isAlive ? 'none' : '4, 4'}
+              />
+            </g>
+          );
+        })}
+
+        {/* Node Cards / Jewels */}
+        {layoutNodes.nodes.map((node) => {
+          const isCloud = node.type === 'cloud';
+          const isSelected = selectedDevice?.id === node.id;
+          const IconComponent = isCloud ? Cloud : getDeviceIcon(node.deviceType);
+          const devColor = isCloud ? '#6366f1' : getDeviceColor(node.deviceType, node.isThisDevice, node.isGateway);
+
+          const cardWidth = isCloud ? 140 : 154;
+          const cardHeight = isCloud ? 50 : 64;
+
+          return (
+            <g
+              key={node.id || `node-${node.ip}`}
+              transform={`translate(${node.x}, ${node.y})`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isCloud) {
+                  setSelectedDevice && setSelectedDevice(isSelected ? null : node);
+                }
+              }}
+              className="cursor-pointer group"
+            >
+              {/* Card Container Box */}
+              <rect
+                x={-cardWidth / 2}
+                y={-cardHeight / 2}
+                width={cardWidth}
+                height={cardHeight}
+                rx={10}
+                fill="#0b1120"
+                fillOpacity={0.92}
+                stroke={isSelected ? '#f59e0b' : devColor}
+                strokeWidth={isSelected ? 2 : (node.isThisDevice || node.isGateway ? 1.5 : 1)}
+                strokeOpacity={isSelected ? 1 : (node.isAlive !== false ? 0.8 : 0.4)}
+                filter={isSelected ? 'url(#neon-glow)' : undefined}
+                className="transition-all duration-200 group-hover:stroke-white/80"
+              />
+
+              {/* Icon Disc */}
+              <g transform={`translate(${-cardWidth / 2 + 20}, 0)`}>
+                <circle
+                  cx={0}
+                  cy={0}
+                  r={14}
+                  fill={`${devColor}22`}
+                  stroke={devColor}
+                  strokeWidth={1}
+                />
+                <g transform="translate(-7, -7)">
+                  <IconComponent size={14} color={devColor} />
+                </g>
+              </g>
+
+              {/* Text Information */}
+              <text
+                x={-cardWidth / 2 + 42}
+                y={-8}
+                fill="#ffffff"
+                fontSize={11}
+                fontWeight="700"
+                fontFamily="ui-monospace, monospace"
+              >
+                {isCloud ? node.title : node.ip}
+              </text>
+
+              <text
+                x={-cardWidth / 2 + 42}
+                y={8}
+                fill={devColor}
+                fontSize={9.5}
+                fontWeight="600"
+                fontFamily="system-ui, sans-serif"
+              >
+                {isCloud ? node.subtitle : (node.vendor || (node.isGateway ? 'Router' : 'Device')).slice(0, 16)}
+              </text>
+
+              {/* Latency badge or MAC */}
+              {!isCloud && (
+                <text
+                  x={-cardWidth / 2 + 42}
+                  y={22}
+                  fill="#64748b"
+                  fontSize={8.5}
+                  fontFamily="ui-monospace, monospace"
+                >
+                  {node.latency !== null ? `${node.latency} ms • ` : ''}{node.mac ? node.mac.slice(0, 14) : ''}
+                </text>
+              )}
+
+              {/* Pulsing indicator if alive */}
+              {!isCloud && node.isAlive && (
+                <circle
+                  cx={cardWidth / 2 - 10}
+                  cy={-cardHeight / 2 + 10}
+                  r={3.5}
+                  fill="#10b981"
+                />
+              )}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Top HUD Status Banner */}
+      <div className="absolute top-6 left-6 z-20 flex flex-col gap-1.5 pointer-events-none select-none">
+        <div className="flex items-center gap-2 bg-gray-900/90 border border-emerald-500/40 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto">
+          <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            <span className="font-bold">LAN TOPOLOGY</span>
+          </div>
+          <span className="text-gray-600">•</span>
+          <div className="flex items-center gap-1.5 text-sky-400 font-semibold">
+            <span className="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
+            <span>{lanData?.network?.subnetPrefix || 'Subnet'}</span>
+          </div>
+          <span className="text-gray-500 font-bold">➔</span>
+          <span className="text-emerald-300 px-1.5 py-0.5 bg-emerald-950/80 border border-emerald-500/30 rounded text-[11px] font-bold">
+            {lanData?.totalDevices || 0} devices
+          </span>
+          <span className="text-gray-400 text-[11px] hidden sm:inline">
+            (Gateway: {lanData?.gateway?.ip || '192.168.1.1'})
+          </span>
+        </div>
+
+        {/* Selected Device Floating Card */}
+        {selectedDevice && (
+          <div className="flex items-center justify-between gap-3 bg-gray-950/95 border border-amber-500/70 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto max-w-md animate-in slide-in-from-top-1">
+            <div className="flex items-center gap-2 truncate">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              <div className="truncate">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-amber-400">{selectedDevice.ip}</span>
+                  <span className="text-gray-400 text-[11px]">({selectedDevice.vendor || 'Device'})</span>
+                </div>
+                <div className="text-[10px] text-gray-500 truncate">
+                  MAC: {selectedDevice.mac} {selectedDevice.latency !== null ? `• Latency: ${selectedDevice.latency} ms` : ''}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => copyToClipboard(selectedDevice.ip, `pop-${selectedDevice.id}`)}
+                className="p-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition"
+                title="Copy IP"
+              >
+                {copiedId === `pop-${selectedDevice.id}` ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+              </button>
+              {onPing && (
+                <button
+                  type="button"
+                  onClick={() => onPing(selectedDevice.ip)}
+                  className="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-emerald-400 hover:text-emerald-300 transition text-[11px] font-bold flex items-center gap-1"
+                  title="Ping"
+                >
+                  <Activity size={12} />
+                  <span>Ping</span>
+                </button>
+              )}
+              {onDig && (
+                <button
+                  type="button"
+                  onClick={() => onDig(selectedDevice.ip)}
+                  className="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-purple-400 hover:text-purple-300 transition text-[11px] font-bold flex items-center gap-1"
+                  title="Reverse DNS"
+                >
+                  <Globe size={12} />
+                  <span>PTR</span>
+                </button>
+              )}
+              {onSslCheck && (
+                <button
+                  type="button"
+                  onClick={() => onSslCheck(selectedDevice.ip, 443)}
+                  className="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-sky-400 hover:text-sky-300 transition text-[11px] font-bold flex items-center gap-1"
+                  title="SSL Check"
+                >
+                  <ShieldCheck size={12} />
+                  <span>SSL</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setSelectedDevice && setSelectedDevice(null)}
+                className="text-gray-500 hover:text-white p-1 ml-1 cursor-pointer text-sm"
+                title="Deselect"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Floating Canvas Controls (Layout Toggle & Zoom) */}
+      <div className="absolute bottom-6 right-6 z-20 flex flex-col gap-2">
+        {/* Layout Switcher (Tree vs Radial) */}
+        <div className="flex flex-col bg-gray-900/90 border border-gray-700 rounded-xl p-1 backdrop-blur-sm shadow-xl">
+          <button
+            type="button"
+            onClick={() => setLayoutMode('tree')}
+            className={`p-2 rounded-lg transition-all ${
+              layoutMode === 'tree'
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'text-gray-400 hover:text-emerald-400'
+            }`}
+            title="Tree Hierarchy Layout"
+          >
+            <Share2 size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setLayoutMode('radial')}
+            className={`p-2 rounded-lg transition-all ${
+              layoutMode === 'radial'
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'text-gray-400 hover:text-emerald-400'
+            }`}
+            title="Radial Hub-and-Spoke Layout"
+          >
+            <CircleDot size={16} />
+          </button>
+        </div>
+
+        {/* Zoom Controls */}
+        <button
+          onClick={handleResetView}
+          className="p-2.5 rounded-full bg-gray-900/90 text-gray-400 hover:text-emerald-400 border border-gray-700 backdrop-blur-sm transition-all shadow-xl"
+          title="Reset View"
+        >
+          <Compass size={18} />
+        </button>
+
+        <button
+          onClick={() => setZoom(prev => Math.min(2.5, prev * 1.2))}
+          className="p-2.5 rounded-full bg-gray-900/90 text-gray-400 hover:text-emerald-400 border border-gray-700 backdrop-blur-sm transition-all shadow-xl"
+          title="Zoom In"
+        >
+          <ZoomIn size={18} />
+        </button>
+
+        <button
+          onClick={() => setZoom(prev => Math.max(0.4, prev * 0.8))}
+          className="p-2.5 rounded-full bg-gray-900/90 text-gray-400 hover:text-emerald-400 border border-gray-700 backdrop-blur-sm transition-all shadow-xl"
+          title="Zoom Out"
+        >
+          <ZoomOut size={18} />
+        </button>
+      </div>
+
+      {/* Subtle atmospheric vignette */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          boxShadow: 'inset 0 0 120px rgba(0,0,0,0.85)'
+        }}
+      ></div>
+    </div>
+  );
+}
+

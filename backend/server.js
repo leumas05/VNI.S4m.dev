@@ -5,6 +5,7 @@ const { runTraceroute } = require('./traceroute');
 const { performDig } = require('./dns');
 const { checkSsl } = require('./ssl');
 const { getLiveConnections } = require('./netstat');
+const { scanLan } = require('./arp');
 
 const path = require('path');
 const readline = require('readline');
@@ -174,6 +175,16 @@ app.get('/api/netstat', async (req, res) => {
         res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message || 'Failed to scan live connections' });
+    }
+});
+
+app.get('/api/lan-scan', async (req, res) => {
+    try {
+        const sweep = req.query.sweep === 'true' || req.query.sweep === '1';
+        const result = await scanLan({ sweep });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to scan local network (ARP)' });
     }
 });
 

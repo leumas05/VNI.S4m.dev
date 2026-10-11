@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Download, Play, History as HistoryIcon, ArrowRightLeft, X, MapPin, Globe, Hash, Map, Building, Mail, AlignJustify, Briefcase, Radio } from 'lucide-react';
+import { Activity, Download, Play, History as HistoryIcon, ArrowRightLeft, X, MapPin, Globe, Hash, Map, Building, Mail, AlignJustify, Briefcase, Radio, Network } from 'lucide-react';
 import HopCard from './HopCard';
 import LiveRadarPanel from './LiveRadarPanel';
+import LanScannerPanel from './LanScannerPanel';
 
 export default function Sidebar({
   startTrace,
@@ -18,6 +19,7 @@ export default function Sidebar({
   openPrivacy,
   onPing,
   onDig,
+  onSslCheck,
   activeMode = 'traceroute',
   setActiveMode,
   radarData,
@@ -29,6 +31,15 @@ export default function Sidebar({
   setSelectedRadarConn,
   hideSelfConnections,
   onToggleHideSelf,
+  lanData,
+  lanLoading,
+  lanSweepLoading,
+  onRefreshLan,
+  onDeepSweepLan,
+  lanAutoRefresh,
+  setLanAutoRefresh,
+  selectedLanDevice,
+  setSelectedLanDevice,
 }) {
   const [input, setInput] = useState('');
   const [showHistory, setShowHistory] = useState(false);
@@ -148,40 +159,75 @@ export default function Sidebar({
           </div>
       )}
 
-      {/* Mode Switcher: Traceroute vs Live Radar */}
-      <div className="grid grid-cols-2 bg-gray-950 p-1 rounded-xl border border-gray-800 mb-4 text-xs font-semibold shrink-0">
+      {/* Mode Switcher: Traceroute vs Live Radar vs LAN Scanner */}
+      <div className="grid grid-cols-3 bg-gray-950 p-1 rounded-xl border border-gray-800 mb-4 text-xs font-semibold shrink-0 gap-1">
         <button
           type="button"
           onClick={() => setActiveMode && setActiveMode('traceroute')}
-          className={`py-1.5 rounded-lg flex items-center justify-center gap-2 transition cursor-pointer ${
+          className={`py-1.5 px-1 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer ${
             activeMode === 'traceroute'
               ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950 font-bold'
               : 'text-gray-400 hover:text-gray-200'
           }`}
+          title="Internet Traceroute Analysis"
         >
-          <Activity size={14} />
-          <span>Traceroute</span>
+          <Activity size={13} />
+          <span className="truncate">Traceroute</span>
         </button>
         <button
           type="button"
           onClick={() => setActiveMode && setActiveMode('radar')}
-          className={`py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer relative ${
+          className={`py-1.5 px-1 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer relative ${
             activeMode === 'radar'
               ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950 font-bold'
               : 'text-gray-400 hover:text-emerald-400'
           }`}
+          title="Real-Time Network Connections"
         >
-          <Radio size={14} className={activeMode === 'radar' ? 'animate-pulse text-emerald-300' : ''} />
-          <span>Live Radar</span>
+          <Radio size={13} className={activeMode === 'radar' ? 'animate-pulse text-emerald-300' : ''} />
+          <span className="truncate">Radar</span>
           {radarData?.internetCount > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-emerald-950 border border-emerald-500/40 text-emerald-300">
+            <span className="px-1 py-0.2 rounded-full text-[9px] font-mono bg-emerald-950 border border-emerald-500/40 text-emerald-300 hidden sm:inline">
               {radarData.internetCount}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveMode && setActiveMode('lan')}
+          className={`py-1.5 px-1 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer relative ${
+            activeMode === 'lan'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950 font-bold'
+              : 'text-gray-400 hover:text-emerald-400'
+          }`}
+          title="Local Area Network Scanner & Topology"
+        >
+          <Network size={13} className={activeMode === 'lan' ? 'text-emerald-300' : ''} />
+          <span className="truncate">LAN</span>
+          {lanData?.totalDevices > 0 && (
+            <span className="px-1 py-0.2 rounded-full text-[9px] font-mono bg-emerald-950 border border-emerald-500/40 text-emerald-300 hidden sm:inline">
+              {lanData.totalDevices}
             </span>
           )}
         </button>
       </div>
 
-      {activeMode === 'radar' ? (
+      {activeMode === 'lan' ? (
+        <LanScannerPanel
+          lanData={lanData}
+          loading={lanLoading}
+          sweepLoading={lanSweepLoading}
+          onRefresh={onRefreshLan}
+          onDeepSweep={onDeepSweepLan}
+          autoRefresh={lanAutoRefresh}
+          setAutoRefresh={setLanAutoRefresh}
+          selectedDevice={selectedLanDevice}
+          onSelectDevice={setSelectedLanDevice}
+          onPing={onPing}
+          onDig={onDig}
+          onSslCheck={onSslCheck}
+        />
+      ) : activeMode === 'radar' ? (
         <LiveRadarPanel
           radarData={radarData}
           loading={radarLoading}
