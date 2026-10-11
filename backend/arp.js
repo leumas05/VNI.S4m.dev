@@ -198,81 +198,7 @@ function guessDeviceType({ vendor, isGateway, isThisDevice, hostname }) {
   return 'device';
 }
 
-// Detect local adapter connection medium (Cable / Ethernet vs Wi-Fi 2.4/5 GHz)
-function getLocalConnectionInfo() {
-  return new Promise((resolve) => {
-    if (os.platform() !== 'win32') {
-      return resolve({ medium: 'cable', band: null, interfaceName: 'Ethernet', label: 'Kabel (Ethernet)' });
-    }
 
-    exec('netsh wlan show interfaces', { timeout: 1500 }, (err, wlanOut) => {
-      const isWifiConnected = !err && wlanOut && /State\s*:\s*connected/i.test(wlanOut);
-      if (isWifiConnected) {
-        const bandMatch = wlanOut.match(/Band\s*:\s*([^\r\n]+)/i);
-        const bssidMatch = wlanOut.match(/BSSID\s*:\s*([^\r\n]+)/i);
-        const ssidMatch = wlanOut.match(/SSID\s*:\s*([^\r\n]+)/i);
-        const radioMatch = wlanOut.match(/Radio type\s*:\s*([^\r\n]+)/i);
-        const signalMatch = wlanOut.match(/Signal\s*:\s*([^\r\n]+)/i);
-
-        let band = '5 GHz';
-        if (bandMatch) {
-          band = bandMatch[1].trim();
-        } else if (radioMatch && (radioMatch[1].includes('802.11b') || radioMatch[1].includes('802.11g'))) {
-          band = '2.4 GHz';
-        }
-
-        return resolve({
-          medium: band.includes('2.4') ? 'wifi_24g' : 'wifi_5g',
-          band,
-          ssid: ssidMatch ? ssidMatch[1].trim() : null,
-          bssid: bssidMatch ? formatMac(bssidMatch[1].trim()) : null,
-          signal: signalMatch ? signalMatch[1].trim() : null,
-          interfaceName: 'Wi-Fi',
-          label: `Wi-Fi ${band}`
-        });
-      }
-
-      exec('netsh interface show interface', { timeout: 1500 }, (err2, ifOut) => {
-        const isEthernet = !err2 && ifOut && /Connected\s+Dedicated\s+Ethernet/i.test(ifOut);
-        resolve({
-          medium: 'cable',
-          band: null,
-          interfaceName: isEthernet ? 'Ethernet' : 'LAN',
-          label: 'Kabel (Ethernet)'
-        });
-      });
-    });
-  });
-}
-
-// Guess connection medium based on device type & vendor
-function guessConnectionMedium({ deviceType, isThisDevice, vendor, hostname }) {
-  if (isThisDevice) return { medium: 'cable', label: 'Kabel (Ethernet)' };
-  if (deviceType === 'router' || deviceType === 'mesh_node') {
-    return { medium: 'cable', label: 'Kabel / Mesh' };
-  }
-  const v = (vendor || '').toLowerCase();
-  const h = (hostname || '').toLowerCase();
-  if (
-    deviceType === 'iot' ||
-    deviceType === 'ev_charger' ||
-    deviceType === 'solar' ||
-    deviceType === 'printer' ||
-    v.includes('zaptec') ||
-    v.includes('solar') ||
-    v.includes('oven') ||
-    v.includes('ugn') ||
-    v.includes('espressif') ||
-    h.includes('ugn') ||
-    h.includes('printer')
-  ) {
-    return { medium: 'wifi_24g', label: '2,4 GHz' };
-  }
-  if (deviceType === 'mobile' || deviceType === 'tv' || deviceType === 'console') {
-    return { medium: 'wifi_5g', label: '5 GHz' };
-  }
-  return { medium: 'wifi_5g', label: '5 GHz' };
-}
 
 // Detect default gateway and active interface
 function getDefaultGateway() {
@@ -530,7 +456,6 @@ async function scanLan(options = { sweep: true }) {
 
   // Identify "This Device" (host PC running VNI)
   const { vendor: thisVendor } = lookupVendor(localMac);
-  const hostConn = await getLocalConnectionInfo();
   const thisDevice = {
     id: `self-${localIp}`,
     ip: localIp,
@@ -541,9 +466,7 @@ async function scanLan(options = { sweep: true }) {
     isGateway: false,
     isThisDevice: true,
     latency: 0,
-    type: 'local',
-    connection: hostConn,
-    medium: hostConn.medium
+    type: 'local'
   };
 
   // Build client devices
@@ -569,9 +492,6 @@ async function scanLan(options = { sweep: true }) {
       else if (vendor.includes('Printer')) displayHostname = 'Network Printer';
     }
 
-    const isMeshNode = dType === 'mesh_node' || vendor.includes('Deco') || displayHostname.includes('Deco');
-    const devConn = guessConnectionMedium({ deviceType: dType, isThisDevice: false, vendor, hostname: displayHostname });
-
     clientDevices.push({
       id: `dev-${entry.ip.replace(/\./g, '-')}`,
       ip: entry.ip,
@@ -582,12 +502,9 @@ async function scanLan(options = { sweep: true }) {
       deviceType: dType,
       isGateway: false,
       isThisDevice: false,
-      isMeshNode,
       isRandomized,
       latency: null,
-      type: entry.type,
-      connection: devConn,
-      medium: devConn.medium
+      type: entry.type
     });
   }
 
@@ -638,7 +555,5 @@ module.exports = {
   scanLan,
   measurePing,
   lookupVendor,
-  formatMac,
-  getLocalConnectionInfo,
-  guessConnectionMedium
+  formatMac
 };
