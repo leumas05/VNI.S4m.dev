@@ -31,6 +31,7 @@ function MapBounds({ positions, myLocation }) {
     } else if (myLocation && myLocation.lat && myLocation.lon) {
       map.setView([myLocation.lat, myLocation.lon], 5);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positionsHash, myLocation, map]);
   return null;
 }
@@ -85,9 +86,22 @@ function getCurvedPoints(p1, p2, offsetMultiplier) {
     return points;
 }
 
-export default function MapView({ hops, selectedHop, setSelectedHop, hoveredHop, myLocation }) {
+export default function MapView({
+  hops = [],
+  selectedHop,
+  setSelectedHop,
+  hoveredHop,
+  myLocation,
+  activeMode = 'traceroute',
+  radarData,
+  selectedRadarConn,
+  setSelectedRadarConn
+}) {
   const [zoomLevel, setZoomLevel] = useState(2);
-  const validHops = hops.filter(h => h && h.geo && h.geo.lat && h.geo.lon);
+  const isRadar = activeMode === 'radar';
+
+  const validHops = (hops || []).filter(h => h && h.geo && h.geo.lat && h.geo.lon);
+  const radarConnections = (radarData?.connections || []).filter(c => c && c.geo && c.geo.lat && c.geo.lon);
   
   let myDisplayLat = myLocation?.lat;
   let myDisplayLon = myLocation?.lon;
@@ -143,34 +157,50 @@ export default function MapView({ hops, selectedHop, setSelectedHop, hoveredHop,
       }
   }
 
-  const positions = unwrappedHops.map(h => [h.geo.lat, h.geo.lon]);
+  const positions = isRadar 
+    ? radarConnections.map(c => [c.geo.lat, c.geo.lon])
+    : unwrappedHops.map(h => [h.geo.lat, h.geo.lon]);
 
   const segments = [];
   const segmentCounts = {};
   
-  if (myDisplayLat && myDisplayLon && positions.length > 0) {
-      segments.push({
-          points: getCurvedPoints([myDisplayLat, myDisplayLon], positions[0], 0.15),
-          hopNum: 0,
-          isClustered: false
+  if (isRadar) {
+    if (myDisplayLat && myDisplayLon) {
+      radarConnections.forEach((conn) => {
+        const isSelected = selectedRadarConn && selectedRadarConn.remoteIp === conn.remoteIp && selectedRadarConn.remotePort === conn.remotePort;
+        segments.push({
+          points: getCurvedPoints([myDisplayLat, myDisplayLon], [conn.geo.lat, conn.geo.lon], 0.12),
+          isSelected,
+          color: isSelected ? '#f59e0b' : '#10b981',
+          weight: isSelected ? 3 : 2
+        });
       });
-  }
+    }
+  } else {
+    if (myDisplayLat && myDisplayLon && positions.length > 0) {
+        segments.push({
+            points: getCurvedPoints([myDisplayLat, myDisplayLon], positions[0], 0.15),
+            hopNum: 0,
+            isClustered: false
+        });
+    }
 
-  if (positions.length > 1) {
-      for (let i = 0; i < positions.length - 1; i++) {
-          const p1 = positions[i];
-          const p2 = positions[i+1];
-          const key = `${p1[0]},${p1[1]}->${p2[0]},${p2[1]}`;
-          if (!segmentCounts[key]) segmentCounts[key] = 0;
-          segmentCounts[key]++;
-          
-          const multiplier = segmentCounts[key] * 0.15;
-          segments.push({
-              points: getCurvedPoints(p1, p2, multiplier),
-              hopNum: unwrappedHops[i].hop,
-              isClustered: unwrappedHops[i].isClustered
-          });
-      }
+    if (positions.length > 1) {
+        for (let i = 0; i < positions.length - 1; i++) {
+            const p1 = positions[i];
+            const p2 = positions[i+1];
+            const key = `${p1[0]},${p1[1]}->${p2[0]},${p2[1]}`;
+            if (!segmentCounts[key]) segmentCounts[key] = 0;
+            segmentCounts[key]++;
+            
+            const multiplier = segmentCounts[key] * 0.15;
+            segments.push({
+                points: getCurvedPoints(p1, p2, multiplier),
+                hopNum: unwrappedHops[i].hop,
+                isClustered: unwrappedHops[i].isClustered
+            });
+        }
+    }
   }
 
   const getIcon = (hopNum, isSelected, isZoomedIn, isClustered) => {
@@ -227,36 +257,90 @@ export default function MapView({ hops, selectedHop, setSelectedHop, hoveredHop,
              <Polyline 
                key={idx}
                positions={segment.points} 
-               color="#10b981" 
-               weight={2}
-               opacity={0.6}
+               color={segment.color || '#10b981'} 
+               weight={segment.weight || 2}
+               opacity={segment.isSelected ? 0.9 : 0.6}
                dashArray="5, 10"
                className="animated-trace-line"
              />
            );
         })}
         
-        {unwrappedHops.map((hop) => {
-           const isSelected = (selectedHop && selectedHop.hop === hop.hop) || (hoveredHop && hoveredHop.hop === hop.hop);
-           return (
-             <Marker 
-               key={hop.hop} 
-               position={[hop.geo.lat, hop.geo.lon]}
-               icon={getIcon(hop.hop, isSelected, zoomLevel >= 10, hop.isClustered)}
-               zIndexOffset={isSelected ? 500 : 0}
-               eventHandlers={{
-                 click: () => setSelectedHop(hop)
-               }}
-             >
-               <Tooltip direction="top" offset={[0, -10]} opacity={1}>
-                 <div className="text-gray-900 font-sans text-sm">
-                   <strong>{hop.geo.city || 'Unknown City'}, {hop.geo.country}</strong><br/>
-                   <span className="text-gray-500 text-xs">{hop.geo.isp} (Hop {hop.hop})</span>
-                 </div>
-               </Tooltip>
-             </Marker>
-           );
-        })}
+        {isRadar ? (
+          radarConnections.map((conn, idx) => {
+            const isSelected = selectedRadarConn && selectedRadarConn.remoteIp === conn.remoteIp && selectedRadarConn.remotePort === conn.remotePort;
+            const p = (conn.process || '').toLowerCase();
+            let color = '#6366f1';
+            let border = '#312e81';
+            if (isSelected) {
+              color = '#f59e0b';
+              border = '#78350f';
+            } else if (p.includes('chrome') || p.includes('edge') || p.includes('firefox') || p.includes('brave')) {
+              color = '#10b981';
+              border = '#064e3b';
+            } else if (p.includes('discord') || p.includes('spotify') || p.includes('steam')) {
+              color = '#a855f7';
+              border = '#581c87';
+            } else if (p.includes('code') || p.includes('node') || p.includes('git') || p.includes('electron')) {
+              color = '#38bdf8';
+              border = '#0369a1';
+            } else if (p.includes('onedrive') || p.includes('dropbox') || p.includes('googledrive')) {
+              color = '#f59e0b';
+              border = '#78350f';
+            }
+            const size = isSelected ? 16 : 12;
+            const icon = new L.DivIcon({
+              className: isSelected ? 'custom-marker-selected' : 'custom-marker',
+              html: `<div style="background-color: ${color}; width: ${size}px; height: ${size}px; border-radius: 50%; border: 2px solid ${border}; box-shadow: 0 0 10px ${color};"></div>`,
+              iconSize: [size, size],
+              iconAnchor: [size / 2, size / 2]
+            });
+
+            return (
+              <Marker
+                key={`radar-${conn.remoteIp}-${conn.remotePort}-${idx}`}
+                position={[conn.geo.lat, conn.geo.lon]}
+                icon={icon}
+                zIndexOffset={isSelected ? 500 : 0}
+                eventHandlers={{
+                  click: () => setSelectedRadarConn && setSelectedRadarConn(isSelected ? null : conn)
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -10]} opacity={1}>
+                  <div className="text-gray-900 font-sans text-sm">
+                    <strong>{conn.process} (:{conn.remotePort})</strong><br/>
+                    <span className="text-gray-600 text-xs font-mono">{conn.remoteIp}</span><br/>
+                    <span className="text-gray-500 text-xs">
+                      {conn.geo?.city ? `${conn.geo.city}, ` : ''}{conn.geo?.country} {conn.geo?.isp ? `• ${conn.geo.isp}` : ''}
+                    </span>
+                  </div>
+                </Tooltip>
+              </Marker>
+            );
+          })
+        ) : (
+          unwrappedHops.map((hop) => {
+            const isSelected = (selectedHop && selectedHop.hop === hop.hop) || (hoveredHop && hoveredHop.hop === hop.hop);
+            return (
+              <Marker 
+                key={hop.hop} 
+                position={[hop.geo.lat, hop.geo.lon]}
+                icon={getIcon(hop.hop, isSelected, zoomLevel >= 10, hop.isClustered)}
+                zIndexOffset={isSelected ? 500 : 0}
+                eventHandlers={{
+                  click: () => setSelectedHop(hop)
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -10]} opacity={1}>
+                  <div className="text-gray-900 font-sans text-sm">
+                    <strong>{hop.geo.city || 'Unknown City'}, {hop.geo.country}</strong><br/>
+                    <span className="text-gray-500 text-xs">{hop.geo.isp} (Hop {hop.hop})</span>
+                  </div>
+                </Tooltip>
+              </Marker>
+            );
+          })
+        )}
         
         {myDisplayLat && myDisplayLon && (
              <Marker 
@@ -271,13 +355,53 @@ export default function MapView({ hops, selectedHop, setSelectedHop, hoveredHop,
              >
                <Tooltip direction="top" offset={[0, -10]} opacity={1}>
                  <div className="text-gray-900 font-sans text-sm">
-                   <strong>My Location</strong><br/>
-                   <span className="text-gray-500 text-xs">{myLocation.city}, {myLocation.country}</span>
+                   <strong>{isRadar ? 'Radar Gateway (Din dator)' : 'My Location'}</strong><br/>
+                   <span className="text-gray-500 text-xs">{myLocation?.city}, {myLocation?.country}</span>
                  </div>
                </Tooltip>
              </Marker>
         )}
       </MapContainer>
+
+      {/* 2D Live Radar HUD Banner */}
+      {isRadar && (
+        <div className="absolute top-6 left-6 z-[1000] flex flex-col gap-1.5 pointer-events-none select-none">
+          <div className="flex items-center gap-2 bg-gray-900/85 border border-emerald-500/40 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto">
+            <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+              <span className="font-bold">LIVE RADAR</span>
+            </div>
+            <span className="text-gray-600">•</span>
+            <div className="flex items-center gap-1.5 text-sky-400 font-semibold" title={myLocation?.city}>
+              <span className="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
+              <span>{myLocation?.city || 'Gateway'}</span>
+            </div>
+            <span className="text-gray-500 font-bold">➔</span>
+            <span className="text-emerald-300 px-1.5 py-0.5 bg-emerald-950/80 border border-emerald-500/30 rounded text-[11px] font-bold">
+              {radarData?.internetCount || 0} aktiva anslutningar
+            </span>
+          </div>
+
+          {selectedRadarConn && (
+            <div className="flex items-center justify-between gap-2 bg-gray-950/90 border border-amber-500/60 rounded-lg px-3 py-1.5 backdrop-blur-md shadow-xl text-xs font-mono pointer-events-auto">
+              <div className="flex items-center gap-2 truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                <span className="font-bold text-amber-400">{selectedRadarConn.process}:</span>
+                <span className="text-gray-200">{selectedRadarConn.remoteIp}:{selectedRadarConn.remotePort}</span>
+                <span className="text-gray-400 truncate">({selectedRadarConn.geo?.city || ''}, {selectedRadarConn.geo?.country || ''})</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRadarConn && setSelectedRadarConn(null)}
+                className="text-gray-500 hover:text-white p-0.5 ml-2 cursor-pointer"
+                title="Stäng markering"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       
       <div className="absolute inset-0 pointer-events-none" style={{
          boxShadow: 'inset 0 0 100px rgba(0,0,0,0.9)'

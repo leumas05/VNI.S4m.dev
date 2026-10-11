@@ -88,7 +88,34 @@ function getHopTheme(hop, isSelected, isLast) {
   };
 }
 
-export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHop, myLocation }) {
+function getRadarColor(conn) {
+  const p = (conn?.process || '').toLowerCase();
+  if (p.includes('chrome') || p.includes('msedge') || p.includes('firefox') || p.includes('brave')) {
+    return '#10b981'; // Emerald
+  }
+  if (p.includes('discord') || p.includes('spotify') || p.includes('steam')) {
+    return '#a855f7'; // Purple
+  }
+  if (p.includes('code') || p.includes('node') || p.includes('git') || p.includes('electron')) {
+    return '#38bdf8'; // Sky
+  }
+  if (p.includes('onedrive') || p.includes('dropbox') || p.includes('googledrive')) {
+    return '#f59e0b'; // Amber
+  }
+  return '#6366f1'; // Indigo
+}
+
+export default function GlobeView({
+  hops = [],
+  selectedHop,
+  setSelectedHop,
+  hoveredHop,
+  myLocation,
+  activeMode = 'traceroute',
+  radarData,
+  selectedRadarConn,
+  setSelectedRadarConn
+}) {
   const globeRef = useRef();
   const containerRef = useRef();
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -111,9 +138,40 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     return () => observer.disconnect();
   }, []);
 
+  // Filter valid connections with geo coordinates and de-cluster overlapping endpoints
+  const radarConnections = useMemo(() => {
+    if (activeMode !== 'radar') return [];
+    const valid = (radarData?.connections || []).filter(c => c && c.geo && c.geo.lat && c.geo.lon);
+
+    const coordCounts = {};
+    valid.forEach(c => {
+      const key = `${c.geo.lat.toFixed(3)},${c.geo.lon.toFixed(3)}`;
+      coordCounts[key] = (coordCounts[key] || 0) + 1;
+    });
+
+    const seenCoords = {};
+    return valid.map(c => {
+      const copy = { ...c, geo: { ...c.geo } };
+      const key = `${c.geo.lat.toFixed(3)},${c.geo.lon.toFixed(3)}`;
+
+      if (coordCounts[key] > 1) {
+        seenCoords[key] = (seenCoords[key] || 0) + 1;
+        const count = seenCoords[key];
+        const total = coordCounts[key];
+        const angle = ((count - 1) / total) * (2 * Math.PI) + 0.35;
+        const spreadRadius = 0.20 + (total > 4 ? 0.05 : 0);
+        const cosLat = Math.max(0.25, Math.cos(copy.geo.lat * Math.PI / 180));
+        copy.geo.lat = Math.max(-89.9, Math.min(89.9, copy.geo.lat + Math.sin(angle) * spreadRadius));
+        const rawLon = copy.geo.lon + (Math.cos(angle) * spreadRadius) / cosLat;
+        copy.geo.lon = ((rawLon + 180) % 360 + 360) % 360 - 180;
+      }
+      return copy;
+    });
+  }, [activeMode, radarData]);
+
   // Filter valid hops and de-cluster co-located hops (so Stockholm hops don't overlap into a blob!)
   const processedHops = useMemo(() => {
-    const valid = hops.filter(h => h && h.geo && h.geo.lat && h.geo.lon);
+    const valid = (hops || []).filter(h => h && h.geo && h.geo.lat && h.geo.lon);
     
     // Count coordinates
     const coordCounts = {};
@@ -161,7 +219,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     const list = [];
 
     // Helper to generate sleek dark HUD tooltip HTML
-    const getTooltip = ({ title, subtitle, info, latency, color }) => `
+    const getTooltip = ({ title, subtitle, info, latency, color, extra }) => `
       <div style="background: rgba(10, 15, 29, 0.95); border: 1px solid ${color}; padding: 7px 11px; border-radius: 8px; color: #f8fafc; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; box-shadow: 0 10px 25px rgba(0,0,0,0.85); backdrop-filter: blur(6px); pointer-events: none;">
         <div style="color: ${color}; font-weight: 700; margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
           <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:${color}; box-shadow:0 0 8px ${color};"></span>
@@ -170,13 +228,14 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         <div style="font-weight: 500; color: #e2e8f0;">${subtitle}</div>
         ${info ? `<div style="color: #94a3b8; font-size: 10px; margin-top: 2px;">${info}</div>` : ''}
         ${latency ? `<div style="color: #34d399; font-weight: 600; font-size: 10px; margin-top: 2px;">Latency: ${latency}</div>` : ''}
+        ${extra ? `<div style="color: #38bdf8; font-size: 10px; margin-top: 2px; font-weight: 500;">${extra}</div>` : ''}
       </div>
     `;
 
     // User Location Node (matching 2D map #3b82f6)
     if (myLocation?.lat && myLocation?.lon) {
       const tooltip = getTooltip({
-        title: 'My Location (Gateway)',
+        title: activeMode === 'radar' ? 'Radar Gateway (Din dator)' : 'My Location (Gateway)',
         subtitle: `${myLocation.city || 'Local'}, ${myLocation.country || ''}`,
         info: `IP: ${myLocation.query || 'Internal'}`,
         color: '#3b82f6'
@@ -203,6 +262,46 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         label: tooltip,
         hopData: null
       });
+    }
+
+    if (activeMode === 'radar') {
+      radarConnections.forEach((conn) => {
+        const isSelected = selectedRadarConn && selectedRadarConn.remoteIp === conn.remoteIp && selectedRadarConn.remotePort === conn.remotePort;
+        const baseColor = getRadarColor(conn);
+        const color = isSelected ? '#f59e0b' : baseColor;
+        const haloColor = isSelected ? 'rgba(245, 158, 11, 0.45)' : `${baseColor}44`;
+
+        const tooltip = getTooltip({
+          title: `${conn.process} (Port ${conn.remotePort})`,
+          subtitle: `${conn.geo?.city ? `${conn.geo.city}, ` : ''}${conn.geo?.country || 'Okänd plats'}`,
+          info: `IP: ${conn.remoteIp} ${conn.geo?.isp ? `• ${conn.geo.isp}` : ''}`,
+          extra: `Status: ${conn.state} ${conn.pid ? `(PID: ${conn.pid})` : ''}`,
+          color
+        });
+
+        // Outer halo
+        list.push({
+          lat: conn.geo.lat,
+          lng: conn.geo.lon,
+          color: haloColor,
+          radius: isSelected ? 0.45 : 0.28,
+          altitude: 0.006,
+          label: tooltip,
+          connData: conn
+        });
+
+        // Core jewel
+        list.push({
+          lat: conn.geo.lat,
+          lng: conn.geo.lon,
+          color,
+          radius: isSelected ? 0.22 : 0.13,
+          altitude: 0.009,
+          label: tooltip,
+          connData: conn
+        });
+      });
+      return list;
     }
 
     // Trace Hops with 2D Map Color System
@@ -243,11 +342,34 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     });
 
     return list;
-  }, [processedHops, selectedHop, hoveredHop, myLocation]);
+  }, [activeMode, radarConnections, selectedRadarConn, processedHops, selectedHop, hoveredHop, myLocation]);
 
   // Trace Arcs: Pure WebGL glowing laser lines with dynamic directional pulses and node colors
   const arcsData = useMemo(() => {
     const arcs = [];
+
+    if (activeMode === 'radar') {
+      if (!myLocation?.lat || !myLocation?.lon) return [];
+      radarConnections.forEach((conn) => {
+        const isSelected = selectedRadarConn && selectedRadarConn.remoteIp === conn.remoteIp && selectedRadarConn.remotePort === conn.remotePort;
+        const connColor = getRadarColor(conn);
+        const arcAlt = getArcAltitude(myLocation.lat, myLocation.lon, conn.geo.lat, conn.geo.lon);
+        const strokeColor = isSelected ? ['#f59e0b', '#f59e0b'] : ['#3b82f6', connColor];
+
+        arcs.push({
+          startLat: myLocation.lat,
+          startLng: myLocation.lon,
+          endLat: conn.geo.lat,
+          endLng: conn.geo.lon,
+          altitude: arcAlt,
+          color: strokeColor,
+          stroke: isSelected ? 0.32 : 0.14,
+          name: `${conn.process} -> ${conn.remoteIp}`
+        });
+      });
+      return arcs;
+    }
+
     let prevPoint = null;
 
     if (myLocation?.lat && myLocation?.lon && processedHops.length > 0) {
@@ -286,11 +408,36 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     });
 
     return arcs;
-  }, [processedHops, myLocation, selectedHop, hoveredHop]);
+  }, [activeMode, radarConnections, selectedRadarConn, processedHops, myLocation, selectedHop, hoveredHop]);
 
   // 3D WebGL Vector Labels: Mark Start, Destination, and Selected Waypoint clearly
   const labelsData = useMemo(() => {
     const list = [];
+
+    if (activeMode === 'radar') {
+      if (myLocation?.lat && myLocation?.lon && radarConnections.length > 0) {
+        list.push({
+          lat: myLocation.lat,
+          lng: myLocation.lon,
+          text: 'GATEWAY',
+          color: '#3b82f6',
+          size: 0.36,
+          altitude: 0.016,
+        });
+      }
+      if (selectedRadarConn?.geo?.lat && selectedRadarConn?.geo?.lon) {
+        list.push({
+          lat: selectedRadarConn.geo.lat,
+          lng: selectedRadarConn.geo.lon,
+          text: `${selectedRadarConn.process.replace(/\.exe$/i, '')} (:${selectedRadarConn.remotePort})`,
+          color: '#f59e0b',
+          size: 0.40,
+          altitude: 0.02,
+        });
+      }
+      return list;
+    }
+
     if (myLocation?.lat && myLocation?.lon && processedHops.length > 0) {
       list.push({
         lat: myLocation.lat,
@@ -332,12 +479,39 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     }
 
     return list;
-  }, [processedHops, myLocation, selectedHop, hoveredHop]);
+  }, [activeMode, radarConnections, selectedRadarConn, processedHops, myLocation, selectedHop, hoveredHop]);
 
   // Subtle pulsing radar ripples for user, destination, and selected hop
   const ringsData = useMemo(() => {
     const rings = [];
     
+    if (activeMode === 'radar') {
+      if (myLocation?.lat && myLocation?.lon) {
+        // Continuous green expanding radar sweep waves!
+        rings.push({
+          lat: myLocation.lat,
+          lng: myLocation.lon,
+          color: () => (t) => `rgba(16, 185, 129, ${Math.max(0, 0.85 * (1 - t))})`,
+          maxR: 3.2,
+          propagationSpeed: 1.6,
+          repeatPeriod: 1800,
+          altitude: 0.007
+        });
+      }
+      if (selectedRadarConn?.geo?.lat && selectedRadarConn?.geo?.lon) {
+        rings.push({
+          lat: selectedRadarConn.geo.lat,
+          lng: selectedRadarConn.geo.lon,
+          color: () => (t) => `rgba(245, 158, 11, ${Math.max(0, 0.9 * (1 - t))})`,
+          maxR: 2.2,
+          propagationSpeed: 1.4,
+          repeatPeriod: 1200,
+          altitude: 0.007
+        });
+      }
+      return rings;
+    }
+
     if (myLocation?.lat && myLocation?.lon) {
       rings.push({
         lat: myLocation.lat,
@@ -377,7 +551,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     }
 
     return rings;
-  }, [processedHops, selectedHop, hoveredHop, myLocation]);
+  }, [activeMode, selectedRadarConn, processedHops, selectedHop, hoveredHop, myLocation]);
 
   // Explicitly sync layers on real-time streaming updates
   useEffect(() => {
@@ -428,10 +602,17 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     }
   }, [processedHops]);
 
-  // Smooth camera movements when selecting a hop
+  // Smooth camera movements when selecting a hop or a radar connection
   useEffect(() => {
     if (!globeRef.current) return;
-    if (selectedHop?.geo?.lat && selectedHop?.geo?.lon) {
+    if (activeMode === 'radar' && selectedRadarConn?.geo?.lat && selectedRadarConn?.geo?.lon) {
+      globeRef.current.pointOfView({
+        lat: selectedRadarConn.geo.lat,
+        lng: selectedRadarConn.geo.lon,
+        altitude: 1.6
+      }, 900);
+      setAutoRotate(false);
+    } else if (selectedHop?.geo?.lat && selectedHop?.geo?.lon) {
       const matched = processedHops.find(h => h.hop === selectedHop.hop) || selectedHop;
       globeRef.current.pointOfView({
         lat: matched.geo.lat,
@@ -440,10 +621,15 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
       }, 900);
       setAutoRotate(false);
     }
-  }, [selectedHop, processedHops]);
+  }, [activeMode, selectedRadarConn, selectedHop, processedHops]);
 
   const handleResetCamera = () => {
     if (!globeRef.current) return;
+    if (activeMode === 'radar') {
+      const target = myLocation?.lat ? { lat: myLocation.lat, lng: myLocation.lon, altitude: 2.2 } : { lat: 20, lng: 0, altitude: 2.5 };
+      globeRef.current.pointOfView(target, 1000);
+      return;
+    }
     const target = processedHops.length > 0 
       ? { lat: processedHops[0].geo.lat, lng: processedHops[0].geo.lon, altitude: 2.0 }
       : (myLocation?.lat ? { lat: myLocation.lat, lng: myLocation.lon, altitude: 2.2 } : { lat: 20, lng: 0, altitude: 2.5 });
@@ -497,8 +683,10 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
           pointLabel="label"
           pointsTransitionDuration={0}
           onPointClick={(point) => {
-            if (point && point.hopData) {
-              setSelectedHop(point.hopData);
+            if (point && point.connData) {
+              setSelectedRadarConn && setSelectedRadarConn(point.connData);
+            } else if (point && point.hopData) {
+              setSelectedHop && setSelectedHop(point.hopData);
             }
           }}
 
@@ -542,8 +730,48 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         />
       )}
 
-      {/* Route Flow HUD Status */}
-      {processedHops.length > 0 && (
+      {/* Route Flow / Live Radar HUD Status */}
+      {activeMode === 'radar' ? (
+        <div className="absolute top-6 left-6 z-20 flex flex-col gap-1.5 pointer-events-none select-none">
+          <div className="flex items-center gap-2 bg-gray-900/85 border border-emerald-500/40 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto">
+            <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+              <span className="font-bold">LIVE RADAR</span>
+            </div>
+            <span className="text-gray-600">•</span>
+            <div className="flex items-center gap-1.5 text-sky-400 font-semibold" title={myLocation?.city}>
+              <span className="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
+              <span>{myLocation?.city || 'Gateway'}</span>
+            </div>
+            <span className="text-gray-500 font-bold">➔</span>
+            <span className="text-emerald-300 px-1.5 py-0.5 bg-emerald-950/80 border border-emerald-500/30 rounded text-[11px] font-bold">
+              {radarData?.internetCount || 0} aktiva anslutningar
+            </span>
+            <span className="text-gray-400 text-[11px] hidden sm:inline">
+              ({Object.keys(radarData?.countryCounts || {}).length} länder)
+            </span>
+          </div>
+
+          {selectedRadarConn && (
+            <div className="flex items-center justify-between gap-2 bg-gray-950/90 border border-amber-500/60 rounded-lg px-3 py-1.5 backdrop-blur-md shadow-xl text-xs font-mono pointer-events-auto">
+              <div className="flex items-center gap-2 truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                <span className="font-bold text-amber-400">{selectedRadarConn.process}:</span>
+                <span className="text-gray-200">{selectedRadarConn.remoteIp}:{selectedRadarConn.remotePort}</span>
+                <span className="text-gray-400 truncate">({selectedRadarConn.geo?.city || ''}, {selectedRadarConn.geo?.country || ''})</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRadarConn && setSelectedRadarConn(null)}
+                className="text-gray-500 hover:text-white p-0.5 ml-2 cursor-pointer"
+                title="Stäng markering"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+        </div>
+      ) : processedHops.length > 0 ? (
         <div className="absolute top-6 left-6 z-20 flex flex-col gap-1.5 pointer-events-none select-none">
           <div className="flex items-center gap-2 bg-gray-900/85 border border-gray-700/80 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto">
             <div className="flex items-center gap-1.5 text-sky-400 font-semibold" title={myLocation?.city}>
@@ -578,7 +806,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
             );
           })()}
         </div>
-      )}
+      ) : null}
 
       {/* Globe Floating Controls */}
       <div className="absolute bottom-6 right-6 z-20 flex flex-col gap-2">

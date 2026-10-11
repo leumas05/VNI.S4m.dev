@@ -4,6 +4,7 @@ const { spawn } = require('child_process');
 const { runTraceroute } = require('./traceroute');
 const { performDig } = require('./dns');
 const { checkSsl } = require('./ssl');
+const { getLiveConnections } = require('./netstat');
 
 const path = require('path');
 const readline = require('readline');
@@ -164,6 +165,15 @@ app.get('/api/ssl-check', async (req, res) => {
         res.json(result);
     } catch (err) {
         res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.get('/api/netstat', async (req, res) => {
+    try {
+        const result = await getLiveConnections();
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Failed to scan live connections' });
     }
 });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Info, X, Activity, Globe, Map } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MapView from './components/Map';
@@ -69,6 +69,36 @@ function App() {
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('vni_view_mode') || '2d');
   const [pingingHop, setPingingHop] = useState(null);
   const [diggingHop, setDiggingHop] = useState(null);
+
+  // Live Radar State
+  const [activeMode, setActiveMode] = useState('traceroute'); // 'traceroute' | 'radar'
+  const [radarData, setRadarData] = useState(null);
+  const [radarLoading, setRadarLoading] = useState(false);
+  const [radarAutoRefresh, setRadarAutoRefresh] = useState(true);
+  const [selectedRadarConn, setSelectedRadarConn] = useState(null);
+
+  const fetchRadarData = useCallback(async () => {
+    try {
+      setRadarLoading(true);
+      const res = await fetch(`${API_BASE}/api/netstat`, { cache: 'no-cache' });
+      if (res.ok) {
+        const data = await res.json();
+        setRadarData(data);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch netstat radar:', e);
+    } finally {
+      setRadarLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeMode !== 'radar') return;
+    fetchRadarData();
+    if (!radarAutoRefresh) return;
+    const interval = setInterval(fetchRadarData, 4000);
+    return () => clearInterval(interval);
+  }, [activeMode, radarAutoRefresh, fetchRadarData]);
   
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [privacyText, setPrivacyText] = useState('');
@@ -333,6 +363,15 @@ function App() {
                  openPrivacy={openPrivacy}
                  onPing={setPingingHop}
                  onDig={setDiggingHop}
+                 activeMode={activeMode}
+                 setActiveMode={setActiveMode}
+                 radarData={radarData}
+                 radarLoading={radarLoading}
+                 onRefreshRadar={fetchRadarData}
+                 radarAutoRefresh={radarAutoRefresh}
+                 setRadarAutoRefresh={setRadarAutoRefresh}
+                 selectedRadarConn={selectedRadarConn}
+                 setSelectedRadarConn={setSelectedRadarConn}
               />
            </div>
            <div className="w-full lg:w-3/5 h-[45%] lg:h-full relative z-0 flex-1">
@@ -348,7 +387,11 @@ function App() {
                 selectedHop={selectedHop} 
                 setSelectedHop={setSelectedHop} 
                 hoveredHop={hoveredHop} 
-                myLocation={myLocation} 
+                myLocation={myLocation}
+                activeMode={activeMode}
+                radarData={radarData}
+                selectedRadarConn={selectedRadarConn}
+                setSelectedRadarConn={setSelectedRadarConn}
               />
             </React.Suspense>
           ) : (
@@ -357,7 +400,11 @@ function App() {
               selectedHop={selectedHop} 
               setSelectedHop={setSelectedHop} 
               hoveredHop={hoveredHop} 
-              myLocation={myLocation} 
+              myLocation={myLocation}
+              activeMode={activeMode}
+              radarData={radarData}
+              selectedRadarConn={selectedRadarConn}
+              setSelectedRadarConn={setSelectedRadarConn}
             />
           )}
 

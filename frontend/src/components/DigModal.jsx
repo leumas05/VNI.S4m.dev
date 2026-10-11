@@ -681,13 +681,14 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
 }
 
 export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
-  const initialTarget = hop?.hostname && hop.hostname !== hop?.ip ? hop.hostname : (hop?.ip || '');
+  const isProcessName = (str) => Boolean(str && (str.endsWith('.exe') || str.includes('(')));
+  const initialTarget = hop?.hostname && hop.hostname !== hop?.ip && !isProcessName(hop?.hostname) ? hop.hostname : (hop?.ip || '');
   const [target, setTarget] = useState(initialTarget);
   const [queryType, setQueryType] = useState(() => (isIpAddress(initialTarget) ? 'PTR' : 'ALL'));
   const [dnsServer, setDnsServer] = useState('');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
-  const [viewMode, setViewMode] = useState('visual'); // 'visual' | 'raw' | 'ssl'
+  const [viewMode, setViewMode] = useState(() => (hop?.initialTab === 'ssl' ? 'ssl' : 'visual')); // 'visual' | 'raw' | 'ssl'
   const [copiedRaw, setCopiedRaw] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const [collapsedSoa, setCollapsedSoa] = useState({});
@@ -941,7 +942,11 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
 
   // Initial lookup once on open
   useEffect(() => {
-    executeDig(initialTarget, isIpAddress(initialTarget) ? 'PTR' : 'ALL', dnsServerRef.current);
+    if (hop?.initialTab === 'ssl') {
+      executeSslCheck(initialTarget, '443');
+    } else {
+      executeDig(initialTarget, isIpAddress(initialTarget) ? 'PTR' : 'ALL', dnsServerRef.current);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

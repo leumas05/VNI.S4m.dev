@@ -1,8 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Download, Play, History as HistoryIcon, ArrowRightLeft, X, MapPin, Globe, Hash, Map, Building, Mail, AlignJustify, Briefcase, Radio } from 'lucide-react';
 import HopCard from './HopCard';
+import LiveRadarPanel from './LiveRadarPanel';
 
-export default function Sidebar({ startTrace, tracing, hops, selectedHop, setSelectedHop, setHoveredHop, history, loadHistoryTrace, compareMode, compareHops, myLocation, openPrivacy, onPing, onDig }) {
+export default function Sidebar({
+  startTrace,
+  tracing,
+  hops,
+  selectedHop,
+  setSelectedHop,
+  setHoveredHop,
+  history,
+  loadHistoryTrace,
+  compareMode,
+  compareHops,
+  myLocation,
+  openPrivacy,
+  onPing,
+  onDig,
+  activeMode = 'traceroute',
+  setActiveMode,
+  radarData,
+  radarLoading,
+  onRefreshRadar,
+  radarAutoRefresh,
+  setRadarAutoRefresh,
+  selectedRadarConn,
+  setSelectedRadarConn
+}) {
   const [input, setInput] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
@@ -121,85 +146,134 @@ export default function Sidebar({ startTrace, tracing, hops, selectedHop, setSel
           </div>
       )}
 
-      <form onSubmit={onSubmit} className="flex gap-2 mb-4">
-        <input 
-          type="text" 
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Domain or IP (e.g. s4m.dev)"
-          className="flex-1 bg-gray-800 border border-gray-700 rounded px-4 py-2 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
-          disabled={tracing}
-        />
-        <button 
-          type="submit" 
-          disabled={tracing || !input}
-          className={`px-4 py-2 rounded font-semibold flex items-center gap-2 transition-all ${tracing ? 'bg-gray-700 text-gray-500' : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.5)]'}`}
+      {/* Mode Switcher: Traceroute vs Live Radar */}
+      <div className="grid grid-cols-2 bg-gray-950 p-1 rounded-xl border border-gray-800 mb-4 text-xs font-semibold shrink-0">
+        <button
+          type="button"
+          onClick={() => setActiveMode && setActiveMode('traceroute')}
+          className={`py-1.5 rounded-lg flex items-center justify-center gap-2 transition cursor-pointer ${
+            activeMode === 'traceroute'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950 font-bold'
+              : 'text-gray-400 hover:text-gray-200'
+          }`}
         >
-          {tracing ? 'Tracing...' : <><Play size={16}/> Analyze</>}
+          <Activity size={14} />
+          <span>Traceroute</span>
         </button>
-      </form>
+        <button
+          type="button"
+          onClick={() => setActiveMode && setActiveMode('radar')}
+          className={`py-1.5 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer relative ${
+            activeMode === 'radar'
+              ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950 font-bold'
+              : 'text-gray-400 hover:text-emerald-400'
+          }`}
+        >
+          <Radio size={14} className={activeMode === 'radar' ? 'animate-pulse text-emerald-300' : ''} />
+          <span>Live Radar</span>
+          {radarData?.internetCount > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-emerald-950 border border-emerald-500/40 text-emerald-300">
+              {radarData.internetCount}
+            </span>
+          )}
+        </button>
+      </div>
 
-      {showHistory && history.length > 0 && (
-          <div className="mb-4 bg-gray-950 border border-gray-800 rounded p-3 text-sm max-h-40 overflow-y-auto custom-scrollbar">
-             <h3 className="text-gray-500 uppercase text-xs mb-2 font-semibold">Saved Traces</h3>
-             {history.map(h => (
-                 <div key={h.id} className="flex justify-between items-center py-2 border-b border-gray-800 last:border-0 hover:bg-gray-900 px-2 rounded cursor-pointer transition" onClick={() => loadHistoryTrace(h)}>
-                     <span className="font-mono text-emerald-400">{h.target}</span>
-                     <span className="text-gray-500 text-xs">{h.date} - {h.hops.length} hops</span>
-                 </div>
-             ))}
+      {activeMode === 'radar' ? (
+        <LiveRadarPanel
+          radarData={radarData}
+          loading={radarLoading}
+          onRefresh={onRefreshRadar}
+          autoRefresh={radarAutoRefresh}
+          setAutoRefresh={setRadarAutoRefresh}
+          selectedConn={selectedRadarConn}
+          onSelectConn={setSelectedRadarConn}
+          onPing={onPing}
+          onDig={onDig}
+        />
+      ) : (
+        <>
+          <form onSubmit={onSubmit} className="flex gap-2 mb-4">
+            <input 
+              type="text" 
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Domain or IP (e.g. s4m.dev)"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded px-4 py-2 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+              disabled={tracing}
+            />
+            <button 
+              type="submit" 
+              disabled={tracing || !input}
+              className={`px-4 py-2 rounded font-semibold flex items-center gap-2 transition-all ${tracing ? 'bg-gray-700 text-gray-500' : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.5)]'}`}
+            >
+              {tracing ? 'Tracing...' : <><Play size={16}/> Analyze</>}
+            </button>
+          </form>
+
+          {showHistory && history.length > 0 && (
+              <div className="mb-4 bg-gray-950 border border-gray-800 rounded p-3 text-sm max-h-40 overflow-y-auto custom-scrollbar">
+                 <h3 className="text-gray-500 uppercase text-xs mb-2 font-semibold">Saved Traces</h3>
+                 {history.map(h => (
+                     <div key={h.id} className="flex justify-between items-center py-2 border-b border-gray-800 last:border-0 hover:bg-gray-900 px-2 rounded cursor-pointer transition" onClick={() => loadHistoryTrace(h)}>
+                         <span className="font-mono text-emerald-400">{h.target}</span>
+                         <span className="text-gray-500 text-xs">{h.date} - {h.hops.length} hops</span>
+                     </div>
+                 ))}
+              </div>
+          )}
+
+          {compareMode && (
+             <div className="mb-4 bg-indigo-950/30 border border-indigo-900 text-indigo-300 px-3 py-2 rounded flex items-center gap-2 text-sm">
+                <ArrowRightLeft size={16} className="text-indigo-400" />
+                Comparing against previous trace of same target
+             </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3 mb-4">
+             <div className="bg-gray-800 p-2.5 rounded border border-gray-700">
+                <p className="text-[10px] text-gray-400 uppercase">Total Hops</p>
+                <p className="text-lg font-mono leading-none mt-1">{totalHops}</p>
+             </div>
+             <div className="bg-gray-800 p-2.5 rounded border border-gray-700">
+                <p className="text-[10px] text-gray-400 uppercase">Target Ping</p>
+                <p className="text-lg font-mono leading-none mt-1">{targetLatency} ms</p>
+             </div>
+             <div className="bg-gray-800 p-2.5 rounded border border-gray-700">
+                <p className="text-[10px] text-gray-400 uppercase">Packet Loss</p>
+                <p className={`text-lg font-mono leading-none mt-1 ${packetLoss > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{packetLoss}%</p>
+             </div>
+             <button 
+                 className={`w-full bg-gray-800 p-2.5 rounded border border-gray-700 flex items-center justify-center transition ${tracing || hops.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-gray-700'}`} 
+                 onClick={tracing || hops.length === 0 ? undefined : exportData}
+                 disabled={tracing || hops.length === 0}
+             >
+                <Download size={16} className={tracing || hops.length === 0 ? 'text-gray-500' : 'text-emerald-400'} />
+                <span className="ml-1.5 text-xs font-semibold text-gray-300">Export JSON</span>
+             </button>
           </div>
+
+          <div className="flex-none lg:flex-1 lg:overflow-y-auto pr-2 space-y-1.5 lg:custom-scrollbar">
+             {hops.map((hop, idx) => {
+                 const pastHop = compareHops.find(h => h.hop === hop.hop);
+                 return (
+                     <HopCard 
+                       key={idx} 
+                       hop={hop} 
+                       pastHop={pastHop}
+                       compareMode={compareMode}
+                       isSelected={selectedHop && selectedHop.hop === hop.hop}
+                       onClick={() => setSelectedHop(hop.hop === selectedHop?.hop ? null : hop)}
+                       onMouseEnter={() => setHoveredHop(hop)}
+                       onMouseLeave={() => setHoveredHop(null)}
+                       onPing={onPing}
+                       onDig={onDig}
+                     />
+                 )
+             })}
+          </div>
+        </>
       )}
-
-      {compareMode && (
-         <div className="mb-4 bg-indigo-950/30 border border-indigo-900 text-indigo-300 px-3 py-2 rounded flex items-center gap-2 text-sm">
-            <ArrowRightLeft size={16} className="text-indigo-400" />
-            Comparing against previous trace of same target
-         </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-3 mb-4">
-         <div className="bg-gray-800 p-2.5 rounded border border-gray-700">
-            <p className="text-[10px] text-gray-400 uppercase">Total Hops</p>
-            <p className="text-lg font-mono leading-none mt-1">{totalHops}</p>
-         </div>
-         <div className="bg-gray-800 p-2.5 rounded border border-gray-700">
-            <p className="text-[10px] text-gray-400 uppercase">Target Ping</p>
-            <p className="text-lg font-mono leading-none mt-1">{targetLatency} ms</p>
-         </div>
-         <div className="bg-gray-800 p-2.5 rounded border border-gray-700">
-            <p className="text-[10px] text-gray-400 uppercase">Packet Loss</p>
-            <p className={`text-lg font-mono leading-none mt-1 ${packetLoss > 0 ? 'text-red-400' : 'text-emerald-400'}`}>{packetLoss}%</p>
-         </div>
-         <button 
-             className={`w-full bg-gray-800 p-2.5 rounded border border-gray-700 flex items-center justify-center transition ${tracing || hops.length === 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-gray-700'}`} 
-             onClick={tracing || hops.length === 0 ? undefined : exportData}
-             disabled={tracing || hops.length === 0}
-         >
-            <Download size={16} className={tracing || hops.length === 0 ? 'text-gray-500' : 'text-emerald-400'} />
-            <span className="ml-1.5 text-xs font-semibold text-gray-300">Export JSON</span>
-         </button>
-      </div>
-
-      <div className="flex-none lg:flex-1 lg:overflow-y-auto pr-2 space-y-1.5 lg:custom-scrollbar">
-         {hops.map((hop, idx) => {
-             const pastHop = compareHops.find(h => h.hop === hop.hop);
-             return (
-                 <HopCard 
-                   key={idx} 
-                   hop={hop} 
-                   pastHop={pastHop}
-                   compareMode={compareMode}
-                   isSelected={selectedHop && selectedHop.hop === hop.hop}
-                   onClick={() => setSelectedHop(hop.hop === selectedHop?.hop ? null : hop)}
-                   onMouseEnter={() => setHoveredHop(hop)}
-                   onMouseLeave={() => setHoveredHop(null)}
-                   onPing={onPing}
-                   onDig={onDig}
-                 />
-             )
-         })}
-      </div>
 
       <div className="text-center text-[10px] text-gray-500 font-mono border-t border-gray-800 mt-3 pt-3 flex flex-col items-center gap-1 shrink-0">
          <span>
