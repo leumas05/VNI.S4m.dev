@@ -89,106 +89,96 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     });
   }, []);
 
-  // HTML Elements for Nodes: 100% visible, crisp, glowing circular pins (like 2D Leaflet!)
-  const htmlElementsData = useMemo(() => {
+  // 100% True 3D WebGL Node Markers: Firmly anchored to globe terrain (Zero Parallax Drift!)
+  const pointsData = useMemo(() => {
     const list = [];
-    
+
+    // Helper to generate sleek dark HUD tooltip HTML
+    const getTooltip = ({ title, subtitle, info, latency, color }) => `
+      <div style="background: rgba(10, 15, 29, 0.95); border: 1px solid ${color}; padding: 7px 11px; border-radius: 8px; color: #f8fafc; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; box-shadow: 0 10px 25px rgba(0,0,0,0.85); backdrop-filter: blur(6px); pointer-events: none;">
+        <div style="color: ${color}; font-weight: 700; margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
+          <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:${color}; box-shadow:0 0 8px ${color};"></span>
+          ${title}
+        </div>
+        <div style="font-weight: 500; color: #e2e8f0;">${subtitle}</div>
+        ${info ? `<div style="color: #94a3b8; font-size: 10px; margin-top: 2px;">${info}</div>` : ''}
+        ${latency ? `<div style="color: #34d399; font-weight: 600; font-size: 10px; margin-top: 2px;">Latency: ${latency} ms</div>` : ''}
+      </div>
+    `;
+
+    // User Location Node
     if (myLocation?.lat && myLocation?.lon) {
+      const tooltip = getTooltip({
+        title: 'My Location (Gateway)',
+        subtitle: `${myLocation.city || 'Local'}, ${myLocation.country || ''}`,
+        info: `IP: ${myLocation.query || 'Internal'}`,
+        color: '#38bdf8'
+      });
+
+      // Outer ambient glow halo disc
       list.push({
         lat: myLocation.lat,
         lng: myLocation.lon,
-        isMe: true,
-        hopNum: 0,
-        isSelected: false,
-        title: `My Location: ${myLocation.city || 'Local'}, ${myLocation.country || ''}`,
-        onSelect: null
+        color: 'rgba(56, 189, 248, 0.32)',
+        radius: 1.15,
+        altitude: 0.006,
+        label: tooltip,
+        hopData: null
+      });
+
+      // Solid crisp center cyan jewel
+      list.push({
+        lat: myLocation.lat,
+        lng: myLocation.lon,
+        color: '#38bdf8',
+        radius: 0.55,
+        altitude: 0.009,
+        label: tooltip,
+        hopData: null
       });
     }
 
-    processedHops.forEach(hop => {
+    // Trace Hops
+    processedHops.forEach((hop, idx) => {
       const isSelected = (selectedHop && selectedHop.hop === hop.hop) || (hoveredHop && hoveredHop.hop === hop.hop);
+      const isLast = idx === processedHops.length - 1;
+
+      const themeColor = isSelected ? '#fbbf24' : (isLast ? '#34d399' : '#10b981');
+      const haloColor = isSelected ? 'rgba(251, 191, 36, 0.42)' : (isLast ? 'rgba(52, 211, 153, 0.35)' : 'rgba(16, 185, 129, 0.28)');
+
+      const tooltip = getTooltip({
+        title: `Hop #${hop.hop}`,
+        subtitle: `${hop.geo.city || 'Unknown City'}, ${hop.geo.country || ''}`,
+        info: hop.geo.isp || 'Unknown ISP',
+        latency: hop.rtt,
+        color: themeColor
+      });
+
+      // Outer ambient glowing halo
       list.push({
         lat: hop.geo.lat,
         lng: hop.geo.lon,
-        isMe: false,
-        hopNum: hop.hop,
-        isSelected,
-        hopData: hop,
-        title: `Hop #${hop.hop}: ${hop.geo.city || 'Unknown'}, ${hop.geo.country || ''} (${hop.geo.isp || ''})${hop.rtt ? ` - ${hop.rtt}ms` : ''}`,
-        onSelect: () => setSelectedHop(hop)
+        color: haloColor,
+        radius: isSelected ? 1.5 : (isLast ? 1.25 : 1.05),
+        altitude: 0.006,
+        label: tooltip,
+        hopData: hop
+      });
+
+      // Solid crisp neon core jewel
+      list.push({
+        lat: hop.geo.lat,
+        lng: hop.geo.lon,
+        color: themeColor,
+        radius: isSelected ? 0.75 : (isLast ? 0.6 : 0.48),
+        altitude: 0.009,
+        label: tooltip,
+        hopData: hop
       });
     });
 
     return list;
-  }, [processedHops, selectedHop, hoveredHop, myLocation, setSelectedHop]);
-
-  // Node marker DOM renderer: Beautiful glowing circular pins with amber/emerald/blue themes
-  const createNodeMarker = useCallback((d) => {
-    const el = document.createElement('div');
-    el.className = 'globe-node-pin';
-    el.style.position = 'relative';
-    el.style.cursor = 'pointer';
-    el.style.pointerEvents = 'auto';
-    el.style.userSelect = 'none';
-
-    // Outer ambient glowing halo
-    const halo = document.createElement('div');
-    halo.style.position = 'absolute';
-    halo.style.top = '50%';
-    halo.style.left = '50%';
-    halo.style.transform = 'translate(-50%, -50%)';
-    halo.style.borderRadius = '50%';
-    halo.style.width = d.isSelected ? '28px' : (d.isMe ? '24px' : '20px');
-    halo.style.height = d.isSelected ? '28px' : (d.isMe ? '24px' : '20px');
-    halo.style.backgroundColor = d.isMe 
-      ? 'rgba(56, 189, 248, 0.28)' 
-      : (d.isSelected ? 'rgba(251, 191, 36, 0.35)' : 'rgba(16, 185, 129, 0.28)');
-    halo.style.boxShadow = d.isMe 
-      ? '0 0 14px #38bdf8' 
-      : (d.isSelected ? '0 0 16px #fbbf24' : '0 0 12px #10b981');
-    halo.style.transition = 'all 0.2s ease-out';
-
-    // Solid crisp center jewel dot
-    const dot = document.createElement('div');
-    dot.style.position = 'absolute';
-    dot.style.top = '50%';
-    dot.style.left = '50%';
-    dot.style.transform = 'translate(-50%, -50%)';
-    dot.style.borderRadius = '50%';
-    dot.style.width = d.isSelected ? '14px' : (d.isMe ? '12px' : '10px');
-    dot.style.height = d.isSelected ? '14px' : (d.isMe ? '12px' : '10px');
-    dot.style.backgroundColor = d.isMe ? '#38bdf8' : (d.isSelected ? '#fbbf24' : '#10b981');
-    dot.style.border = d.isMe 
-      ? '2px solid #0369a1' 
-      : (d.isSelected ? '2px solid #78350f' : '2px solid #064e3b');
-    dot.style.boxShadow = d.isMe 
-      ? '0 0 8px #38bdf8' 
-      : (d.isSelected ? '0 0 10px #fbbf24' : '0 0 6px #10b981');
-    dot.style.transition = 'all 0.2s ease-out';
-
-    el.appendChild(halo);
-    el.appendChild(dot);
-
-    // Native browser hover tooltip
-    el.title = d.title;
-
-    // Hover effect
-    el.onmouseenter = () => {
-      dot.style.transform = 'translate(-50%, -50%) scale(1.35)';
-      halo.style.transform = 'translate(-50%, -50%) scale(1.4)';
-    };
-    el.onmouseleave = () => {
-      dot.style.transform = 'translate(-50%, -50%) scale(1)';
-      halo.style.transform = 'translate(-50%, -50%) scale(1)';
-    };
-
-    el.onclick = (e) => {
-      e.stopPropagation();
-      if (d.onSelect) d.onSelect();
-    };
-
-    return el;
-  }, []);
+  }, [processedHops, selectedHop, hoveredHop, myLocation]);
 
   // Trace Arcs: Pure WebGL glowing laser lines (stroke=null uses THREE.Line!)
   const arcsData = useMemo(() => {
@@ -230,11 +220,11 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
       rings.push({
         lat: myLocation.lat,
         lng: myLocation.lon,
-        color: () => (t) => `rgba(56, 189, 248, ${Math.max(0, 0.7 * (1 - t))})`,
-        maxR: 2.2,
+        color: () => (t) => `rgba(56, 189, 248, ${Math.max(0, 0.75 * (1 - t))})`,
+        maxR: 2.6,
         propagationSpeed: 1.2,
         repeatPeriod: 2000,
-        altitude: 0.012
+        altitude: 0.007
       });
     }
 
@@ -247,23 +237,37 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         maxR: 3.2,
         propagationSpeed: 1.8,
         repeatPeriod: 1200,
-        altitude: 0.012
+        altitude: 0.007
       });
     } else if (processedHops.length > 0) {
       const last = processedHops[processedHops.length - 1];
       rings.push({
         lat: last.geo.lat,
         lng: last.geo.lon,
-        color: () => (t) => `rgba(16, 185, 129, ${Math.max(0, 0.8 * (1 - t))})`,
-        maxR: 3.2,
+        color: () => (t) => `rgba(52, 211, 153, ${Math.max(0, 0.8 * (1 - t))})`,
+        maxR: 3.0,
         propagationSpeed: 1.4,
         repeatPeriod: 1500,
-        altitude: 0.012
+        altitude: 0.007
       });
     }
 
     return rings;
   }, [processedHops, selectedHop, myLocation]);
+
+  // Explicitly sync layers on real-time streaming updates
+  useEffect(() => {
+    if (!globeRef.current) return;
+    if (typeof globeRef.current.pointsData === 'function') {
+      globeRef.current.pointsData(pointsData);
+    }
+    if (typeof globeRef.current.arcsData === 'function') {
+      globeRef.current.arcsData(arcsData);
+    }
+    if (typeof globeRef.current.ringsData === 'function') {
+      globeRef.current.ringsData(ringsData);
+    }
+  }, [pointsData, arcsData, ringsData]);
 
   // Setup globe controls and orientation
   useEffect(() => {
@@ -282,7 +286,11 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
   useEffect(() => {
     if (!globeRef.current) return;
     const count = processedHops.length;
-    if (count > 0 && count !== prevCountRef.current) {
+    if (count === 0) {
+      prevCountRef.current = 0;
+      return;
+    }
+    if (count !== prevCountRef.current) {
       prevCountRef.current = count;
       const latest = processedHops[count - 1];
       globeRef.current.pointOfView({
@@ -351,13 +359,21 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
           polygonLabel={getPolygonLabel}
           polygonsTransitionDuration={0}
 
-          /* 100% visible glowing HTML node markers */
-          htmlElementsData={htmlElementsData}
-          htmlLat="lat"
-          htmlLng="lng"
-          htmlAltitude={0.018}
-          htmlElement={createNodeMarker}
-          htmlTransitionDuration={0}
+          /* 100% True 3D WebGL Nodes (Anchored to surface, ZERO parallax shift!) */
+          pointsData={pointsData}
+          pointLat="lat"
+          pointLng="lng"
+          pointColor="color"
+          pointRadius="radius"
+          pointAltitude="altitude"
+          pointResolution={32}
+          pointLabel="label"
+          pointsTransitionDuration={0}
+          onPointClick={(point) => {
+            if (point && point.hopData) {
+              setSelectedHop(point.hopData);
+            }
+          }}
 
           /* Razor-thin glowing laser lines (THREE.Line) updating in real-time */
           arcsData={arcsData}
