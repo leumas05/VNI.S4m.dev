@@ -65,11 +65,11 @@ async function performDig({ target, type, server }) {
     let resolver;
     let serverDisplay = server ? server.trim() : 'Default (System)';
     if (server && isIpAddress(server.trim())) {
-        resolver = new Resolver();
+        resolver = new Resolver({ timeout: 2500, tries: 2 });
         resolver.setServers([server.trim()]);
         serverDisplay = `${server.trim()}#53`;
     } else {
-        resolver = dnsPromises;
+        resolver = new Resolver({ timeout: 2500, tries: 2 });
     }
 
     const answers = [];
@@ -88,7 +88,7 @@ async function performDig({ target, type, server }) {
                 // If local system resolver fails or times out, try 1.1.1.1 / 8.8.8.8 public resolver
                 if (!server) {
                     try {
-                        const fallbackRes = new Resolver();
+                        const fallbackRes = new Resolver({ timeout: 2500, tries: 1 });
                         fallbackRes.setServers(['1.1.1.1', '8.8.8.8']);
                         ptrResults = await fallbackRes.reverse(cleanTarget);
                         serverDisplay = '1.1.1.1 (Fallback)';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { X, Terminal, Copy, Check, RefreshCw, Server, Search, Globe, FileText, ArrowRight, CornerDownLeft, Layers, ExternalLink, ChevronDown, ChevronUp, Info } from 'lucide-react';
 
 const DNS_SERVERS = [
@@ -251,6 +251,15 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
   const [copiedField, setCopiedField] = useState(null);
   const [collapsedSoa, setCollapsedSoa] = useState({});
 
+  const targetRef = useRef(target);
+  const queryTypeRef = useRef(queryType);
+  const dnsServerRef = useRef(dnsServer);
+  const activeReqIdRef = useRef(0);
+
+  useEffect(() => { targetRef.current = target; }, [target]);
+  useEffect(() => { queryTypeRef.current = queryType; }, [queryType]);
+  useEffect(() => { dnsServerRef.current = dnsServer; }, [dnsServer]);
+
   // Generate quick target pills (IP, Hostname, Subdomains, Base Domain, Trace Destination)
   const quickTargets = useMemo(() => {
     const list = [];
@@ -330,19 +339,20 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
   }, [hop, traceTarget]);
 
   const executeDig = useCallback(async (targetToQuery, typeToQuery, serverToQuery) => {
-    const qTarget = (targetToQuery !== undefined ? targetToQuery : target).trim();
+    const qTarget = (targetToQuery !== undefined ? targetToQuery : targetRef.current).trim();
     if (!qTarget) return;
 
     const isTargetAnIp = isIpAddress(qTarget);
     // If target is an IP, query type must be PTR. If target is domain and type is PTR, switch to ALL.
-    let qType = typeToQuery || queryType;
+    let qType = typeToQuery !== undefined ? typeToQuery : queryTypeRef.current;
     if (isTargetAnIp) {
       qType = 'PTR';
     } else if (qType === 'PTR') {
       qType = 'ALL';
     }
 
-    const qServer = serverToQuery !== undefined ? serverToQuery : dnsServer;
+    const qServer = serverToQuery !== undefined ? serverToQuery : dnsServerRef.current;
+    const currentReqId = ++activeReqIdRef.current;
 
     setData(null);
     setLoading(true);
@@ -350,7 +360,7 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
 
     try {
       // 1. Try local VNI Engine API if available
-      let res;
+      let res = null;
       try {
         const queryParams = new URLSearchParams({
           target: qTarget,
@@ -358,7 +368,9 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
         });
         if (qServer) queryParams.append('server', qServer);
 
-        const response = await fetch(`${apiBase || ''}/api/dig?${queryParams.toString()}`);
+        const response = await fetch(`${apiBase || ''}/api/dig?${queryParams.toString()}`, {
+          cache: 'no-cache'
+        });
         if (response.ok) {
           res = await response.json();
         }
@@ -372,7 +384,8 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
         const dohUrl = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(nameToQuery)}&type=${qType === 'ALL' ? 'ANY' : qType}`;
 
         const dohRes = await fetch(dohUrl, {
-          headers: { Accept: 'application/dns-json' }
+          headers: { Accept: 'application/dns-json' },
+          cache: 'no-cache'
         });
         const dohData = await dohRes.json();
         const duration = Date.now() - startTime;
@@ -403,29 +416,37 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
         };
       }
 
-      setData(res);
+      // Only apply data if this request is still the most recent one
+      if (currentReqId === activeReqIdRef.current) {
+        setData(res);
+      }
     } catch (err) {
-      const duration = Date.now() - startTime;
-      setData({
-        status: 'ERROR',
-        statusCode: 2,
-        queryTime: duration,
-        server: dnsServer || 'Default',
-        target: qTarget,
-        type: qType,
-        answers: [],
-        errorMessage: err.message || 'Lookup failed',
-        rawOutput: `; <<>> DiG (VNI Engine) <<>> ${qType} ${qTarget}\n;; ERROR: ${err.message || 'Lookup failed'}\n;; Query time: ${duration} msec`
-      });
+      if (currentReqId === activeReqIdRef.current) {
+        const duration = Date.now() - startTime;
+        setData({
+          status: 'ERROR',
+          statusCode: 2,
+          queryTime: duration,
+          server: qServer || 'Default',
+          target: qTarget,
+          type: qType,
+          answers: [],
+          errorMessage: err.message || 'Lookup failed',
+          rawOutput: `; <<>> DiG (VNI Engine) <<>> ${qType} ${qTarget}\n;; ERROR: ${err.message || 'Lookup failed'}\n;; Query time: ${duration} msec`
+        });
+      }
     } finally {
-      setLoading(false);
+      if (currentReqId === activeReqIdRef.current) {
+        setLoading(false);
+      }
     }
-  }, [target, queryType, dnsServer, apiBase]);
+  }, [apiBase]);
 
-  // Initial lookup on open
+  // Initial lookup once on open
   useEffect(() => {
-    executeDig(initialTarget, isIpAddress(initialTarget) ? 'PTR' : 'ALL', '');
-  }, [executeDig, initialTarget]);
+    executeDig(initialTarget, isIpAddress(initialTarget) ? 'PTR' : 'ALL', dnsServerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Keyboard shortcut: Escape to close
   useEffect(() => {
@@ -451,22 +472,27 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
 
   // Immediate search on clicking any quick target pill
   const handleSelectQuickTarget = (item) => {
-    setTarget(item.value);
-    const chosenType = item.type || (isIpAddress(item.value) ? 'PTR' : 'ALL');
+    const val = item.value;
+    const chosenType = item.type || (isIpAddress(val) ? 'PTR' : 'ALL');
+    setTarget(val);
     setQueryType(chosenType);
-    executeDig(item.value, chosenType, dnsServer);
+    targetRef.current = val;
+    queryTypeRef.current = chosenType;
+    executeDig(val, chosenType, dnsServerRef.current);
   };
 
   // Immediate search on changing record type
   const handleTypeChange = (t) => {
     setQueryType(t);
-    executeDig(target, t, dnsServer);
+    queryTypeRef.current = t;
+    executeDig(targetRef.current, t, dnsServerRef.current);
   };
 
   // Immediate search on changing resolver
   const handleServerChange = (s) => {
     setDnsServer(s);
-    executeDig(target, queryType, s);
+    dnsServerRef.current = s;
+    executeDig(targetRef.current, queryTypeRef.current, s);
   };
 
   // Immediate search on form submit (Enter / Dig button)
@@ -477,7 +503,9 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
     const isIp = isIpAddress(cleanTarget);
     const chosenType = isIp ? 'PTR' : (queryType === 'PTR' ? 'ALL' : queryType);
     setQueryType(chosenType);
-    executeDig(cleanTarget, chosenType, dnsServer);
+    targetRef.current = cleanTarget;
+    queryTypeRef.current = chosenType;
+    executeDig(cleanTarget, chosenType, dnsServerRef.current);
   };
 
   return (
