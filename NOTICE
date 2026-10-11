@@ -31,24 +31,20 @@ third parties:
    - Website: https://leafletjs.com/
    - License: BSD 2-Clause License
 
-5. OpenStreetMap
-   - Map tiles and geographical data © OpenStreetMap contributors
-   - Website: https://www.openstreetmap.org/copyright
-   - License: Open Data Commons Open Database License (ODbL)
+5. Esri ArcGIS (World Dark Gray Base Map Tiles)
+   - Map tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ
+   - Website: https://www.esri.com/
+   - Used for the 2D Leaflet dark base map layer.
 
-6. CARTO (Dark Matter Map Tiles)
-   - Map tiles © CARTO (https://carto.com/attributions)
-   - License: Creative Commons Attribution (CC BY 4.0)
-
-7. IP Geolocation & ASN Enrichment
+6. IP Geolocation & ASN Enrichment
    - Geolocation and network enrichment powered in part by IP-API (https://ip-api.com/)
 
-8. Lucide Icons
+7. Lucide Icons
    - Copyright (c) 2022-2026 Lucide Contributors
    - Website: https://lucide.dev/
    - License: ISC License
 
-9. Electron
+8. Electron
    - Copyright (c) OpenJS Foundation and Electron contributors
    - Website: https://www.electronjs.org/
    - License: MIT License
