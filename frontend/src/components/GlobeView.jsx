@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import Globe from 'react-globe.gl';
 import * as THREE from 'three';
 import { RotateCw, Compass, ZoomIn, ZoomOut } from 'lucide-react';
@@ -299,7 +299,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         altitude: 2.0
       }, 700);
     }
-  }, [processedHops.length]);
+  }, [processedHops]);
 
   // Smooth camera movements when selecting a hop
   useEffect(() => {
@@ -313,7 +313,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
       }, 900);
       setAutoRotate(false);
     }
-  }, [selectedHop]);
+  }, [selectedHop, processedHops]);
 
   const handleResetCamera = () => {
     if (!globeRef.current) return;

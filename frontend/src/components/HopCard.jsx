@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Network, Server, Globe2, AlertCircle, ArrowRight, Copy, Check } from 'lucide-react';
+import { Network, AlertCircle, ArrowRight, Copy, Check } from 'lucide-react';
 
 const CopyableRow = ({ label, value, copyText, mono = false, className = '', title = "Click to copy" }) => {
     const [copied, setCopied] = useState(false);
@@ -273,7 +273,7 @@ export default function HopCard({ hop, isSelected, onClick, pastHop, compareMode
               </p>
               <ul className="list-disc list-outside ml-4 text-gray-400 text-xs space-y-1">
                   <li>The network admin configured the router to ignore ICMP tracking for security (Firewall).</li>
-                  <li>The router deprioritizes generating "Time Exceeded" messages to save CPU power.</li>
+                  <li>The router deprioritizes generating &quot;Time Exceeded&quot; messages to save CPU power.</li>
                   <li>An intermediate firewall blocked the returning ICMP response.</li>
               </ul>
               <p className="text-gray-500 text-xs italic mt-3">
