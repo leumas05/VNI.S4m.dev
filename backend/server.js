@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { spawn } = require('child_process');
 const { runTraceroute } = require('./traceroute');
+const { performDig } = require('./dns');
 
 const path = require('path');
 const readline = require('readline');
@@ -132,6 +133,22 @@ app.get('/api/ping-target', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(result);
     });
+});
+
+app.get('/api/dig', async (req, res) => {
+    const target = req.query.target;
+    if (!target || !/^[a-zA-Z0-9\.\:\-]+$/.test(target)) {
+        return res.status(400).json({ error: 'Valid target IP or domain name is required' });
+    }
+    const type = req.query.type;
+    const server = req.query.server;
+
+    try {
+        const result = await performDig({ target, type, server });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.get('/api/my-location', async (req, res) => {

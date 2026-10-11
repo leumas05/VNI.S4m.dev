@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Network, AlertCircle, ArrowRight, Copy, Check, Activity } from 'lucide-react';
+import { Network, AlertCircle, ArrowRight, Copy, Check, Activity, Terminal } from 'lucide-react';
 
 const CopyableRow = ({ label, value, copyText, mono = false, className = '', title = "Click to copy" }) => {
     const [copied, setCopied] = useState(false);
@@ -31,7 +31,7 @@ const CopyableRow = ({ label, value, copyText, mono = false, className = '', tit
     );
 };
 
-export default function HopCard({ hop, isSelected, onClick, pastHop, compareMode, onMouseEnter, onMouseLeave, onPing }) {
+export default function HopCard({ hop, isSelected, onClick, pastHop, compareMode, onMouseEnter, onMouseLeave, onPing, onDig }) {
   const isPrivate = hop.isPrivate;
   const isDropped = hop.dropped;
   
@@ -205,17 +205,30 @@ export default function HopCard({ hop, isSelected, onClick, pastHop, compareMode
              <span className="text-[10px] text-gray-500 truncate max-w-[170px]" title={hop.geo?.city ? `${hop.geo.city}, ${hop.geo.country || ''}` : ''}>
                {hop.geo?.city ? `${hop.geo.city}${hop.geo.countryCode ? `, ${hop.geo.countryCode}` : ''}` : (hop.isPrivate ? 'Internal Gateway' : 'Router')}
              </span>
-             <button
-               onClick={(e) => {
-                 e.stopPropagation();
-                 if (onPing) onPing(hop);
-               }}
-               className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-gray-950/80 hover:bg-emerald-950 text-gray-400 hover:text-emerald-400 border border-gray-700/80 hover:border-emerald-500/60 text-[11px] font-mono transition cursor-pointer shadow-sm group"
-               title={`Live continuous ping monitor for ${hop.ip}`}
-             >
-               <Activity size={12} className="text-emerald-500 group-hover:animate-pulse" />
-               <span>Ping</span>
-             </button>
+             <div className="flex items-center gap-1.5">
+               <button
+                 onClick={(e) => {
+                   e.stopPropagation();
+                   if (onDig) onDig(hop);
+                 }}
+                 className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-gray-950/80 hover:bg-sky-950 text-gray-400 hover:text-sky-400 border border-gray-700/80 hover:border-sky-500/60 text-[11px] font-mono transition cursor-pointer shadow-sm group"
+                 title={`DNS Dig inspection for ${hop.ip}${hop.hostname ? ` (${hop.hostname})` : ''}`}
+               >
+                 <Terminal size={12} className="text-sky-400 group-hover:text-sky-300" />
+                 <span>Dig</span>
+               </button>
+               <button
+                 onClick={(e) => {
+                   e.stopPropagation();
+                   if (onPing) onPing(hop);
+                 }}
+                 className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-gray-950/80 hover:bg-emerald-950 text-gray-400 hover:text-emerald-400 border border-gray-700/80 hover:border-emerald-500/60 text-[11px] font-mono transition cursor-pointer shadow-sm group"
+                 title={`Live continuous ping monitor for ${hop.ip}`}
+               >
+                 <Activity size={12} className="text-emerald-500 group-hover:animate-pulse" />
+                 <span>Ping</span>
+               </button>
+             </div>
            </div>
          )}
       </div>

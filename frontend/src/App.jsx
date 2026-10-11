@@ -3,6 +3,7 @@ import { Info, X, Activity, Globe, Map } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import MapView from './components/Map';
 import PingModal from './components/PingModal';
+import DigModal from './components/DigModal';
 const GlobeView = React.lazy(() => import('./components/GlobeView'));
 
 const getApiBaseUrl = () => {
@@ -67,6 +68,7 @@ function App() {
   const [backendStatus, setBackendStatus] = useState('checking');
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('vni_view_mode') || '2d');
   const [pingingHop, setPingingHop] = useState(null);
+  const [diggingHop, setDiggingHop] = useState(null);
   
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [privacyText, setPrivacyText] = useState('');
@@ -330,6 +332,7 @@ function App() {
                  myLocation={myLocation}
                  openPrivacy={openPrivacy}
                  onPing={setPingingHop}
+                 onDig={setDiggingHop}
               />
            </div>
            <div className="w-full lg:w-3/5 h-[45%] lg:h-full relative z-0 flex-1">
@@ -580,6 +583,14 @@ function App() {
           <PingModal 
               hop={pingingHop} 
               onClose={() => setPingingHop(null)} 
+              apiBase={API_BASE} 
+          />
+      )}
+
+      {diggingHop && (
+          <DigModal 
+              hop={diggingHop} 
+              onClose={() => setDiggingHop(null)} 
               apiBase={API_BASE} 
           />
       )}
