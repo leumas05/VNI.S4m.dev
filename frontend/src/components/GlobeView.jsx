@@ -34,6 +34,18 @@ const getPolygonLabel = ({ properties: d }) => `
   </div>
 `;
 
+// Helper to safely format hop latency from rtt array (e.g. ['1', '1', '1'] -> '1 ms')
+function formatHopRtt(rtt) {
+  if (!rtt) return null;
+  if (Array.isArray(rtt)) {
+    const valid = rtt.filter(x => x && x !== '*');
+    if (valid.length === 0) return null;
+    const sum = valid.reduce((acc, val) => acc + (String(val).includes('<') ? 0.5 : parseFloat(val) || 0), 0);
+    return `${Math.round(sum / valid.length)} ms`;
+  }
+  return `${rtt} ms`;
+}
+
 // Color palette matching 2D MapView for clustered/co-located hops
 const CLUSTER_PALETTE = [
   { bg: '#ef4444', border: '#7f1d1d', halo: 'rgba(239, 68, 68, 0.35)' }, // Red
@@ -157,7 +169,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         </div>
         <div style="font-weight: 500; color: #e2e8f0;">${subtitle}</div>
         ${info ? `<div style="color: #94a3b8; font-size: 10px; margin-top: 2px;">${info}</div>` : ''}
-        ${latency ? `<div style="color: #34d399; font-weight: 600; font-size: 10px; margin-top: 2px;">Latency: ${latency} ms</div>` : ''}
+        ${latency ? `<div style="color: #34d399; font-weight: 600; font-size: 10px; margin-top: 2px;">Latency: ${latency}</div>` : ''}
       </div>
     `;
 
@@ -203,7 +215,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         title: `Hop #${hop.hop}`,
         subtitle: `${hop.geo.city || 'Unknown City'}, ${hop.geo.country || ''}`,
         info: hop.geo.isp || 'Unknown ISP',
-        latency: hop.rtt,
+        latency: formatHopRtt(hop.rtt),
         color: theme.color
       });
 
@@ -561,7 +573,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
                 <span className="w-1.5 h-1.5 rounded-full animate-ping" style={{ backgroundColor: theme.color }}></span>
                 <span className="font-bold">Hop #{selectedHop.hop}:</span>
                 <span className="text-gray-200">{selectedHop.geo?.city || 'Unknown'}, {selectedHop.geo?.country || ''}</span>
-                {selectedHop.rtt && <span className="opacity-80 font-semibold">({selectedHop.rtt}ms)</span>}
+                {formatHopRtt(selectedHop.rtt) && <span className="opacity-80 font-semibold">({formatHopRtt(selectedHop.rtt)})</span>}
               </div>
             );
           })()}
