@@ -475,7 +475,7 @@ function App() {
                            </a>
                        </p>
                        <p className="text-xs text-gray-600">
-                           &copy; {new Date().getFullYear()} <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">S4M.dev</a>. All rights reserved.
+                           &copy; {new Date().getFullYear()} <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">S4m.dev</a>. All rights reserved.
                        </p>
                    </div>
                </div>
@@ -551,13 +551,9 @@ function App() {
                    <div className="w-full pt-6 border-t border-gray-800/50 flex flex-col items-center gap-2">
                        <p className="text-xs text-gray-500">
                            <button onClick={openPrivacy} className="text-emerald-500 hover:text-emerald-400 hover:underline transition cursor-pointer">Privacy Policy</button>
-                           <span className="mx-2 text-gray-700">•</span>
-                           <a href="https://github.com/leumas05/VNI.S4m.dev" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-emerald-400 transition-colors inline-flex items-center gap-1">
-                               <GithubIcon size={12} /> GitHub
-                           </a>
                        </p>
                        <p className="text-xs text-gray-600">
-                           &copy; {new Date().getFullYear()} <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">S4M.dev</a>. All rights reserved.
+                           &copy; {new Date().getFullYear()} <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">S4m.dev</a>. All rights reserved.
                        </p>
                    </div>
                </div>

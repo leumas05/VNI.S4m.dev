@@ -204,7 +204,7 @@ export default function Sidebar({ startTrace, tracing, hops, selectedHop, setSel
          <span>
              &copy; {new Date().getFullYear() === 2026 ? '2026' : `2026 - ${new Date().getFullYear()}`}{' '}
              <a href="https://vni.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">VNI.S4m.dev</a> &amp;{' '}
-             <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">S4M.dev</a>
+             <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-300 transition-colors">S4m.dev</a>
          </span>
           <div className="flex items-center gap-2">
               <a href="https://github.com/leumas05/VNI.S4m.dev" target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 text-gray-400 transition-colors inline-flex items-center gap-1">
