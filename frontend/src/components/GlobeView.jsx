@@ -4,16 +4,24 @@ import * as THREE from 'three';
 import { RotateCw, Compass, ZoomIn, ZoomOut } from 'lucide-react';
 import countries from '../assets/countries.json';
 
-// Helper to calculate great-circle distance between coordinates in km
-function getDistanceKm(lat1, lon1, lat2, lon2) {
-  const R = 6371;
+
+// Calculate optimal arc altitude so Three.js 3D Cubic Bezier curves never sag into/under the globe surface
+function getArcAltitude(lat1, lon1, lat2, lon2) {
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
             Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
             Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+  const theta = 2 * Math.atan2(Math.sqrt(Math.min(1, Math.max(0, a))), Math.sqrt(Math.min(1, Math.max(0, 1 - a))));
+
+  // Theoretical geometric clearance needed so 3D CubicBezier stays above the globe sphere (R=100)
+  // Even across transcontinental & antipodal hops (>10,000-18,000 km, ~120°-180°)
+  const baseClearance = Math.max(0, ((1.025 - 0.25 * Math.cos(theta / 2)) / (0.75 * Math.cos(theta / 4)) - 1) / 1.25);
+
+  // Elegant aesthetic arch that scales gracefully with angular distance
+  const aestheticArch = Math.sin(theta / 2) * 0.22;
+
+  return Math.max(0.015, baseClearance + aestheticArch);
 }
 
 // Static accessors outside component to prevent three-globe from re-digesting 177 polygons on every render
@@ -117,8 +125,9 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         const spreadRadius = 0.20 + (total > 4 ? 0.05 : 0);
         // Correct for latitude distortion so circles don't turn into squashed ovals
         const cosLat = Math.max(0.25, Math.cos(copy.geo.lat * Math.PI / 180));
-        copy.geo.lat += Math.sin(angle) * spreadRadius;
-        copy.geo.lon += (Math.cos(angle) * spreadRadius) / cosLat;
+        copy.geo.lat = Math.max(-89.9, Math.min(89.9, copy.geo.lat + Math.sin(angle) * spreadRadius));
+        const rawLon = copy.geo.lon + (Math.cos(angle) * spreadRadius) / cosLat;
+        copy.geo.lon = ((rawLon + 180) % 360 + 360) % 360 - 180;
         copy.isClustered = true;
       }
       return copy;
@@ -240,9 +249,8 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
       const currentPoint = { lat: hop.geo.lat, lng: hop.geo.lon, color: theme.color, hop };
 
       if (prevPoint) {
-        const distKm = getDistanceKm(prevPoint.lat, prevPoint.lng, currentPoint.lat, currentPoint.lng);
-        // Dynamic arc height: smooth power curve so local hops don't shoot into orbit, but long hops arch gracefully
-        const arcAlt = Math.max(0.012, Math.min(0.28, Math.pow(distKm / 10000, 0.55) * 0.24));
+        // Dynamic arc height that prevents 3D Bezier chord sag even across half the world
+        const arcAlt = getArcAltitude(prevPoint.lat, prevPoint.lng, currentPoint.lat, currentPoint.lng);
 
         const isCurrentSelected = isSelected;
         const isPrevSelected = prevPoint.hop && ((selectedHop && selectedHop.hop === prevPoint.hop.hop) || (hoveredHop && hoveredHop.hop === prevPoint.hop.hop));
@@ -503,6 +511,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
           arcAltitude="altitude"
           arcColor="color"
           arcStroke="stroke"
+          arcCurveResolution={64}
           arcDashLength={0.35}
           arcDashGap={0.2}
           arcDashInitialGap={0}
