@@ -13,6 +13,21 @@ const getApiBaseUrl = () => {
 };
 const API_BASE = getApiBaseUrl();
 
+function GithubIcon({ size = 18, className = "" }) {
+  return (
+    <svg 
+      width={size} 
+      height={size} 
+      viewBox="0 0 24 24" 
+      fill="currentColor" 
+      className={className}
+      aria-hidden="true"
+    >
+      <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+    </svg>
+  );
+}
+
 
 function App() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -343,47 +358,59 @@ function App() {
             />
           )}
 
-          {/* 2D / 3D Mode Toggle Switch */}
-          <div className="absolute top-6 right-20 z-50 flex items-center bg-gray-900/80 border border-gray-700/80 rounded-full p-1 backdrop-blur-sm shadow-lg">
-            <button
-              onClick={() => {
-                setViewMode('2d');
-                localStorage.setItem('vni_view_mode', '2d');
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                viewMode === '2d'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950'
-                  : 'text-gray-400 hover:text-gray-200'
-              }`}
-              title="2D Map View"
+          {/* Top-Right Floating Controls (2D/3D Toggle, GitHub, Info) */}
+          <div className="absolute top-6 right-6 z-50 flex items-center gap-2.5">
+            <div className="flex items-center bg-gray-900/80 border border-gray-700/80 rounded-full p-1 backdrop-blur-sm shadow-lg">
+              <button
+                onClick={() => {
+                  setViewMode('2d');
+                  localStorage.setItem('vni_view_mode', '2d');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  viewMode === '2d'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950'
+                    : 'text-gray-400 hover:text-gray-200'
+                }`}
+                title="2D Map View"
+              >
+                <Map size={14} />
+                <span>2D Map</span>
+              </button>
+              <button
+                onClick={() => {
+                  setViewMode('3d');
+                  localStorage.setItem('vni_view_mode', '3d');
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  viewMode === '3d'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950'
+                    : 'text-gray-400 hover:text-gray-200'
+                }`}
+                title="3D Globe View"
+              >
+                <Globe size={14} />
+                <span>3D Globe</span>
+              </button>
+            </div>
+
+            <a
+              href="https://github.com/leumas05/VNI.S4m.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-gray-900/80 hover:bg-gray-800 text-gray-400 hover:text-white p-2.5 rounded-full border border-gray-700 backdrop-blur-sm transition-all shadow-lg flex items-center justify-center cursor-pointer hover:border-gray-600"
+              title="GitHub - leumas05/VNI.S4m.dev"
             >
-              <Map size={14} />
-              <span>2D Map</span>
-            </button>
-            <button
-              onClick={() => {
-                setViewMode('3d');
-                localStorage.setItem('vni_view_mode', '3d');
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                viewMode === '3d'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-950'
-                  : 'text-gray-400 hover:text-gray-200'
-              }`}
-              title="3D Globe View"
+              <GithubIcon size={18} />
+            </a>
+
+            <button 
+              onClick={() => setShowInfo(true)}
+              className="bg-gray-900/80 hover:bg-gray-800 text-gray-400 hover:text-emerald-400 p-2.5 rounded-full border border-gray-700 backdrop-blur-sm transition-all shadow-lg flex items-center justify-center cursor-pointer"
+              title="About VNI.S4m.dev"
             >
-              <Globe size={14} />
-              <span>3D Globe</span>
+              <Info size={18} />
             </button>
           </div>
-          
-          <button 
-             onClick={() => setShowInfo(true)}
-             className="absolute top-6 right-6 z-50 bg-gray-900/80 hover:bg-gray-800 text-gray-400 hover:text-emerald-400 p-2.5 rounded-full border border-gray-700 backdrop-blur-sm transition-all shadow-lg"
-             title="About VNI.S4m.dev"
-          >
-             <Info size={24} />
-          </button>
 
           {showInfo && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -409,9 +436,17 @@ function App() {
                               <li>Historical route comparison (detect changes)</li>
                               <li>Smart identification of local & internal gateways</li>
                           </ul>
-                          <p className="text-xs text-gray-500 pt-4 mt-4 border-t border-gray-800">
-                              Built for network diagnostics and learning.
-                          </p>
+                          <div className="text-xs text-gray-500 pt-4 mt-4 border-t border-gray-800 flex items-center justify-between">
+                              <span>Built for network diagnostics and learning.</span>
+                              <a 
+                                  href="https://github.com/leumas05/VNI.S4m.dev"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-emerald-400 hover:underline flex items-center gap-1 font-mono"
+                              >
+                                  <GithubIcon size={12} /> GitHub
+                              </a>
+                          </div>
                       </div>
                   </div>
               </div>
@@ -434,6 +469,10 @@ function App() {
                    <div className="w-full pt-6 border-t border-gray-800/50 flex flex-col items-center gap-2">
                        <p className="text-xs text-gray-500">
                            <button onClick={openPrivacy} className="text-emerald-500 hover:text-emerald-400 hover:underline transition cursor-pointer">Privacy Policy</button>
+                           <span className="mx-2 text-gray-700">•</span>
+                           <a href="https://github.com/leumas05/VNI.S4m.dev" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-emerald-400 transition-colors inline-flex items-center gap-1">
+                               <GithubIcon size={12} /> GitHub
+                           </a>
                        </p>
                        <p className="text-xs text-gray-600">
                            &copy; {new Date().getFullYear()} <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">S4M.dev</a>. All rights reserved.
@@ -496,9 +535,26 @@ function App() {
                        Waiting for connection on <strong>localhost:3001</strong>...
                    </p>
 
+                    <div className="mb-4">
+                        <a 
+                            href="https://github.com/leumas05/VNI.S4m.dev"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-800/90 hover:bg-gray-750 text-gray-300 hover:text-white text-xs font-mono border border-gray-700 hover:border-emerald-500/50 transition-all shadow-md group cursor-pointer"
+                            title="Open project on GitHub"
+                        >
+                            <GithubIcon size={16} className="text-gray-400 group-hover:text-emerald-400 transition-colors" />
+                            <span>GitHub: leumas05/VNI.S4m.dev</span>
+                        </a>
+                    </div>
+
                    <div className="w-full pt-6 border-t border-gray-800/50 flex flex-col items-center gap-2">
                        <p className="text-xs text-gray-500">
                            <button onClick={openPrivacy} className="text-emerald-500 hover:text-emerald-400 hover:underline transition cursor-pointer">Privacy Policy</button>
+                           <span className="mx-2 text-gray-700">•</span>
+                           <a href="https://github.com/leumas05/VNI.S4m.dev" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-emerald-400 transition-colors inline-flex items-center gap-1">
+                               <GithubIcon size={12} /> GitHub
+                           </a>
                        </p>
                        <p className="text-xs text-gray-600">
                            &copy; {new Date().getFullYear()} <a href="https://www.s4m.dev/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400 transition-colors">S4M.dev</a>. All rights reserved.
