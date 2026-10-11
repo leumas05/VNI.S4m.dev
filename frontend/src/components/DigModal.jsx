@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { X, Terminal, Copy, Check, RefreshCw, Server, Search, Globe, FileText, ArrowRight, CornerDownLeft } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { X, Terminal, Copy, Check, RefreshCw, Server, Search, Globe, FileText, ArrowRight, CornerDownLeft, Layers, ExternalLink } from 'lucide-react';
 
 const DNS_SERVERS = [
   { label: 'System Default', value: '' },
@@ -25,7 +25,22 @@ function toArpa(ip) {
   return ip;
 }
 
-export default function DigModal({ hop, onClose, apiBase }) {
+// Extract domain hierarchy: e.g. "gw40-no2330.tbcn.telia.com" -> ["tbcn.telia.com", "telia.com"]
+function extractDomainLevels(hostname) {
+  if (!hostname || isIpAddress(hostname)) return [];
+  const clean = hostname.trim().toLowerCase().replace(/\.$/, '');
+  const parts = clean.split('.').filter(Boolean);
+  if (parts.length <= 1) return [];
+
+  const levels = [];
+  // For standard domain hierarchies, get intermediate subdomains and apex domain
+  for (let i = 1; i < parts.length - 1; i++) {
+    levels.push(parts.slice(i).join('.'));
+  }
+  return Array.from(new Set(levels));
+}
+
+export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
   const initialTarget = hop?.hostname && hop.hostname !== hop?.ip ? hop.hostname : (hop?.ip || '');
   const [target, setTarget] = useState(initialTarget);
   const [queryType, setQueryType] = useState(() => (isIpAddress(initialTarget) ? 'PTR' : 'ALL'));
@@ -36,13 +51,100 @@ export default function DigModal({ hop, onClose, apiBase }) {
   const [copiedRaw, setCopiedRaw] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
 
+  // Generate quick target pills (IP, Hostname, Subdomains, Base Domain, Trace Destination)
+  const quickTargets = useMemo(() => {
+    const list = [];
+    const seen = new Set();
+
+    // 1. Hop IP
+    if (hop?.ip) {
+      list.push({
+        id: 'ip',
+        label: `IP: ${hop.ip}`,
+        value: hop.ip,
+        badge: 'PTR',
+        type: 'PTR'
+      });
+      seen.add(hop.ip.toLowerCase());
+    }
+
+    // 2. Full Hop Hostname
+    if (hop?.hostname && !seen.has(hop.hostname.toLowerCase())) {
+      list.push({
+        id: 'host',
+        label: `Host: ${hop.hostname}`,
+        value: hop.hostname,
+        badge: 'HOST',
+        type: 'ALL'
+      });
+      seen.add(hop.hostname.toLowerCase());
+
+      // 3. Subdomain and Domain hierarchy levels
+      const levels = extractDomainLevels(hop.hostname);
+      levels.forEach((lvl, idx) => {
+        if (!seen.has(lvl)) {
+          const isBase = idx === levels.length - 1;
+          list.push({
+            id: `lvl-${lvl}`,
+            label: isBase ? `Domain: ${lvl}` : `Subdomain: ${lvl}`,
+            value: lvl,
+            badge: isBase ? 'DOMAIN' : 'SUB',
+            type: 'ALL'
+          });
+          seen.add(lvl);
+        }
+      });
+    }
+
+    // 4. Trace Destination (what user initially traced)
+    if (traceTarget && !seen.has(traceTarget.toLowerCase())) {
+      const isDestIp = isIpAddress(traceTarget);
+      list.push({
+        id: 'dest',
+        label: `Destination: ${traceTarget}`,
+        value: traceTarget,
+        badge: 'DEST',
+        type: isDestIp ? 'PTR' : 'ALL'
+      });
+      seen.add(traceTarget.toLowerCase());
+
+      if (!isDestIp) {
+        const destLevels = extractDomainLevels(traceTarget);
+        destLevels.forEach((lvl, idx) => {
+          if (!seen.has(lvl)) {
+            const isBase = idx === destLevels.length - 1;
+            list.push({
+              id: `dest-lvl-${lvl}`,
+              label: isBase ? `Domain: ${lvl}` : `Subdomain: ${lvl}`,
+              value: lvl,
+              badge: isBase ? 'DOMAIN' : 'SUB',
+              type: 'ALL'
+            });
+            seen.add(lvl);
+          }
+        });
+      }
+    }
+
+    return list;
+  }, [hop, traceTarget]);
+
   const executeDig = useCallback(async (targetToQuery, typeToQuery, serverToQuery) => {
-    const qTarget = (targetToQuery || target).trim();
+    const qTarget = (targetToQuery !== undefined ? targetToQuery : target).trim();
     if (!qTarget) return;
 
-    const qType = typeToQuery || queryType;
+    const isTargetAnIp = isIpAddress(qTarget);
+    // If target is an IP, query type must be PTR. If target is domain and type is PTR, switch to ALL.
+    let qType = typeToQuery || queryType;
+    if (isTargetAnIp) {
+      qType = 'PTR';
+    } else if (qType === 'PTR') {
+      qType = 'ALL';
+    }
+
     const qServer = serverToQuery !== undefined ? serverToQuery : dnsServer;
 
+    setData(null);
     setLoading(true);
     const startTime = Date.now();
 
@@ -61,14 +163,12 @@ export default function DigModal({ hop, onClose, apiBase }) {
           res = await response.json();
         }
       } catch (engineErr) {
-        // Fallback to client-side DoH if backend unreachable
         console.warn('Backend /api/dig unavailable, falling back to DoH:', engineErr);
       }
 
       // 2. Client-side Cloudflare / Google DoH fallback
       if (!res) {
-        const isIp = isIpAddress(qTarget);
-        const nameToQuery = (qType === 'PTR' || isIp) ? toArpa(qTarget) : qTarget;
+        const nameToQuery = isTargetAnIp ? toArpa(qTarget) : qTarget;
         const dohUrl = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(nameToQuery)}&type=${qType === 'ALL' ? 'ANY' : qType}`;
 
         const dohRes = await fetch(dohUrl, {
@@ -94,7 +194,7 @@ export default function DigModal({ hop, onClose, apiBase }) {
           status: statusName,
           statusCode: dohData.Status,
           queryTime: duration,
-          server: '1.1.1.1#53 (Cloudflare DoH Fallback)',
+          server: '1.1.1.1#53 (Cloudflare DoH)',
           target: qTarget,
           type: qType,
           answers,
@@ -149,24 +249,36 @@ export default function DigModal({ hop, onClose, apiBase }) {
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  const handleSwitchTarget = (newTarget) => {
-    setTarget(newTarget);
-    const newType = isIpAddress(newTarget) ? 'PTR' : 'ALL';
-    setQueryType(newType);
-    executeDig(newTarget, newType, dnsServer);
+  // Immediate search on clicking any quick target pill
+  const handleSelectQuickTarget = (item) => {
+    setTarget(item.value);
+    const chosenType = item.type || (isIpAddress(item.value) ? 'PTR' : 'ALL');
+    setQueryType(chosenType);
+    executeDig(item.value, chosenType, dnsServer);
   };
 
+  // Immediate search on changing record type
   const handleTypeChange = (t) => {
     setQueryType(t);
     executeDig(target, t, dnsServer);
   };
 
+  // Immediate search on changing resolver
   const handleServerChange = (s) => {
     setDnsServer(s);
     executeDig(target, queryType, s);
   };
 
-  const hasHostnameOption = hop?.hostname && hop.hostname !== hop?.ip;
+  // Immediate search on form submit (Enter / Dig button)
+  const handleSearchSubmit = (e) => {
+    if (e) e.preventDefault();
+    const cleanTarget = target.trim();
+    if (!cleanTarget) return;
+    const isIp = isIpAddress(cleanTarget);
+    const chosenType = isIp ? 'PTR' : (queryType === 'PTR' ? 'ALL' : queryType);
+    setQueryType(chosenType);
+    executeDig(cleanTarget, chosenType, dnsServer);
+  };
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in duration-200">
@@ -200,7 +312,7 @@ export default function DigModal({ hop, onClose, apiBase }) {
               </div>
               <div className="flex items-center gap-2 text-xs font-mono text-gray-400 mt-0.5">
                 <span className="text-gray-200 font-semibold">{hop?.ip}</span>
-                {hasHostnameOption && <span className="text-gray-500">({hop.hostname})</span>}
+                {hop?.hostname && hop.hostname !== hop?.ip && <span className="text-gray-500">({hop.hostname})</span>}
                 {hop?.geo?.city && (
                   <>
                     <span className="text-gray-600">•</span>
@@ -232,55 +344,63 @@ export default function DigModal({ hop, onClose, apiBase }) {
 
         {/* Query Controls */}
         <div className="p-4 bg-gray-900/30 border-b border-gray-800/80 flex flex-col gap-3 shrink-0">
-          {/* Target Input and Search button */}
-          <div className="flex items-center gap-2">
+          {/* Target Input and Dig button */}
+          <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
             <div className="relative flex-1">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
               <input
                 type="text"
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && executeDig(target, queryType, dnsServer)}
-                placeholder="Domain or IP address (e.g. s4m.dev or 1.1.1.1)"
-                className="w-full bg-gray-950 border border-gray-700/80 focus:border-sky-500/80 rounded-lg pl-9 pr-3 py-1.5 text-sm text-gray-200 font-mono focus:outline-none transition"
+                placeholder="Domain or IP address (e.g. telia.com, s4m.dev or 1.1.1.1)"
+                className="w-full bg-gray-950 border border-gray-700/80 focus:border-sky-500/80 rounded-lg pl-9 pr-8 py-1.5 text-sm text-gray-200 font-mono focus:outline-none transition"
               />
+              {target && (
+                <button
+                  type="button"
+                  onClick={() => setTarget('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 cursor-pointer"
+                  title="Clear input"
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
             
             <button
-              onClick={() => executeDig(target, queryType, dnsServer)}
-              disabled={loading}
+              type="submit"
+              disabled={loading || !target.trim()}
               className="px-4 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium text-sm flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm shadow-sky-950"
             >
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               <span>Dig</span>
             </button>
-          </div>
+          </form>
 
-          {/* Quick Target Switchers if hop has both IP and hostname */}
-          {hasHostnameOption && (
-            <div className="flex items-center gap-2 text-xs font-mono">
-              <span className="text-gray-500">Quick target:</span>
-              <button
-                onClick={() => handleSwitchTarget(hop.ip)}
-                className={`px-2 py-0.5 rounded border transition cursor-pointer ${
-                  target === hop.ip
-                    ? 'bg-sky-950/80 border-sky-500/60 text-sky-300 font-bold'
-                    : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'
-                }`}
-              >
-                IP: {hop.ip} (PTR)
-              </button>
-              <button
-                onClick={() => handleSwitchTarget(hop.hostname)}
-                className={`px-2 py-0.5 rounded border transition cursor-pointer truncate max-w-[260px] ${
-                  target === hop.hostname
-                    ? 'bg-sky-950/80 border-sky-500/60 text-sky-300 font-bold'
-                    : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white'
-                }`}
-                title={hop.hostname}
-              >
-                Host: {hop.hostname}
-              </button>
+          {/* Quick Target Hierarchy Pills */}
+          {quickTargets.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 text-xs font-mono">
+              <span className="text-[11px] text-gray-500 flex items-center gap-1 mr-1">
+                <Layers size={12} className="text-sky-400" /> Quick targets:
+              </span>
+              {quickTargets.map((item) => {
+                const isActive = target.trim().toLowerCase() === item.value.toLowerCase();
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectQuickTarget(item)}
+                    className={`px-2 py-0.5 rounded border transition cursor-pointer flex items-center gap-1 text-[11px] ${
+                      isActive
+                        ? 'bg-sky-950 border-sky-500 text-sky-300 font-bold shadow-sm shadow-sky-950'
+                        : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-white hover:border-gray-700'
+                    }`}
+                    title={`Instantly query ${item.value}`}
+                  >
+                    <span className="truncate max-w-[200px]">{item.label}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
 
@@ -292,6 +412,7 @@ export default function DigModal({ hop, onClose, apiBase }) {
               {RECORD_TYPES.map((t) => (
                 <button
                   key={t}
+                  type="button"
                   onClick={() => handleTypeChange(t)}
                   className={`px-2 py-0.5 rounded text-xs font-mono font-medium transition cursor-pointer border ${
                     queryType === t
@@ -326,11 +447,11 @@ export default function DigModal({ hop, onClose, apiBase }) {
         <div className="px-6 py-2.5 bg-gray-900/50 border-b border-gray-800 flex items-center justify-between text-xs font-mono text-gray-400 shrink-0">
           <div className="flex items-center gap-3">
             <span>
-              Query time: <strong className="text-gray-200">{data ? `${data.queryTime} ms` : '--'}</strong>
+              Query time: <strong className="text-gray-200">{data ? `${data.queryTime} ms` : (loading ? '...' : '--')}</strong>
             </span>
             <span className="text-gray-700">•</span>
             <span className="truncate max-w-[200px]" title={data?.server}>
-              Server: <strong className="text-gray-200">{data?.server || '--'}</strong>
+              Server: <strong className="text-gray-200">{data?.server || (dnsServer || 'Default')}</strong>
             </span>
             <span className="text-gray-700">•</span>
             <span>
@@ -340,6 +461,7 @@ export default function DigModal({ hop, onClose, apiBase }) {
 
           <div className="flex items-center gap-1 bg-gray-950 p-0.5 rounded-lg border border-gray-800">
             <button
+              type="button"
               onClick={() => setViewMode('visual')}
               className={`px-2.5 py-1 rounded text-[11px] font-medium transition cursor-pointer ${
                 viewMode === 'visual'
@@ -350,6 +472,7 @@ export default function DigModal({ hop, onClose, apiBase }) {
               Visual
             </button>
             <button
+              type="button"
               onClick={() => setViewMode('raw')}
               className={`px-2.5 py-1 rounded text-[11px] font-medium transition cursor-pointer flex items-center gap-1 ${
                 viewMode === 'raw'
@@ -368,7 +491,7 @@ export default function DigModal({ hop, onClose, apiBase }) {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500 gap-3">
               <RefreshCw size={28} className="animate-spin text-sky-400" />
-              <p className="text-sm">Querying DNS records for {target}...</p>
+              <p className="text-sm">Querying DNS records for <span className="text-gray-200">{target}</span> ({queryType})...</p>
             </div>
           ) : viewMode === 'raw' ? (
             /* Raw Terminal View */
@@ -428,6 +551,7 @@ export default function DigModal({ hop, onClose, apiBase }) {
                               {rec.data}
                             </span>
                             <button
+                              type="button"
                               onClick={() => handleCopyField(rec.data, rowId)}
                               className="text-gray-500 hover:text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded shrink-0 cursor-pointer"
                               title="Copy record value"
@@ -450,12 +574,13 @@ export default function DigModal({ hop, onClose, apiBase }) {
                   </h3>
                   <p className="text-xs text-gray-500 max-w-md mb-4">
                     {data?.status === 'NXDOMAIN' 
-                      ? `The queried domain/address does not exist in DNS or has no reverse PTR record configured.`
+                      ? `The queried name or IP address has no configured ${queryType} DNS records.`
                       : data?.errorMessage || `No ${queryType} records found for "${target}". Try querying a different record type or switching resolver.`}
                   </p>
                   <div className="flex items-center gap-2">
-                    {queryType !== 'ALL' && (
+                    {queryType !== 'ALL' && !isIpAddress(target) && (
                       <button
+                        type="button"
                         onClick={() => handleTypeChange('ALL')}
                         className="px-3 py-1.5 rounded-lg bg-sky-950 border border-sky-500/40 text-sky-400 hover:bg-sky-900 text-xs transition cursor-pointer"
                       >
@@ -464,10 +589,20 @@ export default function DigModal({ hop, onClose, apiBase }) {
                     )}
                     {queryType !== 'A' && !isIpAddress(target) && (
                       <button
+                        type="button"
                         onClick={() => handleTypeChange('A')}
                         className="px-3 py-1.5 rounded-lg bg-gray-900 border border-gray-800 text-gray-300 hover:text-white text-xs transition cursor-pointer"
                       >
                         Query A Record
+                      </button>
+                    )}
+                    {isIpAddress(target) && (
+                      <button
+                        type="button"
+                        onClick={() => handleTypeChange('PTR')}
+                        className="px-3 py-1.5 rounded-lg bg-sky-950 border border-sky-500/40 text-sky-400 hover:bg-sky-900 text-xs transition cursor-pointer"
+                      >
+                        Retry PTR Lookup
                       </button>
                     )}
                   </div>

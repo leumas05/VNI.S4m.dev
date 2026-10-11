@@ -590,6 +590,7 @@ function App() {
       {diggingHop && (
           <DigModal 
               hop={diggingHop} 
+              traceTarget={target}
               onClose={() => setDiggingHop(null)} 
               apiBase={API_BASE} 
           />

@@ -78,27 +78,42 @@ async function performDig({ target, type, server }) {
     let errorMessage = null;
 
     try {
-        if (queryType === 'PTR' || (isTargetIp && (queryType === 'ALL' || queryType === 'ANY'))) {
+        if (isTargetIp) {
+            // For an IP address, only Reverse DNS (PTR) query is valid
             questions.push({ name: toArpa(cleanTarget), type: 'PTR' });
+            let ptrResults = [];
             try {
-                const ptrResults = await resolver.reverse(cleanTarget);
-                ptrResults.forEach(host => {
-                    answers.push({
-                        name: toArpa(cleanTarget),
-                        type: 'PTR',
-                        ttl: 300,
-                        data: host
-                    });
-                });
+                ptrResults = await resolver.reverse(cleanTarget);
             } catch (err) {
-                if (queryType === 'PTR') throw err;
+                // If local system resolver fails or times out, try 1.1.1.1 / 8.8.8.8 public resolver
+                if (!server) {
+                    try {
+                        const fallbackRes = new Resolver();
+                        fallbackRes.setServers(['1.1.1.1', '8.8.8.8']);
+                        ptrResults = await fallbackRes.reverse(cleanTarget);
+                        serverDisplay = '1.1.1.1 (Fallback)';
+                    } catch (fbErr) {
+                        throw err;
+                    }
+                } else {
+                    throw err;
+                }
             }
-        }
 
-        if (!isTargetIp || (queryType !== 'PTR')) {
-            const typesToQuery = (queryType === 'ALL' || queryType === 'ANY')
+            ptrResults.forEach(host => {
+                answers.push({
+                    name: toArpa(cleanTarget),
+                    type: 'PTR',
+                    ttl: 300,
+                    data: host
+                });
+            });
+        } else {
+            // For hostnames/domains, query requested type(s)
+            const effectiveType = queryType === 'PTR' ? 'ALL' : queryType;
+            const typesToQuery = (effectiveType === 'ALL' || effectiveType === 'ANY')
                 ? ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SOA']
-                : [queryType];
+                : [effectiveType];
 
             for (const t of typesToQuery) {
                 questions.push({ name: cleanTarget, type: t });
