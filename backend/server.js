@@ -79,6 +79,11 @@ app.get('/api/ping-stream', (req, res) => {
         return res.status(400).json({ error: 'Valid target IP or hostname is required' });
     }
 
+    const intervalParam = parseInt(req.query.interval, 10);
+    const intervalMs = (!isNaN(intervalParam) && intervalParam >= 150 && intervalParam <= 15000)
+        ? intervalParam
+        : 1000;
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -102,7 +107,7 @@ app.get('/api/ping-stream', (req, res) => {
             }
 
             if (!isClosed) {
-                timer = setTimeout(pingNext, 850);
+                timer = setTimeout(pingNext, intervalMs);
             }
         });
     };

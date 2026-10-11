@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Activity, Play, Pause, RotateCcw, Copy, Check, AlertTriangle, Wifi, WifiOff } from 'lucide-react';
+import { X, Activity, Play, Pause, RotateCcw, Copy, Check, Clock } from 'lucide-react';
 
 export default function PingModal({ hop, onClose, apiBase }) {
   const [pings, setPings] = useState([]);
   const [isPaused, setIsPaused] = useState(false);
+  const [intervalMs, setIntervalMs] = useState(1000);
   const [status, setStatus] = useState('connecting'); // 'connecting' | 'active' | 'paused' | 'error'
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -18,7 +19,7 @@ export default function PingModal({ hop, onClose, apiBase }) {
     if (!targetIp || isPaused) return;
 
     setStatus('connecting');
-    const url = `${apiBase}/api/ping-stream?target=${encodeURIComponent(targetIp)}`;
+    const url = `${apiBase}/api/ping-stream?target=${encodeURIComponent(targetIp)}&interval=${intervalMs}`;
     const es = new EventSource(url);
     eventSourceRef.current = es;
 
@@ -50,7 +51,7 @@ export default function PingModal({ hop, onClose, apiBase }) {
         es.close();
       }
     };
-  }, [targetIp, isPaused, apiBase]);
+  }, [targetIp, isPaused, intervalMs, apiBase]);
 
   // Handle Escape key to close
   useEffect(() => {
@@ -338,7 +339,35 @@ export default function PingModal({ hop, onClose, apiBase }) {
               <span>Latency Timeline ({pings.length} samples)</span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center bg-gray-900 border border-gray-800 rounded-lg p-0.5 text-xs font-mono">
+                <span className="text-gray-500 pl-2 pr-1 flex items-center gap-1 text-[11px]">
+                  <Clock size={11} className="text-gray-400" />
+                  <span className="hidden sm:inline">Interval:</span>
+                </span>
+                {[
+                  { label: '0.2s', val: 200 },
+                  { label: '0.5s', val: 500 },
+                  { label: '1s', val: 1000 },
+                  { label: '2s', val: 2000 },
+                  { label: '5s', val: 5000 },
+                ].map(({ label, val }) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setIntervalMs(val)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition cursor-pointer ${
+                      intervalMs === val
+                        ? 'bg-emerald-600 text-white font-semibold shadow-sm'
+                        : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                    }`}
+                    title={`Set ping interval to ${label}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               <button
                 onClick={togglePause}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono font-medium border transition ${
@@ -535,7 +564,7 @@ export default function PingModal({ hop, onClose, apiBase }) {
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
               <span>ICMP Echo Request (32 bytes)</span>
               <span>•</span>
-              <span>Interval: ~1.0s</span>
+              <span>Interval: {intervalMs >= 1000 ? `${intervalMs / 1000}s` : `${intervalMs}ms`}</span>
             </div>
 
             <div>
@@ -547,3 +576,4 @@ export default function PingModal({ hop, onClose, apiBase }) {
     </div>
   );
 }
+
