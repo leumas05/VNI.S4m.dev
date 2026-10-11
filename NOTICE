@@ -5,11 +5,11 @@ This product is licensed under the Apache License, Version 2.0.
 See the LICENSE file in the root directory for the full license terms.
 
 ================================================================================
-Third-Party Software and Dataset Attributions
+Third-Party Software, Datasets, and Service Attributions
 ================================================================================
 
-This product includes software, datasets, and digital assets developed by
-third parties:
+This product includes software, datasets, map tiles, and digital assets
+developed or provided by third parties:
 
 1. Natural Earth / GeoJSON World Boundaries (countries.json)
    - Source: Natural Earth (https://www.naturalearthdata.com/)
@@ -34,12 +34,13 @@ third parties:
    - License: BSD 2-Clause License
 
 5. Esri ArcGIS (World Dark Gray Base Map Tiles)
-   - Map tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ
+   - Map tiles (c) Esri -- Esri, DeLorme, NAVTEQ
    - Website: https://www.esri.com/
    - Used for the 2D Leaflet dark base map layer.
 
-6. IP Geolocation & ASN Enrichment
-   - Geolocation and network enrichment powered in part by IP-API (https://ip-api.com/)
+6. IP Geolocation, ASN & Routing Data
+   - Geolocation data provided by IP2Location.io (https://www.ip2location.io/)
+   - Registry and WHOIS data provided by RIPE NCC RIPEstat (https://stat.ripe.net/)
 
 7. Lucide Icons
    - Copyright (c) 2022-2026 Lucide Contributors
@@ -51,3 +52,16 @@ third parties:
    - Website: https://www.electronjs.org/
    - License: MIT License
 
+9. React & Core Tooling
+   - React & React DOM: Copyright (c) Meta Platforms, Inc. (MIT License)
+   - Vite: Copyright (c) 2019-2026 Evan You & Vite Contributors (MIT License)
+   - Tailwind CSS: Copyright (c) Tailwind Labs, Inc. (MIT License)
+
+10. DNS Resolvers & Network Diagnostics
+    - DNS resolution powered by Node.js DNS subsystem (c-ares)
+    - Preconfigured public resolvers referenced:
+      * Cloudflare DNS (1.1.1.1)
+      * Google Public DNS (8.8.8.8)
+      * Quad9 DNS (9.9.9.9)
+      * Cisco OpenDNS (208.67.222.222)
+    - SSL/TLS cryptographic diagnostics powered by Node.js TLS / OpenSSL
