@@ -3,6 +3,7 @@ const cors = require('cors');
 const { spawn } = require('child_process');
 const { runTraceroute } = require('./traceroute');
 const { performDig } = require('./dns');
+const { checkSsl } = require('./ssl');
 
 const path = require('path');
 const readline = require('readline');
@@ -148,6 +149,21 @@ app.get('/api/dig', async (req, res) => {
         res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/ssl-check', async (req, res) => {
+    const target = req.query.target;
+    if (!target || typeof target !== 'string' || !/^[a-zA-Z0-9\.\:\-]+$/.test(target.trim())) {
+        return res.status(400).json({ ok: false, error: 'Valid target IP or domain name is required' });
+    }
+    const port = parseInt(req.query.port, 10) || 443;
+
+    try {
+        const result = await checkSsl(target, port);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
     }
 });
 

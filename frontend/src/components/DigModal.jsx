@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { X, Terminal, Copy, Check, RefreshCw, Server, Search, Globe, FileText, ArrowRight, CornerDownLeft, Layers, ExternalLink, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { X, Terminal, Copy, Check, RefreshCw, Server, Search, Globe, FileText, ArrowRight, CornerDownLeft, Layers, ExternalLink, ChevronDown, ChevronUp, Info, ShieldCheck, ShieldAlert, Lock, Unlock, Calendar, Award, Hash, Clock, CheckCircle2, AlertCircle, AlertTriangle } from 'lucide-react';
 
 const DNS_SERVERS = [
   { label: 'System Default', value: '' },
@@ -239,6 +239,368 @@ function SoaDetailsCard({ soa, onCopy, copiedId, rowId }) {
   );
 }
 
+function formatSslDate(dateStr) {
+  if (!dateStr) return '--';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('sv-SE', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, onCopyField, copiedField }) {
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-gray-500 gap-3">
+        <RefreshCw size={28} className="animate-spin text-emerald-400" />
+        <p className="text-sm">
+          Ansluter och hämtar SSL/TLS-certifikat för <span className="text-gray-200">{target}:{port || 443}</span>...
+        </p>
+        <span className="text-xs text-gray-600 font-sans">Utför TLS-handskakning och validerar certifikatkedjan...</span>
+      </div>
+    );
+  }
+
+  if (!sslData) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center p-6 bg-gray-950/60 rounded-xl border border-gray-800">
+        <Lock size={28} className="text-gray-600 mb-3" />
+        <h3 className="text-sm font-semibold text-gray-300 mb-1">Ingen SSL-kontroll utförd än</h3>
+        <p className="text-xs text-gray-500 max-w-md mb-4 font-sans">
+          Klicka på knappen nedan för att inspektera SSL/TLS-certifikatet för {target}.
+        </p>
+        <button
+          type="button"
+          onClick={() => onRefresh(target, port)}
+          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-2 transition cursor-pointer"
+        >
+          <ShieldCheck size={14} />
+          <span>Starta SSL-kontroll</span>
+        </button>
+      </div>
+    );
+  }
+
+  if (!sslData.ok) {
+    return (
+      <div className="flex flex-col gap-4 font-sans">
+        <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-500/40 flex items-start gap-3">
+          <ShieldAlert size={22} className="text-rose-400 shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs">
+            <div className="font-semibold text-rose-300 text-sm mb-1">
+              Inget giltigt SSL/TLS-certifikat hittades
+            </div>
+            <p className="text-gray-300 mb-2 font-sans">
+              Kunde inte upprätta en säker TLS-anslutning till <strong className="text-white font-mono">{sslData.host}:{sslData.port}</strong>.
+            </p>
+            <div className="p-2.5 rounded bg-gray-950 border border-rose-900/40 font-mono text-rose-300 text-[11px] break-all">
+              Fel: {sslData.error || sslData.code || 'Anslutningsfel'}
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onRefresh(target, port)}
+                className="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-gray-200 border border-gray-700 hover:border-gray-600 text-xs flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <RefreshCw size={12} />
+                <span>Försök igen</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate life progress percentage
+  let lifePercent = 100;
+  if (sslData.validFromMs && sslData.validToMs && sslData.validToMs > sslData.validFromMs) {
+    const totalLife = sslData.validToMs - sslData.validFromMs;
+    const elapsed = Date.now() - sslData.validFromMs;
+    lifePercent = Math.min(100, Math.max(0, Math.round((elapsed / totalLife) * 100)));
+  }
+
+  const isTrusted = sslData.authorized && !sslData.isExpired;
+
+  return (
+    <div className="flex flex-col gap-4 font-sans text-xs">
+      {/* Hero Banner */}
+      <div className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-3 ${
+        isTrusted
+          ? 'bg-emerald-950/40 border-emerald-500/40'
+          : sslData.isExpired
+          ? 'bg-rose-950/40 border-rose-500/40'
+          : 'bg-amber-950/40 border-amber-500/40'
+      }`}>
+        <div className="flex items-start gap-3">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+            isTrusted
+              ? 'bg-emerald-950 border-emerald-500/50 text-emerald-400'
+              : sslData.isExpired
+              ? 'bg-rose-950 border-rose-500/50 text-rose-400'
+              : 'bg-amber-950 border-amber-500/50 text-amber-400'
+          }`}>
+            {isTrusted ? <ShieldCheck size={22} /> : sslData.isExpired ? <AlertCircle size={22} /> : <ShieldAlert size={22} />}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-white tracking-wide">
+                {isTrusted
+                  ? 'Giltigt och betrott SSL/TLS-certifikat'
+                  : sslData.isExpired
+                  ? 'Certifikatet har gått ut!'
+                  : 'Certifikatet är inte betrott'}
+              </h3>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider border ${
+                isTrusted
+                  ? 'bg-emerald-950 border-emerald-500/40 text-emerald-400'
+                  : sslData.isExpired
+                  ? 'bg-rose-950 border-rose-500/40 text-rose-400'
+                  : 'bg-amber-950 border-amber-500/40 text-amber-400'
+              }`}>
+                {isTrusted ? 'VALID' : sslData.isExpired ? 'EXPIRED' : 'UNTRUSTED'}
+              </span>
+            </div>
+            <p className="text-gray-300 text-xs mt-0.5 font-mono">
+              <span>{sslData.host}:{sslData.port}</span>
+              <span className="text-gray-600 mx-1.5">•</span>
+              <span className="text-emerald-400 font-semibold">{sslData.protocol}</span>
+              <span className="text-gray-600 mx-1.5">•</span>
+              <span className="text-gray-400">{sslData.cipher?.name || 'Cipher'}</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="text-right">
+            <div className="text-[10px] uppercase tracking-wider text-gray-400">Handskakningstid</div>
+            <div className="text-sm font-bold text-gray-200 font-mono">{sslData.handshakeTime} ms</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onRefresh(target, port)}
+            className="p-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-gray-300 hover:text-white border border-gray-800 transition cursor-pointer"
+            title="Uppdatera SSL-kontroll"
+          >
+            <RefreshCw size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Details Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Card 1: Giltighet */}
+        <div className="p-3.5 rounded-xl bg-gray-950/80 border border-gray-800 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                <Calendar size={14} className="text-emerald-400" /> Giltighet & Återstående tid
+              </span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
+                sslData.daysRemaining > 30
+                  ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-400'
+                  : sslData.daysRemaining > 0
+                  ? 'bg-amber-950/70 border-amber-500/40 text-amber-400'
+                  : 'bg-rose-950/70 border-rose-500/40 text-rose-400'
+              }`}>
+                {sslData.daysRemaining > 0 ? `${sslData.daysRemaining} dagar kvar` : 'Utgånget'}
+              </span>
+            </div>
+
+            {/* Life progress bar */}
+            <div className="w-full bg-gray-900 rounded-full h-1.5 mb-3 overflow-hidden border border-gray-800">
+              <div 
+                className={`h-full rounded-full transition-all duration-500 ${
+                  sslData.daysRemaining > 30 ? 'bg-emerald-500' : sslData.daysRemaining > 0 ? 'bg-amber-500' : 'bg-rose-500'
+                }`}
+                style={{ width: `${lifePercent}%` }}
+                title={`${lifePercent}% av certifikatets livslängd har passerat`}
+              />
+            </div>
+
+            <div className="space-y-1.5 text-xs font-mono">
+              <div className="flex justify-between items-center text-gray-400">
+                <span>Utfärdat:</span>
+                <span className="text-gray-200">{formatSslDate(sslData.validFrom)}</span>
+              </div>
+              <div className="flex justify-between items-center text-gray-400">
+                <span>Förfaller:</span>
+                <span className={`font-semibold ${sslData.isExpired ? 'text-rose-400' : 'text-gray-200'}`}>
+                  {formatSslDate(sslData.validTo)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: Utfärdare & Ägare */}
+        <div className="p-3.5 rounded-xl bg-gray-950/80 border border-gray-800 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                <Award size={14} className="text-sky-400" /> Certifikatutfärdare (CA)
+              </span>
+              <span className="text-[10px] text-gray-500 font-mono">Issuer</span>
+            </div>
+
+            <div className="space-y-1.5 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Primär domän (CN):</span>
+                <span className="text-white font-mono font-semibold truncate max-w-[200px]" title={sslData.subject?.cn}>
+                  {sslData.subject?.cn}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Utfärdare:</span>
+                <span className="text-emerald-400 font-medium truncate max-w-[200px]" title={sslData.issuer?.o || sslData.issuer?.cn}>
+                  {sslData.issuer?.o || sslData.issuer?.cn || 'Okänd'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Organisation (O):</span>
+                <span className="text-gray-300 truncate max-w-[200px]" title={sslData.subject?.o || 'Ej angiven'}>
+                  {sslData.subject?.o || 'Ej angiven'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: SANs (Subject Alternative Names) */}
+        <div className="p-3.5 rounded-xl bg-gray-950/80 border border-gray-800 md:col-span-2">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+              <Globe size={14} className="text-indigo-400" /> Täckta domäner (SANs — Subject Alternative Names)
+            </span>
+            <span className="text-[10px] font-mono text-gray-500">
+              {sslData.sans?.length || 0} st domäner
+            </span>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1">
+            {sslData.sans && sslData.sans.length > 0 ? (
+              sslData.sans.map((name, i) => (
+                <span 
+                  key={i} 
+                  className="px-2 py-0.5 rounded bg-gray-900 border border-gray-800 text-gray-300 font-mono text-[11px] hover:border-gray-700 transition"
+                >
+                  {name}
+                </span>
+              ))
+            ) : (
+              <span className="text-gray-500 italic">Inga alternativa namn listade</span>
+            )}
+          </div>
+        </div>
+
+        {/* Card 4: Certifikatkedja (Hierarchy) */}
+        {sslData.chain && sslData.chain.length > 0 && (
+          <div className="p-3.5 rounded-xl bg-gray-900/60 border border-gray-800 md:col-span-2">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                <Layers size={14} className="text-amber-400" /> Förtroendekedja (Certificate Chain)
+              </span>
+              <span className="text-[10px] text-gray-500 font-mono">
+                {sslData.chain.length} nivåer
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {sslData.chain.map((c, i) => {
+                const isLeaf = i === 0;
+                const isRoot = c.isRoot || i === sslData.chain.length - 1;
+                return (
+                  <div 
+                    key={i}
+                    className="flex items-center gap-2 p-2 rounded-lg bg-gray-950/80 border border-gray-800/80 text-xs font-mono"
+                  >
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 border ${
+                      isLeaf
+                        ? 'bg-sky-950/80 border-sky-500/40 text-sky-400'
+                        : isRoot
+                        ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-400'
+                        : 'bg-purple-950/80 border-purple-500/40 text-purple-400'
+                    }`}>
+                      {isLeaf ? 'SERVER' : isRoot ? 'ROOT CA' : 'INTERMEDIATE'}
+                    </span>
+                    <span className="font-semibold text-gray-200 truncate flex-1" title={c.cn}>
+                      {c.cn}
+                    </span>
+                    {c.o && (
+                      <span className="text-gray-400 text-[11px] truncate hidden sm:inline" title={c.o}>
+                        ({c.o})
+                      </span>
+                    )}
+                    <span className="text-[10px] text-gray-500 shrink-0">
+                      Giltigt till: {formatSslDate(c.validTo)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Card 5: Kryptografi & Fingeravtryck */}
+        <div className="p-3.5 rounded-xl bg-gray-950/80 border border-gray-800 md:col-span-2">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+              <Hash size={14} className="text-gray-400" /> Tekniska specifikationer & Fingeravtryck
+            </span>
+            <span className="text-[10px] text-gray-500 font-mono">SHA-256</span>
+          </div>
+
+          <div className="space-y-2 font-mono text-xs">
+            {sslData.fingerprint256 && (
+              <div className="flex items-center justify-between gap-2 p-2 rounded bg-gray-900 border border-gray-800">
+                <div className="truncate">
+                  <span className="text-gray-500 mr-2 text-[11px]">SHA-256:</span>
+                  <span className="text-gray-300 text-[11px] select-all">{sslData.fingerprint256}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onCopyField(sslData.fingerprint256, 'fp256')}
+                  className="text-gray-500 hover:text-sky-400 p-1 rounded transition cursor-pointer shrink-0"
+                  title="Kopiera SHA-256 fingeravtryck"
+                >
+                  {copiedField === 'fp256' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                </button>
+              </div>
+            )}
+            {sslData.serialNumber && (
+              <div className="flex items-center justify-between gap-2 p-2 rounded bg-gray-900 border border-gray-800">
+                <div className="truncate">
+                  <span className="text-gray-500 mr-2 text-[11px]">Serienummer:</span>
+                  <span className="text-gray-300 text-[11px] select-all">{sslData.serialNumber}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onCopyField(sslData.serialNumber, 'serial')}
+                  className="text-gray-500 hover:text-sky-400 p-1 rounded transition cursor-pointer shrink-0"
+                  title="Kopiera serienummer"
+                >
+                  {copiedField === 'serial' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                </button>
+              </div>
+            )}
+            <div className="flex items-center justify-between text-gray-400 pt-1 text-[11px]">
+              <span>Asymmetrisk nyckel: <strong className="text-gray-200">{sslData.keyType || 'RSA/ECDSA'} {sslData.keyBits ? `(${sslData.keyBits} bitar)` : ''}</strong></span>
+              <span>Protokoll: <strong className="text-emerald-400">{sslData.protocol}</strong></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
   const initialTarget = hop?.hostname && hop.hostname !== hop?.ip ? hop.hostname : (hop?.ip || '');
   const [target, setTarget] = useState(initialTarget);
@@ -246,15 +608,19 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
   const [dnsServer, setDnsServer] = useState('');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
-  const [viewMode, setViewMode] = useState('visual'); // 'visual' | 'raw'
+  const [viewMode, setViewMode] = useState('visual'); // 'visual' | 'raw' | 'ssl'
   const [copiedRaw, setCopiedRaw] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   const [collapsedSoa, setCollapsedSoa] = useState({});
+  const [sslData, setSslData] = useState(null);
+  const [sslLoading, setSslLoading] = useState(false);
+  const [sslPort, setSslPort] = useState('443');
 
   const targetRef = useRef(target);
   const queryTypeRef = useRef(queryType);
   const dnsServerRef = useRef(dnsServer);
   const activeReqIdRef = useRef(0);
+  const sslReqIdRef = useRef(0);
 
   useEffect(() => { targetRef.current = target; }, [target]);
   useEffect(() => { queryTypeRef.current = queryType; }, [queryType]);
@@ -442,6 +808,58 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
     }
   }, [apiBase]);
 
+  const executeSslCheck = useCallback(async (targetToCheck, portToCheck) => {
+    const qTarget = (targetToCheck !== undefined ? targetToCheck : targetRef.current).trim();
+    if (!qTarget) return;
+
+    const qPort = portToCheck !== undefined ? portToCheck : sslPort;
+    const currentReqId = ++sslReqIdRef.current;
+
+    setSslLoading(true);
+    setSslData(null);
+
+    try {
+      const queryParams = new URLSearchParams({
+        target: qTarget,
+        port: qPort || '443'
+      });
+
+      const response = await fetch(`${apiBase || ''}/api/ssl-check?${queryParams.toString()}`, {
+        cache: 'no-cache'
+      });
+
+      let res;
+      if (response.ok) {
+        res = await response.json();
+      } else {
+        const errJson = await response.json().catch(() => ({}));
+        res = {
+          ok: false,
+          host: qTarget,
+          port: qPort,
+          error: errJson.error || `HTTP ${response.status} error under SSL-kontroll`
+        };
+      }
+
+      if (currentReqId === sslReqIdRef.current) {
+        setSslData(res);
+      }
+    } catch (err) {
+      if (currentReqId === sslReqIdRef.current) {
+        setSslData({
+          ok: false,
+          host: qTarget,
+          port: qPort,
+          error: err.message || 'Kunde inte ansluta till VNI Engine för SSL-kontroll'
+        });
+      }
+    } finally {
+      if (currentReqId === sslReqIdRef.current) {
+        setSslLoading(false);
+      }
+    }
+  }, [apiBase, sslPort]);
+
   // Initial lookup once on open
   useEffect(() => {
     executeDig(initialTarget, isIpAddress(initialTarget) ? 'PTR' : 'ALL', dnsServerRef.current);
@@ -470,6 +888,15 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
     setTimeout(() => setCopiedField(null), 2000);
   };
 
+  const handleToggleSsl = () => {
+    if (viewMode === 'ssl') {
+      setViewMode('visual');
+    } else {
+      setViewMode('ssl');
+      executeSslCheck(targetRef.current, sslPort);
+    }
+  };
+
   // Immediate search on clicking any quick target pill
   const handleSelectQuickTarget = (item) => {
     const val = item.value;
@@ -478,13 +905,20 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
     setQueryType(chosenType);
     targetRef.current = val;
     queryTypeRef.current = chosenType;
-    executeDig(val, chosenType, dnsServerRef.current);
+    if (viewMode === 'ssl') {
+      executeSslCheck(val, sslPort);
+    } else {
+      executeDig(val, chosenType, dnsServerRef.current);
+    }
   };
 
   // Immediate search on changing record type
   const handleTypeChange = (t) => {
     setQueryType(t);
     queryTypeRef.current = t;
+    if (viewMode === 'ssl') {
+      setViewMode('visual');
+    }
     executeDig(targetRef.current, t, dnsServerRef.current);
   };
 
@@ -492,6 +926,9 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
   const handleServerChange = (s) => {
     setDnsServer(s);
     dnsServerRef.current = s;
+    if (viewMode === 'ssl') {
+      setViewMode('visual');
+    }
     executeDig(targetRef.current, queryTypeRef.current, s);
   };
 
@@ -505,7 +942,11 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
     setQueryType(chosenType);
     targetRef.current = cleanTarget;
     queryTypeRef.current = chosenType;
-    executeDig(cleanTarget, chosenType, dnsServerRef.current);
+    if (viewMode === 'ssl') {
+      executeSslCheck(cleanTarget, sslPort);
+    } else {
+      executeDig(cleanTarget, chosenType, dnsServerRef.current);
+    }
   };
 
   return (
@@ -553,6 +994,20 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
+              onClick={handleToggleSsl}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-mono transition flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'ssl'
+                  ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 shadow-sm shadow-emerald-950'
+                  : 'bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-emerald-400 border-gray-800'
+              }`}
+              title={viewMode === 'ssl' ? 'Tillbaka till DNS DiG' : 'Kontrollera målets SSL/TLS-certifikat'}
+            >
+              <ShieldCheck size={14} className={viewMode === 'ssl' ? 'text-emerald-400' : 'text-emerald-500'} />
+              <span>SSL</span>
+            </button>
+            <button
+              type="button"
               onClick={handleCopyRaw}
               className="px-2.5 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white border border-gray-800 text-xs font-mono transition flex items-center gap-1.5 cursor-pointer"
               title="Copy Raw DiG CLI Output"
@@ -561,6 +1016,7 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
               <span className="hidden sm:inline">Copy DiG</span>
             </button>
             <button
+              type="button"
               onClick={onClose}
               className="p-2 rounded-lg bg-gray-900 hover:bg-rose-950/40 text-gray-400 hover:text-rose-400 border border-gray-800 hover:border-rose-900/50 transition cursor-pointer"
               title="Close (Esc)"
@@ -597,11 +1053,11 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
             
             <button
               type="submit"
-              disabled={loading || !target.trim()}
+              disabled={(viewMode === 'ssl' ? sslLoading : loading) || !target.trim()}
               className="px-4 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium text-sm flex items-center gap-1.5 transition disabled:opacity-50 cursor-pointer shadow-sm shadow-sky-950"
             >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-              <span>Dig</span>
+              <RefreshCw size={14} className={(viewMode === 'ssl' ? sslLoading : loading) ? 'animate-spin' : ''} />
+              <span>{viewMode === 'ssl' ? 'Check SSL' : 'Dig'}</span>
             </button>
           </form>
 
@@ -632,59 +1088,81 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
             </div>
           )}
 
-          {/* Record Type pills & Resolver selection */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-gray-800/40">
-            {/* Record Types */}
-            <div className="flex items-center gap-1 overflow-x-auto py-0.5">
-              <span className="text-[11px] font-mono uppercase text-gray-500 mr-1">Type:</span>
-              {RECORD_TYPES.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => handleTypeChange(t)}
-                  className={`px-2 py-0.5 rounded text-xs font-mono font-medium transition cursor-pointer border ${
-                    queryType === t
-                      ? 'bg-sky-500 text-white border-sky-400 shadow-sm shadow-sky-900/40'
-                      : 'bg-gray-950 text-gray-400 hover:text-gray-200 border-gray-800 hover:border-gray-700'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-
-            {/* DNS Resolver selector */}
-            <div className="flex items-center gap-1.5 text-xs font-mono">
-              <Server size={13} className="text-gray-500" />
-              <select
-                value={dnsServer}
-                onChange={(e) => handleServerChange(e.target.value)}
-                className="bg-gray-950 border border-gray-800 text-gray-300 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-sky-500 cursor-pointer"
-              >
-                {DNS_SERVERS.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
+          {/* Record Type pills & Resolver selection (visible in DNS views) */}
+          {viewMode !== 'ssl' && (
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-gray-800/40">
+              {/* Record Types */}
+              <div className="flex items-center gap-1 overflow-x-auto py-0.5">
+                <span className="text-[11px] font-mono uppercase text-gray-500 mr-1">Type:</span>
+                {RECORD_TYPES.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => handleTypeChange(t)}
+                    className={`px-2 py-0.5 rounded text-xs font-mono font-medium transition cursor-pointer border ${
+                      queryType === t
+                        ? 'bg-sky-500 text-white border-sky-400 shadow-sm shadow-sky-900/40'
+                        : 'bg-gray-950 text-gray-400 hover:text-gray-200 border-gray-800 hover:border-gray-700'
+                    }`}
+                  >
+                    {t}
+                  </button>
                 ))}
-              </select>
+              </div>
+
+              {/* DNS Resolver selector */}
+              <div className="flex items-center gap-1.5 text-xs font-mono">
+                <Server size={13} className="text-gray-500" />
+                <select
+                  value={dnsServer}
+                  onChange={(e) => handleServerChange(e.target.value)}
+                  className="bg-gray-950 border border-gray-800 text-gray-300 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-sky-500 cursor-pointer"
+                >
+                  {DNS_SERVERS.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Results Metadata Bar */}
         <div className="px-6 py-2.5 bg-gray-900/50 border-b border-gray-800 flex items-center justify-between text-xs font-mono text-gray-400 shrink-0">
           <div className="flex items-center gap-3">
-            <span>
-              Query time: <strong className="text-gray-200">{data ? `${data.queryTime} ms` : (loading ? '...' : '--')}</strong>
-            </span>
-            <span className="text-gray-700">•</span>
-            <span className="truncate max-w-[200px]" title={data?.server}>
-              Server: <strong className="text-gray-200">{data?.server || (dnsServer || 'Default')}</strong>
-            </span>
-            <span className="text-gray-700">•</span>
-            <span>
-              Answers: <strong className="text-sky-400">{data?.answers ? data.answers.length : 0}</strong>
-            </span>
+            {viewMode === 'ssl' ? (
+              <>
+                <span>
+                  Port: <strong className="text-gray-200">{sslPort || 443}</strong>
+                </span>
+                <span className="text-gray-700">•</span>
+                <span>
+                  Status: <strong className={sslData?.authorized && !sslData?.isExpired ? 'text-emerald-400' : sslData ? 'text-amber-400' : 'text-gray-400'}>
+                    {sslData?.authorized && !sslData?.isExpired ? 'Verified' : sslData ? (sslData.isExpired ? 'Expired' : 'Untrusted') : (sslLoading ? 'Checking...' : '--')}
+                  </strong>
+                </span>
+                <span className="text-gray-700">•</span>
+                <span>
+                  Handshake: <strong className="text-sky-400">{sslData?.handshakeTime !== undefined ? `${sslData.handshakeTime} ms` : (sslLoading ? '...' : '--')}</strong>
+                </span>
+              </>
+            ) : (
+              <>
+                <span>
+                  Query time: <strong className="text-gray-200">{data ? `${data.queryTime} ms` : (loading ? '...' : '--')}</strong>
+                </span>
+                <span className="text-gray-700">•</span>
+                <span className="truncate max-w-[200px]" title={data?.server}>
+                  Server: <strong className="text-gray-200">{data?.server || (dnsServer || 'Default')}</strong>
+                </span>
+                <span className="text-gray-700">•</span>
+                <span>
+                  Answers: <strong className="text-sky-400">{data?.answers ? data.answers.length : 0}</strong>
+                </span>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-1 bg-gray-950 p-0.5 rounded-lg border border-gray-800">
@@ -711,12 +1189,35 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
               <Terminal size={11} />
               <span>Raw DiG</span>
             </button>
+            <button
+              type="button"
+              onClick={handleToggleSsl}
+              className={`px-2.5 py-1 rounded text-[11px] font-medium transition cursor-pointer flex items-center gap-1 ${
+                viewMode === 'ssl'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-gray-400 hover:text-emerald-400'
+              }`}
+            >
+              <ShieldCheck size={12} />
+              <span>SSL Checker</span>
+            </button>
           </div>
         </div>
 
         {/* Content Area */}
         <div className="p-6 overflow-y-auto flex-1 font-mono text-xs">
-          {loading ? (
+          {viewMode === 'ssl' ? (
+            <SslCheckerView
+              sslData={sslData}
+              loading={sslLoading}
+              onRefresh={executeSslCheck}
+              target={target}
+              port={sslPort}
+              setPort={setSslPort}
+              onCopyField={handleCopyField}
+              copiedField={copiedField}
+            />
+          ) : loading ? (
             <div className="flex flex-col items-center justify-center py-16 text-gray-500 gap-3">
               <RefreshCw size={28} className="animate-spin text-sky-400" />
               <p className="text-sm">Querying DNS records for <span className="text-gray-200">{target}</span> ({queryType})...</p>
