@@ -46,6 +46,12 @@ function formatHopRtt(rtt) {
   return `${rtt} ms`;
 }
 
+function formatTimer(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
 // Color palette matching 2D MapView for clustered/co-located hops
 const CLUSTER_PALETTE = [
   { bg: '#ef4444', border: '#7f1d1d', halo: 'rgba(239, 68, 68, 0.35)' }, // Red
@@ -267,15 +273,16 @@ export default function GlobeView({
     if (activeMode === 'radar') {
       radarConnections.forEach((conn) => {
         const isSelected = selectedRadarConn && selectedRadarConn.remoteIp === conn.remoteIp && selectedRadarConn.remotePort === conn.remotePort;
-        const baseColor = getRadarColor(conn);
+        const isInactive = conn.isActive === false;
+        const baseColor = isInactive ? '#64748b' : getRadarColor(conn);
         const color = isSelected ? '#f59e0b' : baseColor;
-        const haloColor = isSelected ? 'rgba(245, 158, 11, 0.45)' : `${baseColor}44`;
+        const haloColor = isSelected ? 'rgba(245, 158, 11, 0.45)' : (isInactive ? 'rgba(100, 116, 139, 0.2)' : `${baseColor}44`);
 
         const tooltip = getTooltip({
-          title: `${conn.process} (Port ${conn.remotePort})`,
+          title: `${conn.process} (Port ${conn.remotePort})${isInactive ? ' [Avslutad]' : ''}`,
           subtitle: `${conn.geo?.city ? `${conn.geo.city}, ` : ''}${conn.geo?.country || 'Okänd plats'}`,
           info: `IP: ${conn.remoteIp} ${conn.geo?.isp ? `• ${conn.geo.isp}` : ''}`,
-          extra: `Status: ${conn.state} ${conn.pid ? `(PID: ${conn.pid})` : ''}`,
+          extra: `Status: ${isInactive ? 'Avslutad session' : conn.state} ${conn.pid ? `(PID: ${conn.pid})` : ''}`,
           color
         });
 
@@ -284,7 +291,7 @@ export default function GlobeView({
           lat: conn.geo.lat,
           lng: conn.geo.lon,
           color: haloColor,
-          radius: isSelected ? 0.45 : 0.28,
+          radius: isSelected ? 0.45 : (isInactive ? 0.20 : 0.28),
           altitude: 0.006,
           label: tooltip,
           connData: conn
@@ -295,7 +302,7 @@ export default function GlobeView({
           lat: conn.geo.lat,
           lng: conn.geo.lon,
           color,
-          radius: isSelected ? 0.22 : 0.13,
+          radius: isSelected ? 0.22 : (isInactive ? 0.09 : 0.13),
           altitude: 0.009,
           label: tooltip,
           connData: conn
@@ -352,9 +359,12 @@ export default function GlobeView({
       if (!myLocation?.lat || !myLocation?.lon) return [];
       radarConnections.forEach((conn) => {
         const isSelected = selectedRadarConn && selectedRadarConn.remoteIp === conn.remoteIp && selectedRadarConn.remotePort === conn.remotePort;
-        const connColor = getRadarColor(conn);
+        const isInactive = conn.isActive === false;
+        const connColor = isInactive ? '#64748b' : getRadarColor(conn);
         const arcAlt = getArcAltitude(myLocation.lat, myLocation.lon, conn.geo.lat, conn.geo.lon);
-        const strokeColor = isSelected ? ['#f59e0b', '#f59e0b'] : ['#3b82f6', connColor];
+        const strokeColor = isSelected
+          ? ['#f59e0b', '#f59e0b']
+          : (isInactive ? ['rgba(59, 130, 246, 0.25)', 'rgba(100, 116, 139, 0.25)'] : ['#3b82f6', connColor]);
 
         arcs.push({
           startLat: myLocation.lat,
@@ -363,7 +373,7 @@ export default function GlobeView({
           endLng: conn.geo.lon,
           altitude: arcAlt,
           color: strokeColor,
-          stroke: isSelected ? 0.32 : 0.14,
+          stroke: isSelected ? 0.32 : (isInactive ? 0.08 : 0.14),
           name: `${conn.process} -> ${conn.remoteIp}`
         });
       });
@@ -734,10 +744,22 @@ export default function GlobeView({
       {activeMode === 'radar' ? (
         <div className="absolute top-6 left-6 z-20 flex flex-col gap-1.5 pointer-events-none select-none">
           <div className="flex items-center gap-2 bg-gray-900/85 border border-emerald-500/40 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto">
-            <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              <span className="font-bold">LIVE RADAR</span>
-            </div>
+            {radarData?.isRecording ? (
+              <div className="flex items-center gap-1.5 text-red-400 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>
+                <span className="font-bold">REC {formatTimer(radarData.recordingElapsed || 0)}</span>
+              </div>
+            ) : radarData?.isRecordedView ? (
+              <div className="flex items-center gap-1.5 text-amber-400 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span className="font-bold">INSPELNING</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span className="font-bold">LIVE RADAR</span>
+              </div>
+            )}
             <span className="text-gray-600">•</span>
             <div className="flex items-center gap-1.5 text-sky-400 font-semibold" title={myLocation?.city}>
               <span className="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
@@ -745,7 +767,9 @@ export default function GlobeView({
             </div>
             <span className="text-gray-500 font-bold">➔</span>
             <span className="text-emerald-300 px-1.5 py-0.5 bg-emerald-950/80 border border-emerald-500/30 rounded text-[11px] font-bold">
-              {radarData?.internetCount || 0} aktiva anslutningar
+              {radarData?.isRecordedView
+                ? `${radarData?.internetCount || 0} sedda (${radarData?.activeCount || 0} aktiva)`
+                : `${radarData?.internetCount || 0} aktiva anslutningar`}
             </span>
             <span className="text-gray-400 text-[11px] hidden sm:inline">
               ({Object.keys(radarData?.countryCounts || {}).length} länder)

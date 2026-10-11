@@ -78,6 +78,13 @@ function App() {
   const [selectedRadarConn, setSelectedRadarConn] = useState(null);
   const [hideSelfConnections, setHideSelfConnections] = useState(() => localStorage.getItem('vni_radar_hide_self') !== 'false');
 
+  // Radar Recording State
+  const [isRecordingRadar, setIsRecordingRadar] = useState(false);
+  const [recordingStartTime, setRecordingStartTime] = useState(null);
+  const [recordingElapsed, setRecordingElapsed] = useState(0);
+  const [recordedConnections, setRecordedConnections] = useState([]);
+  const [radarViewTab, setRadarViewTab] = useState('live'); // 'live' | 'recorded'
+
   const fetchRadarData = useCallback(async () => {
     try {
       setRadarLoading(true);
@@ -101,6 +108,132 @@ function App() {
     return () => clearInterval(interval);
   }, [activeMode, radarAutoRefresh, fetchRadarData]);
 
+  // Recording Timer
+  useEffect(() => {
+    if (!isRecordingRadar || !recordingStartTime) {
+      setRecordingElapsed(0);
+      return;
+    }
+    const timer = setInterval(() => {
+      setRecordingElapsed(Math.floor((Date.now() - recordingStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isRecordingRadar, recordingStartTime]);
+
+  // Accumulate recorded connections as new polls arrive
+  useEffect(() => {
+    if (!isRecordingRadar || !radarData?.connections) return;
+
+    setRecordedConnections(prevList => {
+      const prevMap = new Map();
+      prevList.forEach(item => {
+        const id = `${item.process}|${item.remoteIp}|${item.remotePort}`;
+        prevMap.set(id, { ...item });
+      });
+
+      const currentIds = new Set();
+      const now = Date.now();
+
+      radarData.connections.forEach(conn => {
+        const id = `${conn.process}|${conn.remoteIp}|${conn.remotePort}`;
+        currentIds.add(id);
+
+        if (prevMap.has(id)) {
+          const existing = prevMap.get(id);
+          existing.lastSeen = now;
+          existing.seenCount = (existing.seenCount || 1) + 1;
+          existing.isActive = true;
+          existing.state = conn.state;
+          if (conn.geo && !existing.geo) existing.geo = conn.geo;
+        } else {
+          prevMap.set(id, {
+            ...conn,
+            firstSeen: now,
+            lastSeen: now,
+            seenCount: 1,
+            isActive: true
+          });
+        }
+      });
+
+      for (const [id, item] of prevMap.entries()) {
+        if (!currentIds.has(id)) {
+          item.isActive = false;
+        }
+      }
+
+      return Array.from(prevMap.values());
+    });
+  }, [radarData, isRecordingRadar]);
+
+  const handleStartRecording = useCallback(() => {
+    const now = Date.now();
+    setIsRecordingRadar(true);
+    setRecordingStartTime(now);
+    setRadarAutoRefresh(true);
+
+    if (radarData?.connections && radarData.connections.length > 0) {
+      setRecordedConnections(prev => {
+        const prevMap = new Map();
+        prev.forEach(item => {
+          const id = `${item.process}|${item.remoteIp}|${item.remotePort}`;
+          prevMap.set(id, { ...item });
+        });
+
+        radarData.connections.forEach(conn => {
+          const id = `${conn.process}|${conn.remoteIp}|${conn.remotePort}`;
+          if (!prevMap.has(id)) {
+            prevMap.set(id, {
+              ...conn,
+              firstSeen: now,
+              lastSeen: now,
+              seenCount: 1,
+              isActive: true
+            });
+          } else {
+            const item = prevMap.get(id);
+            item.isActive = true;
+            item.lastSeen = now;
+          }
+        });
+        return Array.from(prevMap.values());
+      });
+    }
+  }, [radarData]);
+
+  const handleStopRecording = useCallback(() => {
+    setIsRecordingRadar(false);
+  }, []);
+
+  const handleClearRecording = useCallback(() => {
+    setIsRecordingRadar(false);
+    setRecordingStartTime(null);
+    setRecordingElapsed(0);
+    setRecordedConnections([]);
+    setRadarViewTab('live');
+  }, []);
+
+  const handleExportRecording = useCallback(() => {
+    if (recordedConnections.length === 0) return;
+    const session = {
+      startTime: recordingStartTime ? new Date(recordingStartTime).toISOString() : null,
+      endTime: new Date().toISOString(),
+      durationSeconds: recordingElapsed,
+      totalConnections: recordedConnections.length,
+      activeConnections: recordedConnections.filter(c => c.isActive).length,
+      closedConnections: recordedConnections.filter(c => !c.isActive).length,
+      connections: recordedConnections
+    };
+
+    const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `vni-radar-recording-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [recordedConnections, recordingStartTime, recordingElapsed]);
+
   const toggleHideSelfConnections = useCallback(() => {
     setHideSelfConnections(prev => {
       const next = !prev;
@@ -110,13 +243,13 @@ function App() {
   }, []);
 
   const displayRadarData = useMemo(() => {
-    if (!radarData) return null;
-    if (!hideSelfConnections) return radarData;
+    const rawList = radarViewTab === 'recorded' ? recordedConnections : (radarData?.connections || []);
+    const filtered = hideSelfConnections ? rawList.filter(c => !c.isSelf) : rawList;
 
-    const filtered = (radarData.connections || []).filter(c => !c.isSelf);
     const countryCounts = {};
     const processCounts = {};
     const uniqueIps = new Set();
+    let activeCount = 0;
 
     filtered.forEach(c => {
       if (c.geo?.countryCode) {
@@ -128,20 +261,29 @@ function App() {
       if (c.remoteIp) {
         uniqueIps.add(c.remoteIp);
       }
+      if (c.isActive !== false) {
+        activeCount++;
+      }
     });
 
-    const hiddenCount = (radarData.connections || []).length - filtered.length;
+    const hiddenCount = rawList.length - filtered.length;
 
     return {
-      ...radarData,
+      timestamp: radarData?.timestamp || Date.now(),
+      totalEstablished: radarData?.totalEstablished || 0,
       internetCount: filtered.length,
+      activeCount,
       uniqueIpsCount: uniqueIps.size,
       countryCounts,
       processCounts,
       connections: filtered,
-      hiddenSelfCount: hiddenCount
+      hiddenSelfCount: hiddenCount,
+      isRecordedView: radarViewTab === 'recorded',
+      isRecording: isRecordingRadar,
+      recordingElapsed,
+      totalRecordedCount: recordedConnections.length
     };
-  }, [radarData, hideSelfConnections]);
+  }, [radarData, recordedConnections, radarViewTab, hideSelfConnections, isRecordingRadar, recordingElapsed]);
   
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [privacyText, setPrivacyText] = useState('');
@@ -417,6 +559,14 @@ function App() {
                  setSelectedRadarConn={setSelectedRadarConn}
                  hideSelfConnections={hideSelfConnections}
                  onToggleHideSelf={toggleHideSelfConnections}
+                 isRecordingRadar={isRecordingRadar}
+                 onStartRecordingRadar={handleStartRecording}
+                 onStopRecordingRadar={handleStopRecording}
+                 onClearRecordingRadar={handleClearRecording}
+                 onExportRecordingRadar={handleExportRecording}
+                 recordingElapsed={recordingElapsed}
+                 radarViewTab={radarViewTab}
+                 onSetRadarViewTab={setRadarViewTab}
               />
            </div>
            <div className="w-full lg:w-3/5 h-[45%] lg:h-full relative z-0 flex-1">

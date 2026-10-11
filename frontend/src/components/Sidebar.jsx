@@ -28,7 +28,15 @@ export default function Sidebar({
   selectedRadarConn,
   setSelectedRadarConn,
   hideSelfConnections,
-  onToggleHideSelf
+  onToggleHideSelf,
+  isRecordingRadar,
+  onStartRecordingRadar,
+  onStopRecordingRadar,
+  onClearRecordingRadar,
+  onExportRecordingRadar,
+  recordingElapsed,
+  radarViewTab,
+  onSetRadarViewTab
 }) {
   const [input, setInput] = useState('');
   const [showHistory, setShowHistory] = useState(false);
@@ -194,6 +202,14 @@ export default function Sidebar({
           onDig={onDig}
           hideSelfConnections={hideSelfConnections}
           onToggleHideSelf={onToggleHideSelf}
+          isRecording={isRecordingRadar}
+          onStartRecording={onStartRecordingRadar}
+          onStopRecording={onStopRecordingRadar}
+          onClearRecording={onClearRecordingRadar}
+          onExportRecording={onExportRecordingRadar}
+          recordingElapsed={recordingElapsed}
+          radarViewTab={radarViewTab}
+          onSetRadarViewTab={onSetRadarViewTab}
         />
       ) : (
         <>

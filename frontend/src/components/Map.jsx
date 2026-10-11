@@ -36,6 +36,12 @@ function MapBounds({ positions, myLocation }) {
   return null;
 }
 
+function formatTimer(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
 function getCurvedPoints(p1, p2, offsetMultiplier) {
     const [lat1, lon1] = p1;
     const [lat2, lon2] = p2;
@@ -168,11 +174,13 @@ export default function MapView({
     if (myDisplayLat && myDisplayLon) {
       radarConnections.forEach((conn) => {
         const isSelected = selectedRadarConn && selectedRadarConn.remoteIp === conn.remoteIp && selectedRadarConn.remotePort === conn.remotePort;
+        const isInactive = conn.isActive === false;
         segments.push({
           points: getCurvedPoints([myDisplayLat, myDisplayLon], [conn.geo.lat, conn.geo.lon], 0.12),
           isSelected,
-          color: isSelected ? '#f59e0b' : '#10b981',
-          weight: isSelected ? 3 : 2
+          color: isSelected ? '#f59e0b' : (isInactive ? '#64748b' : '#10b981'),
+          weight: isSelected ? 3 : (isInactive ? 1.5 : 2),
+          opacity: isInactive ? 0.35 : (isSelected ? 0.9 : 0.6)
         });
       });
     }
@@ -269,12 +277,16 @@ export default function MapView({
         {isRadar ? (
           radarConnections.map((conn, idx) => {
             const isSelected = selectedRadarConn && selectedRadarConn.remoteIp === conn.remoteIp && selectedRadarConn.remotePort === conn.remotePort;
+            const isInactive = conn.isActive === false;
             const p = (conn.process || '').toLowerCase();
             let color = '#6366f1';
             let border = '#312e81';
             if (isSelected) {
               color = '#f59e0b';
               border = '#78350f';
+            } else if (isInactive) {
+              color = '#64748b';
+              border = '#334155';
             } else if (p.includes('chrome') || p.includes('edge') || p.includes('firefox') || p.includes('brave')) {
               color = '#10b981';
               border = '#064e3b';
@@ -288,10 +300,10 @@ export default function MapView({
               color = '#f59e0b';
               border = '#78350f';
             }
-            const size = isSelected ? 16 : 12;
+            const size = isSelected ? 16 : (isInactive ? 10 : 12);
             const icon = new L.DivIcon({
               className: isSelected ? 'custom-marker-selected' : 'custom-marker',
-              html: `<div style="background-color: ${color}; width: ${size}px; height: ${size}px; border-radius: 50%; border: 2px solid ${border}; box-shadow: 0 0 10px ${color};"></div>`,
+              html: `<div style="background-color: ${color}; width: ${size}px; height: ${size}px; border-radius: 50%; border: 2px solid ${border}; box-shadow: 0 0 ${isInactive ? '3px' : '10px'} ${color}; opacity: ${isInactive ? 0.65 : 1};"></div>`,
               iconSize: [size, size],
               iconAnchor: [size / 2, size / 2]
             });
@@ -301,14 +313,14 @@ export default function MapView({
                 key={`radar-${conn.remoteIp}-${conn.remotePort}-${idx}`}
                 position={[conn.geo.lat, conn.geo.lon]}
                 icon={icon}
-                zIndexOffset={isSelected ? 500 : 0}
+                zIndexOffset={isSelected ? 500 : (isInactive ? -50 : 0)}
                 eventHandlers={{
                   click: () => setSelectedRadarConn && setSelectedRadarConn(isSelected ? null : conn)
                 }}
               >
                 <Tooltip direction="top" offset={[0, -10]} opacity={1}>
                   <div className="text-gray-900 font-sans text-sm">
-                    <strong>{conn.process} (:{conn.remotePort})</strong><br/>
+                    <strong>{conn.process} (:{conn.remotePort}){isInactive ? ' [Avslutad]' : ''}</strong><br/>
                     <span className="text-gray-600 text-xs font-mono">{conn.remoteIp}</span><br/>
                     <span className="text-gray-500 text-xs">
                       {conn.geo?.city ? `${conn.geo.city}, ` : ''}{conn.geo?.country} {conn.geo?.isp ? `• ${conn.geo.isp}` : ''}
@@ -367,10 +379,22 @@ export default function MapView({
       {isRadar && (
         <div className="absolute top-6 left-6 z-[1000] flex flex-col gap-1.5 pointer-events-none select-none">
           <div className="flex items-center gap-2 bg-gray-900/85 border border-emerald-500/40 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto">
-            <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              <span className="font-bold">LIVE RADAR</span>
-            </div>
+            {radarData?.isRecording ? (
+              <div className="flex items-center gap-1.5 text-red-400 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>
+                <span className="font-bold">REC {formatTimer(radarData.recordingElapsed || 0)}</span>
+              </div>
+            ) : radarData?.isRecordedView ? (
+              <div className="flex items-center gap-1.5 text-amber-400 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span className="font-bold">INSPELNING</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span className="font-bold">LIVE RADAR</span>
+              </div>
+            )}
             <span className="text-gray-600">•</span>
             <div className="flex items-center gap-1.5 text-sky-400 font-semibold" title={myLocation?.city}>
               <span className="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
@@ -378,7 +402,9 @@ export default function MapView({
             </div>
             <span className="text-gray-500 font-bold">➔</span>
             <span className="text-emerald-300 px-1.5 py-0.5 bg-emerald-950/80 border border-emerald-500/30 rounded text-[11px] font-bold">
-              {radarData?.internetCount || 0} aktiva anslutningar
+              {radarData?.isRecordedView
+                ? `${radarData?.internetCount || 0} sedda (${radarData?.activeCount || 0} aktiva)`
+                : `${radarData?.internetCount || 0} aktiva anslutningar`}
             </span>
           </div>
 
