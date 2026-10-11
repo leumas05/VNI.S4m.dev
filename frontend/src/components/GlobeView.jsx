@@ -26,6 +26,48 @@ const getPolygonLabel = ({ properties: d }) => `
   </div>
 `;
 
+// Color palette matching 2D MapView for clustered/co-located hops
+const CLUSTER_PALETTE = [
+  { bg: '#ef4444', border: '#7f1d1d', halo: 'rgba(239, 68, 68, 0.35)' }, // Red
+  { bg: '#3b82f6', border: '#1e3a8a', halo: 'rgba(59, 130, 246, 0.35)' }, // Blue
+  { bg: '#f97316', border: '#7c2d12', halo: 'rgba(249, 115, 22, 0.35)' }, // Orange
+  { bg: '#8b5cf6', border: '#4c1d95', halo: 'rgba(139, 92, 246, 0.35)' }, // Purple
+  { bg: '#eab308', border: '#713f12', halo: 'rgba(234, 179, 8, 0.35)' },  // Yellow
+  { bg: '#ec4899', border: '#831843', halo: 'rgba(236, 72, 153, 0.35)' }, // Pink
+  { bg: '#06b6d4', border: '#164e63', halo: 'rgba(6, 182, 212, 0.35)' },  // Cyan
+  { bg: '#6366f1', border: '#312e81', halo: 'rgba(99, 102, 241, 0.35)' }  // Indigo
+];
+
+function getHopTheme(hop, isSelected, isLast) {
+  if (isSelected) {
+    return {
+      color: '#f59e0b',
+      halo: 'rgba(245, 158, 11, 0.45)',
+      border: '#78350f'
+    };
+  }
+  if (hop && hop.isClustered) {
+    const item = CLUSTER_PALETTE[hop.hop % CLUSTER_PALETTE.length];
+    return {
+      color: item.bg,
+      halo: item.halo,
+      border: item.border
+    };
+  }
+  if (isLast) {
+    return {
+      color: '#34d399',
+      halo: 'rgba(52, 211, 153, 0.35)',
+      border: '#064e3b'
+    };
+  }
+  return {
+    color: '#10b981',
+    halo: 'rgba(16, 185, 129, 0.25)',
+    border: '#064e3b'
+  };
+}
+
 export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHop, myLocation }) {
   const globeRef = useRef();
   const containerRef = useRef();
@@ -110,31 +152,31 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
       </div>
     `;
 
-    // User Location Node
+    // User Location Node (matching 2D map #3b82f6)
     if (myLocation?.lat && myLocation?.lon) {
       const tooltip = getTooltip({
         title: 'My Location (Gateway)',
         subtitle: `${myLocation.city || 'Local'}, ${myLocation.country || ''}`,
         info: `IP: ${myLocation.query || 'Internal'}`,
-        color: '#38bdf8'
+        color: '#3b82f6'
       });
 
       // Outer ambient glow halo disc
       list.push({
         lat: myLocation.lat,
         lng: myLocation.lon,
-        color: 'rgba(56, 189, 248, 0.28)',
+        color: 'rgba(59, 130, 246, 0.30)',
         radius: 0.35,
         altitude: 0.006,
         label: tooltip,
         hopData: null
       });
 
-      // Solid crisp center cyan jewel
+      // Solid crisp center blue jewel
       list.push({
         lat: myLocation.lat,
         lng: myLocation.lon,
-        color: '#38bdf8',
+        color: '#3b82f6',
         radius: 0.16,
         altitude: 0.009,
         label: tooltip,
@@ -142,27 +184,25 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
       });
     }
 
-    // Trace Hops
+    // Trace Hops with 2D Map Color System
     processedHops.forEach((hop, idx) => {
       const isSelected = (selectedHop && selectedHop.hop === hop.hop) || (hoveredHop && hoveredHop.hop === hop.hop);
       const isLast = idx === processedHops.length - 1;
-
-      const themeColor = isSelected ? '#fbbf24' : (isLast ? '#34d399' : '#10b981');
-      const haloColor = isSelected ? 'rgba(251, 191, 36, 0.45)' : (isLast ? 'rgba(52, 211, 153, 0.35)' : 'rgba(16, 185, 129, 0.25)');
+      const theme = getHopTheme(hop, isSelected, isLast);
 
       const tooltip = getTooltip({
         title: `Hop #${hop.hop}`,
         subtitle: `${hop.geo.city || 'Unknown City'}, ${hop.geo.country || ''}`,
         info: hop.geo.isp || 'Unknown ISP',
         latency: hop.rtt,
-        color: themeColor
+        color: theme.color
       });
 
       // Outer ambient glowing halo
       list.push({
         lat: hop.geo.lat,
         lng: hop.geo.lon,
-        color: haloColor,
+        color: theme.halo,
         radius: isSelected ? 0.48 : (isLast ? 0.38 : 0.28),
         altitude: 0.006,
         label: tooltip,
@@ -173,7 +213,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
       list.push({
         lat: hop.geo.lat,
         lng: hop.geo.lon,
-        color: themeColor,
+        color: theme.color,
         radius: isSelected ? 0.22 : (isLast ? 0.18 : 0.13),
         altitude: 0.009,
         label: tooltip,
@@ -184,42 +224,32 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     return list;
   }, [processedHops, selectedHop, hoveredHop, myLocation]);
 
-  // Trace Arcs: Pure WebGL glowing laser lines with dynamic directional pulses
+  // Trace Arcs: Pure WebGL glowing laser lines with dynamic directional pulses and node colors
   const arcsData = useMemo(() => {
     const arcs = [];
     let prevPoint = null;
 
     if (myLocation?.lat && myLocation?.lon && processedHops.length > 0) {
-      prevPoint = { lat: myLocation.lat, lng: myLocation.lon, isMe: true };
+      prevPoint = { lat: myLocation.lat, lng: myLocation.lon, color: '#3b82f6', isMe: true };
     }
 
     processedHops.forEach((hop, idx) => {
-      const currentPoint = { lat: hop.geo.lat, lng: hop.geo.lon, hop };
+      const isSelected = (selectedHop && selectedHop.hop === hop.hop) || (hoveredHop && hoveredHop.hop === hop.hop);
+      const isLast = idx === processedHops.length - 1;
+      const theme = getHopTheme(hop, isSelected, isLast);
+      const currentPoint = { lat: hop.geo.lat, lng: hop.geo.lon, color: theme.color, hop };
+
       if (prevPoint) {
         const distKm = getDistanceKm(prevPoint.lat, prevPoint.lng, currentPoint.lat, currentPoint.lng);
         // Dynamic arc height: smooth power curve so local hops don't shoot into orbit, but long hops arch gracefully
         const arcAlt = Math.max(0.012, Math.min(0.28, Math.pow(distKm / 10000, 0.55) * 0.24));
 
-        const isCurrentSelected = (selectedHop && selectedHop.hop === hop.hop) || (hoveredHop && hoveredHop.hop === hop.hop);
+        const isCurrentSelected = isSelected;
         const isPrevSelected = prevPoint.hop && ((selectedHop && selectedHop.hop === prevPoint.hop.hop) || (hoveredHop && hoveredHop.hop === prevPoint.hop.hop));
         const isHighlight = isCurrentSelected || isPrevSelected;
-        const isFirst = !!prevPoint.isMe;
-        const isLast = idx === processedHops.length - 1;
 
-        // Visual progression: Gateway (cyan) -> Hop 1 -> ... -> Destination (mint)
-        let strokeColor;
-        if (isHighlight) {
-          strokeColor = isPrevSelected 
-            ? ['rgba(251, 191, 36, 0.95)', 'rgba(52, 211, 153, 0.85)'] 
-            : ['rgba(16, 185, 129, 0.85)', 'rgba(251, 191, 36, 0.95)'];
-        } else if (isFirst) {
-          strokeColor = ['rgba(56, 189, 248, 0.95)', 'rgba(16, 185, 129, 0.95)'];
-        } else if (isLast) {
-          strokeColor = ['rgba(16, 185, 129, 0.7)', 'rgba(52, 211, 153, 1)'];
-        } else {
-          // Forward gradient pointing in direction of network packets
-          strokeColor = ['rgba(16, 185, 129, 0.45)', 'rgba(52, 211, 153, 0.95)'];
-        }
+        // Visual progression: from previous node color to current node color!
+        const strokeColor = [prevPoint.color, currentPoint.color];
 
         arcs.push({
           startLat: prevPoint.lat,
@@ -228,7 +258,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
           endLng: currentPoint.lng,
           altitude: arcAlt,
           color: strokeColor,
-          stroke: isHighlight ? 0.26 : 0.14,
+          stroke: isHighlight ? 0.28 : 0.15,
           name: `Hop ${hop.hop}`
         });
       }
@@ -246,7 +276,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
         lat: myLocation.lat,
         lng: myLocation.lon,
         text: 'START',
-        color: '#38bdf8',
+        color: '#3b82f6',
         size: 0.36,
         altitude: 0.016,
       });
@@ -254,11 +284,13 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
 
     if (processedHops.length > 0) {
       const last = processedHops[processedHops.length - 1];
+      const isSelected = (selectedHop && selectedHop.hop === last.hop) || (hoveredHop && hoveredHop.hop === last.hop);
+      const theme = getHopTheme(last, isSelected, true);
       list.push({
         lat: last.geo.lat,
         lng: last.geo.lon,
         text: 'TARGET',
-        color: '#34d399',
+        color: theme.color,
         size: 0.36,
         altitude: 0.016,
       });
@@ -272,7 +304,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
           lat: matched.geo.lat,
           lng: matched.geo.lon,
           text: `#${matched.hop}`,
-          color: '#fbbf24',
+          color: '#f59e0b',
           size: 0.40,
           altitude: 0.02,
         });
@@ -280,7 +312,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     }
 
     return list;
-  }, [processedHops, myLocation, selectedHop]);
+  }, [processedHops, myLocation, selectedHop, hoveredHop]);
 
   // Subtle pulsing radar ripples for user, destination, and selected hop
   const ringsData = useMemo(() => {
@@ -290,7 +322,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
       rings.push({
         lat: myLocation.lat,
         lng: myLocation.lon,
-        color: () => (t) => `rgba(56, 189, 248, ${Math.max(0, 0.75 * (1 - t))})`,
+        color: () => (t) => `rgba(59, 130, 246, ${Math.max(0, 0.75 * (1 - t))})`,
         maxR: 1.5,
         propagationSpeed: 1.0,
         repeatPeriod: 2200,
@@ -303,7 +335,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
       rings.push({
         lat: matched.geo.lat,
         lng: matched.geo.lon,
-        color: () => (t) => `rgba(251, 191, 36, ${Math.max(0, 0.85 * (1 - t))})`,
+        color: () => (t) => `rgba(245, 158, 11, ${Math.max(0, 0.85 * (1 - t))})`,
         maxR: 2.0,
         propagationSpeed: 1.5,
         repeatPeriod: 1200,
@@ -311,6 +343,8 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
       });
     } else if (processedHops.length > 0) {
       const last = processedHops[processedHops.length - 1];
+      const isSelected = (selectedHop && selectedHop.hop === last.hop) || (hoveredHop && hoveredHop.hop === last.hop);
+      const theme = getHopTheme(last, isSelected, true);
       rings.push({
         lat: last.geo.lat,
         lng: last.geo.lon,
@@ -323,7 +357,7 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
     }
 
     return rings;
-  }, [processedHops, selectedHop, myLocation]);
+  }, [processedHops, selectedHop, hoveredHop, myLocation]);
 
   // Explicitly sync layers on real-time streaming updates
   useEffect(() => {
@@ -506,14 +540,22 @@ export default function GlobeView({ hops, selectedHop, setSelectedHop, hoveredHo
             </div>
           </div>
 
-          {selectedHop && (
-            <div className="flex items-center gap-2 bg-amber-950/70 border border-amber-500/40 rounded-lg px-3 py-1.5 backdrop-blur-md shadow-xl text-xs font-mono text-amber-300 pointer-events-auto">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
-              <span className="font-bold">Hop #{selectedHop.hop}:</span>
-              <span>{selectedHop.geo?.city || 'Unknown'}, {selectedHop.geo?.country || ''}</span>
-              {selectedHop.rtt && <span className="text-amber-400/80 font-semibold">({selectedHop.rtt}ms)</span>}
-            </div>
-          )}
+          {selectedHop && (() => {
+            const matched = processedHops.find(h => h.hop === selectedHop.hop) || selectedHop;
+            const isLast = processedHops.length > 0 && matched.hop === processedHops[processedHops.length - 1].hop;
+            const theme = getHopTheme(matched, true, isLast);
+            return (
+              <div 
+                className="flex items-center gap-2 bg-gray-950/85 border rounded-lg px-3 py-1.5 backdrop-blur-md shadow-xl text-xs font-mono pointer-events-auto"
+                style={{ borderColor: theme.color, color: theme.color }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full animate-ping" style={{ backgroundColor: theme.color }}></span>
+                <span className="font-bold">Hop #{selectedHop.hop}:</span>
+                <span className="text-gray-200">{selectedHop.geo?.city || 'Unknown'}, {selectedHop.geo?.country || ''}</span>
+                {selectedHop.rtt && <span className="opacity-80 font-semibold">({selectedHop.rtt}ms)</span>}
+              </div>
+            );
+          })()}
         </div>
       )}
 
