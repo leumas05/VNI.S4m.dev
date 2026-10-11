@@ -23,7 +23,9 @@ third parties:
 
 3. react-globe.gl & three-globe
    - Copyright (c) 2019-2026 Vasco Asturiano
-   - Website: https://github.com/vasturiano/three-globe
+   - Repositories:
+     * react-globe.gl: https://github.com/vasturiano/react-globe.gl
+     * three-globe: https://github.com/vasturiano/three-globe
    - License: MIT License
 
 4. Leaflet & React-Leaflet
