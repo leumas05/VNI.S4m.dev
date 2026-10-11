@@ -489,20 +489,18 @@ export default function LiveRadarPanel({
                       <span>DiG</span>
                     </button>
 
-                    {conn.remotePort === 443 && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDig && onDig({ ip: conn.remoteIp, hostname: conn.process, geo: conn.geo, initialTab: 'ssl' });
-                        }}
-                        className="px-2 py-0.5 rounded bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 text-gray-300 hover:text-emerald-400 transition cursor-pointer flex items-center gap-1"
-                        title={`SSL-kontroll för ${conn.remoteIp}`}
-                      >
-                        <ShieldCheck size={10} className="text-emerald-400" />
-                        <span>SSL</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDig && onDig({ ip: conn.remoteIp, hostname: conn.process, geo: conn.geo, initialTab: 'ssl' });
+                      }}
+                      className="px-2 py-0.5 rounded bg-gray-900 hover:bg-gray-800 border border-gray-800 hover:border-gray-700 text-gray-300 hover:text-emerald-400 transition cursor-pointer flex items-center gap-1"
+                      title={`SSL-kontroll för ${conn.remoteIp}`}
+                    >
+                      <ShieldCheck size={10} className="text-emerald-400" />
+                      <span>SSL</span>
+                    </button>
                   </div>
                 </div>
               </div>

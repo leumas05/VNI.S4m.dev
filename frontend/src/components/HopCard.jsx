@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Network, AlertCircle, ArrowRight, Copy, Check, Activity, Terminal } from 'lucide-react';
+import { Network, AlertCircle, ArrowRight, Copy, Check, Activity, Terminal, ShieldCheck } from 'lucide-react';
 
 const CopyableRow = ({ label, value, copyText, mono = false, className = '', title = "Click to copy" }) => {
     const [copied, setCopied] = useState(false);
@@ -217,6 +217,19 @@ export default function HopCard({ hop, isSelected, onClick, pastHop, compareMode
                  <Terminal size={12} className="text-sky-400 group-hover:text-sky-300" />
                  <span>Dig</span>
                </button>
+               {!isPrivate && !hop.dropped && (
+                 <button
+                   onClick={(e) => {
+                     e.stopPropagation();
+                     if (onDig) onDig({ ...hop, initialTab: 'ssl' });
+                   }}
+                   className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-gray-950/80 hover:bg-emerald-950 text-gray-400 hover:text-emerald-400 border border-gray-700/80 hover:border-emerald-500/60 text-[11px] font-mono transition cursor-pointer shadow-sm group"
+                   title={`SSL-kontroll för ${hop.ip}`}
+                 >
+                   <ShieldCheck size={12} className="text-emerald-400" />
+                   <span>SSL</span>
+                 </button>
+               )}
                <button
                  onClick={(e) => {
                    e.stopPropagation();
