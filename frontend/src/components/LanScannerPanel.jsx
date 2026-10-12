@@ -380,18 +380,20 @@ export default function LanScannerPanel({
                     <span className="text-[10px]">Ping</span>
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setXmlModalDevice(gateway);
-                  }}
-                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition flex items-center gap-1"
-                  title="Visa UPnP / SSDP XML-beskrivning"
-                >
-                  <FileCode size={11} className={gateway.ssdp ? 'text-sky-400' : 'text-gray-400'} />
-                  <span className="text-[10px]">XML</span>
-                </button>
+                {gateway.ssdp && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setXmlModalDevice(gateway);
+                    }}
+                    className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition flex items-center gap-1 cursor-pointer"
+                    title="Visa UPnP / SSDP XML-beskrivning"
+                  >
+                    <FileCode size={11} className="text-sky-400" />
+                    <span className="text-[10px]">XML</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -662,18 +664,20 @@ export default function LanScannerPanel({
                         <span className="text-[10px]">mDNS</span>
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setXmlModalDevice(dev);
-                      }}
-                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition flex items-center gap-1 cursor-pointer"
-                      title="Visa UPnP / SSDP XML-beskrivning"
-                    >
-                      <FileCode size={11} className={dev.ssdp ? 'text-sky-400' : 'text-gray-400'} />
-                      <span className="text-[10px]">XML</span>
-                    </button>
+                    {dev.ssdp && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setXmlModalDevice(dev);
+                        }}
+                        className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition flex items-center gap-1 cursor-pointer"
+                        title="Visa UPnP / SSDP XML-beskrivning"
+                      >
+                        <FileCode size={11} className="text-sky-400" />
+                        <span className="text-[10px]">XML</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={(e) => {

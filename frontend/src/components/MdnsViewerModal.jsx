@@ -509,3 +509,4 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
     </div>
   );
 }
+

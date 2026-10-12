@@ -628,15 +628,17 @@ export default function LanTopologyView({
                   <span className="text-[10px]">mDNS</span>
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => setXmlModalDevice(selectedDevice)}
-                className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition text-[11px] font-mono flex items-center gap-1 cursor-pointer"
-                title="Visa UPnP / SSDP XML"
-              >
-                <FileCode size={11} className={selectedDevice.ssdp ? 'text-sky-400' : 'text-gray-400'} />
-                <span className="text-[10px]">XML</span>
-              </button>
+              {selectedDevice.ssdp && (
+                <button
+                  type="button"
+                  onClick={() => setXmlModalDevice(selectedDevice)}
+                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition text-[11px] font-mono flex items-center gap-1 cursor-pointer"
+                  title="Visa UPnP / SSDP XML"
+                >
+                  <FileCode size={11} className="text-sky-400" />
+                  <span className="text-[10px]">XML</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => copyToClipboard(selectedDevice.ip, `pop-${selectedDevice.id}`)}

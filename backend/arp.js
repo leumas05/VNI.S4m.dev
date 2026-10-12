@@ -339,7 +339,7 @@ function getArpTable() {
 }
 
 // SSDP UPnP device friendlyName & XML discovery
-function discoverSsdpNames(timeoutMs = 1500, localIp = null) {
+function discoverSsdpNames(timeoutMs = 1600, localIp = null) {
   return new Promise((resolve) => {
     let client;
     try {
@@ -369,8 +369,34 @@ function discoverSsdpNames(timeoutMs = 1500, localIp = null) {
           client.setMulticastInterface(localIp);
         } catch (e) {}
       }
-      const query = 'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: ssdp:all\r\n\r\n';
-      client.send(Buffer.from(query), 1900, '239.255.255.250');
+
+      const queries = [
+        'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: ssdp:all\r\n\r\n',
+        'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: upnp:rootdevice\r\n\r\n'
+      ];
+
+      // Burst 1 (immediate)
+      for (const q of queries) {
+        try { client.send(Buffer.from(q), 1900, '239.255.255.250'); } catch (e) {}
+      }
+
+      // Burst 2 (after 250ms) to ensure slow or sleeping Wi-Fi devices are caught
+      setTimeout(() => {
+        try {
+          for (const q of queries) {
+            client.send(Buffer.from(q), 1900, '239.255.255.250');
+          }
+        } catch (e) {}
+      }, 250);
+
+      // Burst 3 (after 500ms)
+      setTimeout(() => {
+        try {
+          for (const q of queries) {
+            client.send(Buffer.from(q), 1900, '239.255.255.250');
+          }
+        } catch (e) {}
+      }, 500);
     });
 
     setTimeout(async () => {
@@ -378,21 +404,29 @@ function discoverSsdpNames(timeoutMs = 1500, localIp = null) {
       const results = {};
       await Promise.all(
         Object.entries(discovered).map(async ([ip, locUrl]) => {
-          try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 1000);
-            const res = await fetch(locUrl, { signal: controller.signal });
-            clearTimeout(timer);
-            const xml = await res.text();
-            const fnMatch = xml.match(/<friendlyName>([^<]+)<\/friendlyName>/i);
-            const mnMatch = xml.match(/<modelName>([^<]+)<\/modelName>/i);
-            results[ip] = {
-              name: fnMatch ? fnMatch[1].trim() : (mnMatch ? mnMatch[1].trim() : null),
-              model: mnMatch ? mnMatch[1].trim() : null,
-              location: locUrl,
-              rawXml: xml
-            };
-          } catch (e) {}
+          // Retry fetching location up to 2 times
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 900);
+              const res = await fetch(locUrl, { signal: controller.signal });
+              clearTimeout(timer);
+              if (res.ok) {
+                const xml = await res.text();
+                const fnMatch = xml.match(/<friendlyName>([^<]+)<\/friendlyName>/i);
+                const mnMatch = xml.match(/<modelName>([^<]+)<\/modelName>/i);
+                results[ip] = {
+                  name: fnMatch ? fnMatch[1].trim() : (mnMatch ? mnMatch[1].trim() : null),
+                  model: mnMatch ? mnMatch[1].trim() : null,
+                  location: locUrl,
+                  rawXml: xml
+                };
+                break;
+              }
+            } catch (e) {
+              if (attempt === 0) await new Promise(r => setTimeout(r, 120));
+            }
+          }
         })
       );
       resolve(results);
@@ -404,16 +438,20 @@ function discoverSsdpNames(timeoutMs = 1500, localIp = null) {
 async function fetchDeviceXml(ip, cachedLocation = null, cachedXml = null) {
   if (cachedXml) return { location: cachedLocation || `http://${ip}:1900/description.xml`, xml: cachedXml };
   if (cachedLocation) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 1200);
-      const res = await fetch(cachedLocation, { signal: controller.signal });
-      clearTimeout(timer);
-      if (res.ok) {
-        const xml = await res.text();
-        return { location: cachedLocation, xml };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 1000);
+        const res = await fetch(cachedLocation, { signal: controller.signal });
+        clearTimeout(timer);
+        if (res.ok) {
+          const xml = await res.text();
+          return { location: cachedLocation, xml };
+        }
+      } catch (e) {
+        if (attempt === 0) await new Promise(r => setTimeout(r, 100));
       }
-    } catch (e) {}
+    }
   }
 
   // Probe common UPnP / SSDP ports
@@ -430,7 +468,7 @@ async function fetchDeviceXml(ip, cachedLocation = null, cachedXml = null) {
   for (const url of probeUrls) {
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 800);
+      const timer = setTimeout(() => controller.abort(), 700);
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timer);
       if (res.ok) {
