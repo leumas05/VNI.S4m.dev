@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import XmlViewerModal from './XmlViewerModal';
 import MdnsViewerModal from './MdnsViewerModal';
+import DeviceInspectModal from './DeviceInspectModal';
 
 function getDeviceIcon(type) {
   switch (type) {
@@ -91,6 +92,7 @@ export default function LanScannerPanel({
   const [editValue, setEditValue] = useState('');
   const [xmlModalDevice, setXmlModalDevice] = useState(null);
   const [mdnsModalDevice, setMdnsModalDevice] = useState(null);
+  const [inspectModalDevice, setInspectModalDevice] = useState(null);
 
   // Sync nicknames across components
   React.useEffect(() => {
@@ -607,6 +609,15 @@ export default function LanScannerPanel({
                         </div>
                       )}
 
+                      {/* OS Fingerprint */}
+                      {dev.osFingerprint?.osName && (
+                        <div className="text-[10px] text-cyan-400/90 truncate mt-0.5 flex items-center gap-1">
+                          <Cpu size={10} className="text-cyan-400 shrink-0" />
+                          <span className="font-medium">{dev.osFingerprint.osName}</span>
+                          {dev.ttl && <span className="text-[9px] text-slate-500 font-mono">(TTL={dev.ttl})</span>}
+                        </div>
+                      )}
+
                       {dev.mdns?.services?.length > 0 && (
                         <div className="flex flex-wrap items-center gap-1 mt-1">
                           {dev.mdns.services.map((srv, sIdx) => (
@@ -635,7 +646,7 @@ export default function LanScannerPanel({
                         ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'
                         : 'bg-gray-800 text-gray-500'
                     }`}>
-                      {dev.latency !== null ? `${dev.latency} ms` : (dev.isAlive ? 'online' : 'silent')}
+                      {dev.latency !== null ? (dev.latency === 1 ? '<1 ms' : `${dev.latency} ms`) : (dev.isAlive ? 'online' : 'silent')}
                     </span>
                     <div className="flex items-center gap-1 font-mono text-[10px] bg-gray-950/90 border border-gray-700/80 px-2 py-0.5 rounded text-gray-200">
                       <span className="text-[9px] text-gray-400 font-bold">MAC:</span>
@@ -650,6 +661,18 @@ export default function LanScannerPanel({
                     {dev.deviceType} • {dev.type}
                   </span>
                   <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInspectModalDevice(dev);
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/30 hover:border-cyan-400/50 text-cyan-300 hover:text-cyan-100 transition flex items-center gap-1 cursor-pointer"
+                      title="Kör djup enhetsanalys & fingeravtryck (12/12 funktioner: OS, SNMP, Uptime, Portar, etc.)"
+                    >
+                      <Cpu size={11} className="text-cyan-400" />
+                      <span className="text-[10px] font-semibold">Analys</span>
+                    </button>
                     {dev.mdns && (
                       <button
                         type="button"
@@ -678,6 +701,7 @@ export default function LanScannerPanel({
                         <span className="text-[10px]">XML</span>
                       </button>
                     )}
+
                     <button
                       type="button"
                       onClick={(e) => {
@@ -750,6 +774,14 @@ export default function LanScannerPanel({
         isOpen={!!mdnsModalDevice}
         onClose={() => setMdnsModalDevice(null)}
         device={mdnsModalDevice}
+      />
+
+      {/* Deep Device Inspector Modal */}
+      <DeviceInspectModal
+        isOpen={!!inspectModalDevice}
+        onClose={() => setInspectModalDevice(null)}
+        device={inspectModalDevice}
+        apiBase={apiBase}
       />
     </div>
   );

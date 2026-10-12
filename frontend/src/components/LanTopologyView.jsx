@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import XmlViewerModal from './XmlViewerModal';
 import MdnsViewerModal from './MdnsViewerModal';
+import DeviceInspectModal from './DeviceInspectModal';
 
 function getDeviceIcon(type) {
   switch (type) {
@@ -86,6 +87,7 @@ export default function LanTopologyView({
   const [copiedId, setCopiedId] = useState(null);
   const [xmlModalDevice, setXmlModalDevice] = useState(null);
   const [mdnsModalDevice, setMdnsModalDevice] = useState(null);
+  const [inspectModalDevice, setInspectModalDevice] = useState(null);
   const [nicknames, setNicknames] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('vni_lan_nicknames')) || {};
@@ -591,9 +593,14 @@ export default function LanTopologyView({
                     <span className="text-[9px] text-gray-500 font-bold">MAC:</span>
                     <span className="font-bold tracking-wider text-amber-300">{selectedDevice.mac}</span>
                   </div>
+                  {selectedDevice.osFingerprint?.osName && (
+                    <span className="text-[10px] text-cyan-400 font-medium ml-1">
+                      • {selectedDevice.osFingerprint.osName}
+                    </span>
+                  )}
                   {selectedDevice.latency !== null && (
                     <span className="text-[10px] text-emerald-400 font-mono font-bold">
-                      {selectedDevice.latency} ms
+                      {selectedDevice.latency === 1 ? '<1 ms' : `${selectedDevice.latency} ms`}
                     </span>
                   )}
                 </div>
@@ -617,6 +624,16 @@ export default function LanTopologyView({
             </div>
 
             <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setInspectModalDevice(selectedDevice)}
+                className="px-2 py-0.5 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/30 hover:border-cyan-400/60 text-cyan-300 hover:text-cyan-100 transition text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                title="Kör djup enhetsanalys & fingeravtryck (12/12 funktioner: OS, SNMP, Uptime, Portar, etc.)"
+              >
+                <Cpu size={12} className="text-cyan-400" />
+                <span>Analys</span>
+              </button>
+
               {selectedDevice.mdns && (
                 <button
                   type="button"
@@ -773,6 +790,14 @@ export default function LanTopologyView({
         isOpen={!!mdnsModalDevice}
         onClose={() => setMdnsModalDevice(null)}
         device={mdnsModalDevice}
+      />
+
+      {/* Deep Device Inspector Modal */}
+      <DeviceInspectModal
+        isOpen={!!inspectModalDevice}
+        onClose={() => setInspectModalDevice(null)}
+        device={inspectModalDevice}
+        apiBase={apiBase}
       />
     </div>
   );

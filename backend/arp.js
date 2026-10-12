@@ -1,6 +1,7 @@
 const { exec, spawn } = require('child_process');
 const os = require('os');
 const dgram = require('dgram');
+const net = require('net');
 
 // Comprehensive MAC OUI database for instant offline vendor & device recognition
 // Format: 6-char hex prefix without delimiters (lowercase)
@@ -236,7 +237,7 @@ function getDefaultGateway() {
   });
 }
 
-// Quick parallel ping to measure latency to an IP
+// Quick parallel ping to measure latency and ICMP TTL to an IP
 function measurePing(ip, timeoutMs = 600) {
   const isWin = os.platform() === 'win32';
   const args = isWin ? ['-n', '1', '-w', String(timeoutMs), ip] : ['-c', '1', '-W', '1', ip];
@@ -248,18 +249,23 @@ function measurePing(ip, timeoutMs = 600) {
     child.on('close', code => {
       const timeMatch = output.match(/(?:time|tid)[=<](\d+(?:\.\d+)?) ?ms/i);
       const isLess1ms = /(?:time|tid)<1\s*ms/i.test(output);
-      const ttlMatch = output.match(/TTL=/i);
+      const ttlMatch = output.match(/TTL=(\d+)/i);
+      const ttl = ttlMatch ? parseInt(ttlMatch[1], 10) : null;
 
       if (timeMatch || isLess1ms) {
         const val = timeMatch ? parseFloat(timeMatch[1]) : 1;
-        resolve({ alive: true, latency: isLess1ms ? 1 : Math.round(val) });
+        resolve({ alive: true, latency: isLess1ms ? 1 : Math.round(val), ttl });
       } else if (ttlMatch && code === 0) {
-        resolve({ alive: true, latency: 1 });
+        resolve({ alive: true, latency: 1, ttl });
       } else {
-        resolve({ alive: code === 0 && !output.toLowerCase().includes('unreachable') && !output.toLowerCase().includes('inte nås'), latency: null });
+        resolve({
+          alive: code === 0 && !output.toLowerCase().includes('unreachable') && !output.toLowerCase().includes('inte nås'),
+          latency: null,
+          ttl: null
+        });
       }
     });
-    child.on('error', () => resolve({ alive: false, latency: null }));
+    child.on('error', () => resolve({ alive: false, latency: null, ttl: null }));
   });
 }
 
@@ -733,6 +739,605 @@ function discoverMdns(localIp, timeoutMs = 1800) {
   });
 }
 
+// ==========================================
+// Deep Fingerprinting & Diagnostic Probes
+// ==========================================
+
+// 1. NetBIOS Name Service Query (UDP 137)
+function queryNetbios(ip, timeoutMs = 500) {
+  return new Promise((resolve) => {
+    const nbnsQuery = Buffer.from([
+      0x13, 0x37, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x20, 0x43, 0x4b, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41,
+      0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41,
+      0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x00, 0x00, 0x21,
+      0x00, 0x01
+    ]);
+
+    const sock = dgram.createSocket('udp4');
+    let timer = null;
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      try { sock.close(); } catch (e) {}
+    };
+
+    timer = setTimeout(() => {
+      cleanup();
+      resolve(null);
+    }, timeoutMs);
+
+    sock.on('message', (msg) => {
+      cleanup();
+      try {
+        if (msg.length < 57) return resolve(null);
+        const numNames = msg.readUInt8(56);
+        const names = [];
+        let computerName = null;
+        let workgroup = null;
+        let offset = 57;
+
+        for (let i = 0; i < numNames && offset + 18 <= msg.length; i++) {
+          const rawName = msg.toString('ascii', offset, offset + 15).trim();
+          const nameType = msg.readUInt8(offset + 15);
+          names.push({ name: rawName, type: nameType });
+          if ((nameType === 0x00 || nameType === 0x20) && !computerName) {
+            computerName = rawName;
+          } else if (nameType === 0x00 && computerName && !workgroup) {
+            workgroup = rawName;
+          }
+          offset += 18;
+        }
+
+        resolve({
+          name: computerName || (names[0] ? names[0].name : null),
+          workgroup: workgroup || null,
+          names
+        });
+      } catch (e) {
+        resolve(null);
+      }
+    });
+
+    sock.on('error', () => { cleanup(); resolve(null); });
+
+    try {
+      sock.send(nbnsQuery, 137, ip, (err) => {
+        if (err) { cleanup(); resolve(null); }
+      });
+    } catch (e) {
+      cleanup();
+      resolve(null);
+    }
+  });
+}
+
+// 2. SNMP v1/v2c Query (UDP 161)
+const OID_SYS_DESCR = Buffer.from([0x2b, 0x06, 0x01, 0x02, 0x01, 0x01, 0x01, 0x00]);
+const OID_SYS_UPTIME = Buffer.from([0x2b, 0x06, 0x01, 0x02, 0x01, 0x01, 0x03, 0x00]);
+
+const snmpSysDescrPacket = Buffer.from([
+  0x30, 0x29, 0x02, 0x01, 0x00, 0x04, 0x06, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63,
+  0xa0, 0x1c, 0x02, 0x04, 0x12, 0x34, 0x56, 0x78, 0x02, 0x01, 0x00, 0x02, 0x01, 0x00,
+  0x30, 0x0e, 0x30, 0x0c, 0x06, 0x08, 0x2b, 0x06, 0x01, 0x02, 0x01, 0x01, 0x01, 0x00,
+  0x05, 0x00
+]);
+
+const snmpSysUpTimePacket = Buffer.from([
+  0x30, 0x29, 0x02, 0x01, 0x00, 0x04, 0x06, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63,
+  0xa0, 0x1c, 0x02, 0x04, 0x12, 0x34, 0x56, 0x79, 0x02, 0x01, 0x00, 0x02, 0x01, 0x00,
+  0x30, 0x0e, 0x30, 0x0c, 0x06, 0x08, 0x2b, 0x06, 0x01, 0x02, 0x01, 0x01, 0x03, 0x00,
+  0x05, 0x00
+]);
+
+function querySnmp(ip, timeoutMs = 700) {
+  return new Promise((resolve) => {
+    const sock = dgram.createSocket('udp4');
+    let timer = null;
+    let sysDescr = null;
+    let uptimeTicks = null;
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      try { sock.close(); } catch (e) {}
+    };
+
+    const finalize = () => {
+      let serialNumber = null;
+      let model = null;
+      let firmware = null;
+      let formatted = null;
+      let uptimeSeconds = null;
+
+      if (sysDescr) {
+        const snMatch = sysDescr.match(/SN:([A-Za-z0-9]+)/i);
+        if (snMatch) serialNumber = snMatch[1];
+        const pidMatch = sysDescr.match(/PID:([^,\n\]]+)/i);
+        if (pidMatch) model = pidMatch[1].trim();
+        const fnMatch = sysDescr.match(/FN:([A-Za-z0-9]+)/i);
+        if (fnMatch) firmware = fnMatch[1];
+      }
+
+      if (uptimeTicks !== null) {
+        uptimeSeconds = Math.floor(uptimeTicks / 100);
+        const days = Math.floor(uptimeSeconds / 86400);
+        const hours = Math.floor((uptimeSeconds % 86400) / 3600);
+        const mins = Math.floor((uptimeSeconds % 3600) / 60);
+        const secs = uptimeSeconds % 60;
+        formatted = `${days > 0 ? days + 'd ' : ''}${hours}h ${mins}m ${secs}s`;
+      }
+
+      resolve(sysDescr || uptimeTicks !== null ? {
+        sysDescr,
+        uptime: formatted ? { formatted, seconds: uptimeSeconds, ticks: uptimeTicks } : null,
+        serialNumber,
+        model,
+        firmware
+      } : null);
+    };
+
+    timer = setTimeout(() => {
+      cleanup();
+      finalize();
+    }, timeoutMs);
+
+    sock.on('message', (msg) => {
+      const descrOidIdx = msg.indexOf(OID_SYS_DESCR);
+      if (descrOidIdx !== -1) {
+        const valTagIdx = descrOidIdx + OID_SYS_DESCR.length;
+        if (msg[valTagIdx] === 0x04) {
+          let len = msg[valTagIdx + 1];
+          let offset = valTagIdx + 2;
+          if (len & 0x80) {
+            const numBytes = len & 0x7f;
+            len = 0;
+            for (let k = 0; k < numBytes; k++) len = (len * 256) + msg[offset++];
+          }
+          sysDescr = msg.toString('latin1', offset, offset + len).trim();
+        }
+      }
+
+      const uptimeOidIdx = msg.indexOf(OID_SYS_UPTIME);
+      if (uptimeOidIdx !== -1) {
+        const valTagIdx = uptimeOidIdx + OID_SYS_UPTIME.length;
+        if (msg[valTagIdx] === 0x43) {
+          const len = msg[valTagIdx + 1];
+          let ticks = 0;
+          for (let i = 0; i < len; i++) ticks = (ticks * 256) + msg[valTagIdx + 2 + i];
+          uptimeTicks = ticks;
+        }
+      }
+
+      if (sysDescr && uptimeTicks !== null) {
+        cleanup();
+        finalize();
+      }
+    });
+
+    sock.on('error', () => { cleanup(); resolve(null); });
+
+    try {
+      sock.send(snmpSysDescrPacket, 161, ip, () => {});
+      sock.send(snmpSysUpTimePacket, 161, ip, () => {});
+    } catch (e) {
+      cleanup();
+      resolve(null);
+    }
+  });
+}
+
+// 3. Fast Concurrent TCP Port Probing
+const DIAGNOSTIC_PORTS = [
+  { port: 21, service: 'FTP', category: 'Fildelning' },
+  { port: 22, service: 'SSH', category: 'Fjärradministration' },
+  { port: 53, service: 'DNS', category: 'Nätverkstjänst' },
+  { port: 80, service: 'HTTP', category: 'Webbportal' },
+  { port: 135, service: 'MS-RPC', category: 'Windows RPC' },
+  { port: 139, service: 'NetBIOS-SSN', category: 'SMB Fildelning' },
+  { port: 443, service: 'HTTPS', category: 'Säker webbportal' },
+  { port: 445, service: 'SMB', category: 'Windows Fildelning' },
+  { port: 554, service: 'RTSP', category: 'Videoström / Kamera' },
+  { port: 631, service: 'IPP', category: 'Nätverksutskrift' },
+  { port: 3389, service: 'RDP', category: 'Fjärrskrivbord' },
+  { port: 5000, service: 'UPnP / DSM', category: 'Synology / Kontroll' },
+  { port: 8008, service: 'Google Cast HTTP', category: 'Medieströmning' },
+  { port: 8009, service: 'Google Cast Control', category: 'Mediekontroll' },
+  { port: 8080, service: 'HTTP-Alt', category: 'Webbgränssnitt' },
+  { port: 9100, service: 'RAW JetDirect', category: 'Direktutskrift' }
+];
+
+function probeTcpPort(ip, port, timeoutMs = 400) {
+  return new Promise((resolve) => {
+    const s = new net.Socket();
+    s.setTimeout(timeoutMs);
+    s.on('connect', () => {
+      s.destroy();
+      resolve(true);
+    });
+    s.on('timeout', () => { s.destroy(); resolve(false); });
+    s.on('error', () => { s.destroy(); resolve(false); });
+    try {
+      s.connect(port, ip);
+    } catch (e) {
+      resolve(false);
+    }
+  });
+}
+
+async function probeTcpPorts(ip, customPorts = null, timeoutMs = 400) {
+  const portsToProbe = customPorts || DIAGNOSTIC_PORTS;
+  const results = await Promise.all(
+    portsToProbe.map(async (item) => {
+      const portNum = typeof item === 'number' ? item : item.port;
+      const serviceName = item.service || `Port ${portNum}`;
+      const category = item.category || 'Tjänst';
+      const isOpen = await probeTcpPort(ip, portNum, timeoutMs);
+      return {
+        port: portNum,
+        service: serviceName,
+        category,
+        open: isOpen
+      };
+    })
+  );
+  return results;
+}
+
+// 4. HTTP Banner Grabbing & Device Details Scraping
+async function inspectHttpBannersAndStatus(ip, openPortResults, vendor = '') {
+  const openPortNumbers = openPortResults.filter(p => p.open).map(p => p.port);
+  let serverBanner = null;
+  let title = null;
+  let consumableStatus = null;
+  let firmwareVersion = null;
+  let serialNumber = null;
+  let castInfo = null;
+
+  // Try HTTP banners on 80, 8080, 443
+  const webPorts = [80, 8080, 443].filter(p => openPortNumbers.includes(p));
+  if (webPorts.length > 0) {
+    const port = webPorts[0];
+    const proto = port === 443 ? 'https' : 'http';
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1200);
+      const res = await fetch(`${proto}://${ip}:${port}/`, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0 (VNI Device Inspector)' }
+      });
+      clearTimeout(timeout);
+      serverBanner = res.headers.get('server');
+      const text = await res.text();
+      const titleMatch = text.match(/<title[^>]*>([^<]+)<\/title>/i);
+      if (titleMatch) {
+        title = titleMatch[1].replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+    } catch (e) {}
+  }
+
+  // Google Cast eureka_info (port 8008)
+  if (openPortNumbers.includes(8008)) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1200);
+      const res = await fetch(`http://${ip}:8008/setup/eureka_info`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const json = await res.json();
+        castInfo = {
+          name: json.name || null,
+          modelName: json.model_name || null,
+          buildVersion: json.build_version || null,
+          releaseTrack: json.release_track || null,
+          uptimeSeconds: json.uptime ? Math.floor(json.uptime) : null,
+          ssid: json.ssid || null,
+          bssid: json.bssid || null
+        };
+        if (castInfo.buildVersion) firmwareVersion = `Cast build ${castInfo.buildVersion}`;
+      }
+    } catch (e) {}
+  }
+
+  // Printer specific supplies status & firmware
+  const isPrinter = openPortNumbers.includes(631) || openPortNumbers.includes(9100) ||
+    vendor.toLowerCase().includes('printer') || vendor.toLowerCase().includes('hp');
+
+  if (isPrinter && (openPortNumbers.includes(80) || openPortNumbers.includes(8080))) {
+    const pPort = openPortNumbers.includes(80) ? 80 : 8080;
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1200);
+      const res = await fetch(`http://${ip}:${pPort}/info_suppliesStatus.html`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const html = await res.text();
+        const pctMatch = html.match(/SupplyName[^>]*alignRight[^>]*>[\s\S]*?(\d+%\s*†?)/i) ||
+                         html.match(/(\d+%\s*†)/i) ||
+                         html.match(/(\d+%\s*kvar|\d+%\s*level|\d+%\s*toner)/i);
+        if (pctMatch) {
+          consumableStatus = {
+            tonerLevel: pctMatch[1].replace(/&nbsp;/g, ' ').replace('†', '').replace(/\s+/g, ' ').trim(),
+            details: 'Tonernivå (Kassett)'
+          };
+        }
+        const cartMatch = html.match(/([0-9]{10}-[0-9A-Z]{4})/);
+        if (cartMatch && consumableStatus) {
+          consumableStatus.cartridgeSerial = cartMatch[1];
+        }
+      }
+    } catch (e) {}
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1200);
+      const res = await fetch(`http://${ip}:${pPort}/info_configuration.html`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const html = await res.text();
+        const fwMatch = html.match(/(?:Firmware|Datecode|Version)[^<]*<[^>]*>([0-9]{8})/i) ||
+                        html.match(/([0-9]{8})/);
+        if (fwMatch && !firmwareVersion) {
+          firmwareVersion = `Datecode ${fwMatch[1]}`;
+        }
+      }
+    } catch (e) {}
+  }
+
+  return {
+    serverBanner,
+    title,
+    consumableStatus,
+    firmwareVersion,
+    serialNumber,
+    castInfo
+  };
+}
+
+// 5. Operating System Fingerprinting (TTL + Ports + Zeroconf + NetBIOS)
+function guessOsFingerprint({ ttl, vendor = '', mdns = null, ssdp = null, openPorts = [], netbios = null }) {
+  let osName = 'Okänt / Inbäddat OS';
+  let osFamily = 'Unknown';
+  let confidence = 'Låg';
+  let basis = [];
+
+  const openPortNumbers = openPorts.map(p => typeof p === 'object' ? p.port : p);
+  const vendorLower = (vendor || '').toLowerCase();
+  const mdnsTypes = mdns?.serviceTypes || [];
+
+  // Check TTL
+  if (ttl !== null && ttl !== undefined) {
+    if (ttl >= 100 && ttl <= 128) {
+      osName = 'Microsoft Windows';
+      osFamily = 'Windows';
+      confidence = 'Medel';
+      basis.push(`ICMP TTL=${ttl} (standardvärde för Windows NT-kärna)`);
+    } else if (ttl >= 50 && ttl <= 64) {
+      osName = 'Linux / Unix / RTOS';
+      osFamily = 'Unix/Linux';
+      confidence = 'Medel';
+      basis.push(`ICMP TTL=${ttl} (standardvärde för Linux / Unix / Darwin-kärna)`);
+    } else if (ttl >= 200 && ttl <= 255) {
+      osName = 'Nätverksstack / Cisco / Inbäddad RTOS';
+      osFamily = 'Embedded/Network';
+      confidence = 'Medel';
+      basis.push(`ICMP TTL=${ttl} (standardvärde för nätverks- och mikrostacks)`);
+    }
+  }
+
+  const hasSmb = openPortNumbers.includes(445) || openPortNumbers.includes(139);
+  const hasRdp = openPortNumbers.includes(3389);
+  const hasRpc = openPortNumbers.includes(135);
+  const hasSsh = openPortNumbers.includes(22);
+  const hasIpp = openPortNumbers.includes(631) || openPortNumbers.includes(9100);
+  const hasCast = openPortNumbers.includes(8008) || openPortNumbers.includes(8009) || mdnsTypes.some(t => t.includes('googlecast'));
+  const hasAirplay = mdnsTypes.some(t => t.includes('airplay') || t.includes('raop') || t.includes('companion-link'));
+
+  if (hasCast) {
+    osName = 'Google CastOS / Android TV';
+    osFamily = 'Android';
+    confidence = 'Hög';
+    basis.push('Google Cast-tjänst (port 8008/8009 / mDNS _googlecast) aktiv');
+  } else if (hasAirplay || vendorLower.includes('apple')) {
+    osName = 'Apple Darwin (iOS / iPadOS / macOS / tvOS)';
+    osFamily = 'Apple Darwin';
+    confidence = 'Hög';
+    basis.push('Apple mDNS Zeroconf / AirPlay-tjänster eller Apple MAC-adress');
+  } else if (hasIpp || vendorLower.includes('printer')) {
+    osName = 'Printer Embedded RTOS / CUPS';
+    osFamily = 'Embedded RTOS';
+    confidence = 'Hög';
+    basis.push('Skrivartjänster (IPP port 631 / RAW port 9100) eller skrivarhårdvara identifierad');
+  } else if (hasSmb && hasRpc) {
+    osName = 'Microsoft Windows (10 / 11 / Server)';
+    osFamily = 'Windows';
+    confidence = 'Hög';
+    basis.push('Öppna Windows-portar 135 (RPC) och 445 (SMB) verifierade');
+    if (hasRdp) basis.push('Fjärrskrivbord (RDP port 3389) öppen');
+  } else if (netbios && netbios.name && (osFamily === 'Windows' || ttl === 128)) {
+    osName = 'Microsoft Windows (NT-kärna)';
+    osFamily = 'Windows';
+    confidence = 'Hög';
+    basis.push(`Windows NetBIOS-namn identifierat: ${netbios.name}`);
+  } else if (hasSsh && (ttl === null || ttl <= 64)) {
+    osName = 'Linux Server / Raspberry Pi / OpenWrt';
+    osFamily = 'Linux';
+    confidence = 'Hög';
+    basis.push('SSH (port 22) öppen med Linux TTL');
+  } else if (vendorLower.includes('zaptec')) {
+    osName = 'Zaptec Charger OS (FreeRTOS / ESP-IDF)';
+    osFamily = 'Embedded RTOS';
+    confidence = 'Hög';
+    basis.push('Zaptec EV Charger hårdvaru-fingeravtryck');
+  } else if (vendorLower.includes('samsung') && (vendorLower.includes('oven') || vendorLower.includes('appliance'))) {
+    osName = 'Samsung Smart Appliance (Tizen RT / FreeRTOS)';
+    osFamily = 'Embedded IoT';
+    confidence = 'Hög';
+    basis.push('Samsung Smart Home IoT appliance');
+  } else if (vendorLower.includes('vestel') || vendorLower.includes('tcl') || vendorLower.includes('earda')) {
+    osName = 'Smart TV OS (Android TV / Linux)';
+    osFamily = 'Smart TV';
+    confidence = 'Hög';
+    basis.push('Smart TV SoC / DVB Display stack');
+  }
+
+  if (netbios && netbios.name && !basis.some(b => b.includes('NetBIOS'))) {
+    basis.push(`NetBIOS-namn: ${netbios.name}`);
+  }
+
+  return {
+    osName,
+    osFamily,
+    confidence,
+    ttl: ttl || null,
+    basis: basis.length > 0 ? basis.join(' • ') : 'Uppskattning baserad på hårdvara och MAC-adress'
+  };
+}
+
+// 6. Complete Single-Device Inspection
+async function inspectDevice(ip, mac = null, vendor = null) {
+  const startTime = Date.now();
+
+  const [pingRes, portResults, netbiosRes, snmpRes, mdnsMapResult, xmlRes] = await Promise.all([
+    measurePing(ip, 700),
+    probeTcpPorts(ip),
+    queryNetbios(ip, 600),
+    querySnmp(ip, 700),
+    discoverMdns(null, 700),
+    fetchDeviceXml(ip)
+  ]);
+
+  const mdnsInfo = mdnsMapResult ? mdnsMapResult[ip] || null : null;
+  let ssdpInfo = null;
+  if (xmlRes && xmlRes.xml) {
+    const fnMatch = xmlRes.xml.match(/<friendlyName>([^<]+)<\/friendlyName>/i);
+    const mnMatch = xmlRes.xml.match(/<modelName>([^<]+)<\/modelName>/i);
+    ssdpInfo = {
+      name: fnMatch ? fnMatch[1].trim() : (mnMatch ? mnMatch[1].trim() : null),
+      model: mnMatch ? mnMatch[1].trim() : null,
+      location: xmlRes.location,
+      rawXml: xmlRes.xml
+    };
+  }
+
+
+  const bannerInfo = await inspectHttpBannersAndStatus(ip, portResults, vendor || '');
+
+  const osFingerprint = guessOsFingerprint({
+    ttl: pingRes.ttl,
+    vendor,
+    mdns: mdnsInfo,
+    ssdp: ssdpInfo,
+    openPorts: portResults.filter(p => p.open),
+    netbios: netbiosRes
+  });
+
+  let uptime = null;
+  if (snmpRes && snmpRes.uptime) {
+    uptime = {
+      source: 'SNMP (sysUpTime)',
+      formatted: snmpRes.uptime.formatted,
+      seconds: snmpRes.uptime.seconds
+    };
+  } else if (bannerInfo.castInfo && bannerInfo.castInfo.uptimeSeconds) {
+    const s = bannerInfo.castInfo.uptimeSeconds;
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    uptime = {
+      source: 'Google Cast API (eureka_info)',
+      formatted: `${d > 0 ? d + 'd ' : ''}${h}h ${m}m ${s % 60}s`,
+      seconds: s
+    };
+  }
+
+  const networkCapabilities = [];
+  const mdnsTypes = mdnsInfo?.serviceTypes || [];
+  if (mdnsTypes.some(t => t.includes('airplay') || t.includes('raop'))) {
+    networkCapabilities.push({ id: 'airplay', label: 'Apple AirPlay', icon: 'Radio' });
+  }
+  if (mdnsTypes.some(t => t.includes('googlecast')) || portResults.some(p => p.port === 8008 && p.open)) {
+    networkCapabilities.push({ id: 'cast', label: 'Google Cast', icon: 'Tv' });
+  }
+  if (mdnsTypes.some(t => t.includes('spotify-connect'))) {
+    networkCapabilities.push({ id: 'spotify', label: 'Spotify Connect', icon: 'Music' });
+  }
+  if (mdnsTypes.some(t => t.includes('ipp') || t.includes('printer')) || portResults.some(p => (p.port === 631 || p.port === 9100) && p.open)) {
+    networkCapabilities.push({ id: 'print', label: 'IPP / AirPrint Utskrift', icon: 'Printer' });
+  }
+  if (portResults.some(p => p.port === 445 && p.open)) {
+    networkCapabilities.push({ id: 'smb', label: 'SMB Fildelning (Windows / Samba)', icon: 'Folder' });
+  }
+  if (portResults.some(p => p.port === 22 && p.open)) {
+    networkCapabilities.push({ id: 'ssh', label: 'SSH Shell', icon: 'Terminal' });
+  }
+  if (portResults.some(p => (p.port === 80 || p.port === 443 || p.port === 8080) && p.open)) {
+    networkCapabilities.push({ id: 'web', label: 'Web Management (HTTP/S)', icon: 'Globe' });
+  }
+
+  const deviceSpecific = {
+    printer: bannerInfo.consumableStatus ? {
+      tonerLevel: bannerInfo.consumableStatus.tonerLevel,
+      cartridgeSerial: bannerInfo.consumableStatus.cartridgeSerial || null,
+      details: bannerInfo.consumableStatus.details
+    } : null,
+    snmp: snmpRes ? {
+      sysDescr: snmpRes.sysDescr,
+      serialNumber: snmpRes.serialNumber,
+      model: snmpRes.model,
+      firmware: snmpRes.firmware
+    } : null,
+    upnp: ssdpInfo ? {
+      friendlyName: ssdpInfo.name,
+      modelName: ssdpInfo.model,
+      location: ssdpInfo.location,
+      rawXml: ssdpInfo.rawXml
+    } : null,
+    cast: bannerInfo.castInfo || null
+  };
+
+  const serialNumber = snmpRes?.serialNumber || null;
+  const firmware = snmpRes?.firmware || bannerInfo.firmwareVersion || null;
+  const modelName = snmpRes?.model || bannerInfo.title || mdnsInfo?.model || ssdpInfo?.model || null;
+
+  return {
+    ip,
+    mac,
+    vendor,
+    modelName,
+    ping: {
+      alive: pingRes.alive,
+      latency: pingRes.latency,
+      ttl: pingRes.ttl
+    },
+    names: {
+      mdns: mdnsInfo?.name || null,
+      netbios: netbiosRes?.name || null,
+      workgroup: netbiosRes?.workgroup || null,
+      hostname: mdnsInfo?.hostname || null,
+      webTitle: bannerInfo.title || null
+    },
+    osFingerprint,
+    ports: {
+      all: portResults,
+      openCount: portResults.filter(p => p.open).length,
+      open: portResults.filter(p => p.open)
+    },
+    banners: {
+      httpServer: bannerInfo.serverBanner || null,
+      webTitle: bannerInfo.title || null,
+      firmware,
+      serialNumber
+    },
+    networkCapabilities,
+    uptime,
+    deviceSpecific,
+    mdns: mdnsInfo,
+    ssdp: ssdpInfo,
+    inspectedAt: new Date().toISOString(),
+    durationMs: Date.now() - startTime
+  };
+}
+
 // Main function to scan LAN and produce enriched device tree
 async function scanLan(options = { sweep: true }) {
   const startTime = Date.now();
@@ -925,17 +1530,51 @@ async function scanLan(options = { sweep: true }) {
     return 0;
   });
 
-  // 6. Ping Gateway and client devices concurrently for quick latency checks
+  // 6. Ping Gateway and client devices concurrently for quick latency checks & OS / NetBIOS enrichment
   const pingTargets = [gatewayDevice, ...clientDevices];
   await Promise.all(
     pingTargets.map(async (dev) => {
       try {
-        const res = await measurePing(dev.ip, 600);
-        dev.latency = res.latency;
-        dev.isAlive = res.alive;
+        const [pingRes, nbRes] = await Promise.all([
+          measurePing(dev.ip, 600),
+          (!dev.friendlyName && !dev.isGateway && !dev.isThisDevice) ? queryNetbios(dev.ip, 400) : Promise.resolve(null)
+        ]);
+
+        dev.latency = pingRes.latency;
+        dev.isAlive = pingRes.alive;
+        dev.ttl = pingRes.ttl;
+
+        if (nbRes && nbRes.name) {
+          dev.netbiosName = nbRes.name;
+          dev.workgroup = nbRes.workgroup;
+          if (!dev.friendlyName || dev.hostname === dev.ip) {
+            dev.hostname = nbRes.name;
+          }
+        }
+
+        // Quick OS fingerprint for table/card view
+        dev.osFingerprint = guessOsFingerprint({
+          ttl: pingRes.ttl,
+          vendor: dev.vendor,
+          mdns: dev.mdns,
+          ssdp: dev.ssdp,
+          openPorts: [],
+          netbios: nbRes
+        });
+
+        // Quick network capabilities tags
+        const caps = [];
+        const mdnsTypes = dev.mdns?.serviceTypes || [];
+        if (mdnsTypes.some(t => t.includes('airplay') || t.includes('raop'))) caps.push('AirPlay');
+        if (mdnsTypes.some(t => t.includes('googlecast'))) caps.push('Cast');
+        if (mdnsTypes.some(t => t.includes('spotify-connect'))) caps.push('Spotify');
+        if (mdnsTypes.some(t => t.includes('ipp') || t.includes('printer'))) caps.push('Print');
+        if (dev.ssdp) caps.push('UPnP');
+        dev.networkCapabilities = caps;
       } catch (e) {
         dev.latency = null;
         dev.isAlive = false;
+        dev.ttl = null;
       }
     })
   );
@@ -963,5 +1602,11 @@ module.exports = {
   measurePing,
   lookupVendor,
   formatMac,
-  fetchDeviceXml
+  fetchDeviceXml,
+  inspectDevice,
+  queryNetbios,
+  querySnmp,
+  probeTcpPorts,
+  guessOsFingerprint
 };
+

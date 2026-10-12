@@ -5,7 +5,7 @@ const { runTraceroute } = require('./traceroute');
 const { performDig } = require('./dns');
 const { checkSsl } = require('./ssl');
 const { getLiveConnections } = require('./netstat');
-const { scanLan, fetchDeviceXml } = require('./arp');
+const { scanLan, fetchDeviceXml, inspectDevice } = require('./arp');
 
 const path = require('path');
 const readline = require('readline');
@@ -214,6 +214,22 @@ app.get('/api/device-xml', async (req, res) => {
         }
     } catch (err) {
         res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.get('/api/device-inspect', async (req, res) => {
+    const ip = req.query.ip;
+    if (!ip || !/^[0-9\.]+$/.test(ip)) {
+        return res.status(400).json({ ok: false, error: 'Valid target IP is required' });
+    }
+    const mac = req.query.mac || null;
+    const vendor = req.query.vendor || null;
+
+    try {
+        const inspection = await inspectDevice(ip, mac, vendor);
+        res.json({ ok: true, inspection });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message || 'Failed to inspect device' });
     }
 });
 
