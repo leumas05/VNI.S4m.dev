@@ -178,22 +178,23 @@ function lookupVendor(mac) {
   return { vendor: 'Generic Device', isRandomized: false };
 }
 
-// Guess human-friendly device type based on vendor, role, and hostname
-function guessDeviceType({ vendor, isGateway, isThisDevice, hostname }) {
+function guessDeviceType({ vendor, isGateway, isThisDevice, hostname, mdnsServices = [] }) {
   if (isGateway) return 'router';
   if (isThisDevice) return 'desktop';
 
   const v = (vendor || '').toLowerCase();
   const h = (hostname || '').toLowerCase();
+  const servs = (mdnsServices || []).map(s => String(s).toLowerCase()).join(' ');
 
+  if (servs.includes('print') || servs.includes('ipp') || v.includes('printer') || h.includes('skrivare') || h.includes('laserjet') || h.includes('printer')) return 'printer';
+  if (servs.includes('google cast') || servs.includes('android tv') || v.includes('tv') || v.includes('vestel') || v.includes('earda') || h.includes('tv') || h.includes('chromecast')) return 'tv';
+  if (servs.includes('spotify') || servs.includes('airplay audio') || v.includes('sonos') || v.includes('audio')) return 'iot';
   if (v.includes('charger') || v.includes('zaptec') || h.includes('laddare') || h.includes('zaptec')) return 'ev_charger';
   if (v.includes('solar') || v.includes('battery') || h.includes('solpanel') || h.includes('batteri')) return 'solar';
   if (v.includes('oven') || v.includes('appliance') || h.includes('oven') || h.includes('ugn')) return 'iot';
-  if (v.includes('printer') || h.includes('skrivare') || h.includes('printer')) return 'printer';
   if (v.includes('mesh') || v.includes('deco') || h.includes('deco')) return 'mesh_node';
-  if (v.includes('tv') || v.includes('vestel') || v.includes('earda') || h.includes('tv') || h.includes('chromecast')) return 'tv';
   if (v.includes('playstation') || v.includes('sony') || v.includes('xbox') || v.includes('nintendo') || h.includes('playstation') || h.includes('xbox')) return 'console';
-  if (v.includes('espressif') || v.includes('philips') || v.includes('iot') || v.includes('hue') || v.includes('sonos') || v.includes('nest') || v.includes('amazon') || h.includes('iot')) return 'iot';
+  if (v.includes('espressif') || v.includes('philips') || v.includes('iot') || v.includes('hue') || v.includes('nest') || v.includes('amazon') || h.includes('iot')) return 'iot';
   if (v.includes('tp-link') || v.includes('netgear') || v.includes('asus') || v.includes('cisco') || v.includes('ubiquiti') || v.includes('linksys')) return 'network';
   if (v.includes('nas') || v.includes('synology') || v.includes('qnap') || h.includes('nas') || h.includes('server')) return 'server';
   if (v.includes('apple') || v.includes('samsung') || v.includes('galaxy') || v.includes('private mac') || h.includes('iphone') || h.includes('s23') || h.includes('a55') || h.includes('mobil')) return 'mobile';
@@ -337,7 +338,7 @@ function getArpTable() {
   });
 }
 
-// SSDP UPnP device friendlyName discovery
+// SSDP UPnP device friendlyName & XML discovery
 function discoverSsdpNames(timeoutMs = 1500) {
   return new Promise((resolve) => {
     let client;
@@ -380,16 +381,171 @@ function discoverSsdpNames(timeoutMs = 1500) {
             const xml = await res.text();
             const fnMatch = xml.match(/<friendlyName>([^<]+)<\/friendlyName>/i);
             const mnMatch = xml.match(/<modelName>([^<]+)<\/modelName>/i);
-            if (fnMatch) {
-              results[ip] = {
-                name: fnMatch[1].trim(),
-                model: mnMatch ? mnMatch[1].trim() : null
-              };
-            }
+            results[ip] = {
+              name: fnMatch ? fnMatch[1].trim() : (mnMatch ? mnMatch[1].trim() : null),
+              model: mnMatch ? mnMatch[1].trim() : null,
+              location: locUrl,
+              rawXml: xml
+            };
           } catch (e) {}
         })
       );
       resolve(results);
+    }, timeoutMs);
+  });
+}
+
+// Fetch UPnP / SSDP XML on demand (either from cached location or common local endpoints)
+async function fetchDeviceXml(ip, cachedLocation = null, cachedXml = null) {
+  if (cachedXml) return { location: cachedLocation || `http://${ip}:1900/description.xml`, xml: cachedXml };
+  if (cachedLocation) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 1200);
+      const res = await fetch(cachedLocation, { signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const xml = await res.text();
+        return { location: cachedLocation, xml };
+      }
+    } catch (e) {}
+  }
+
+  // Probe common UPnP / SSDP ports
+  const probeUrls = [
+    `http://${ip}:8008/ssdp/device-desc.xml`,
+    `http://${ip}:1900/description.xml`,
+    `http://${ip}:49152/wps_device.xml`,
+    `http://${ip}:49153/description.xml`,
+    `http://${ip}:52323/dmr.xml`,
+    `http://${ip}:5000/rootDesc.xml`,
+    `http://${ip}:80/description.xml`
+  ];
+
+  for (const url of probeUrls) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 800);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && (text.includes('<?xml') || text.includes('<root') || text.includes('<device'))) {
+          return { location: url, xml: text };
+        }
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+// Pure Node.js mDNS / Bonjour Service & Hostname Discovery (zero external deps)
+function discoverMdns(localIp, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    let socket;
+    try {
+      socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    } catch (e) {
+      return resolve({});
+    }
+
+    const mdnsMap = {};
+
+    socket.on('message', (msg, rinfo) => {
+      const ip = rinfo.address;
+      if (!mdnsMap[ip]) {
+        mdnsMap[ip] = { services: new Set(), name: null, model: null };
+      }
+
+      const str = msg.toString('latin1');
+
+      // Google Cast / Android TV TXT attributes (fn=Friendly Name, md=Model Name)
+      const fnMatch = str.match(/fn=([^\x00\r\n\t]+)/);
+      if (fnMatch && !mdnsMap[ip].name) {
+        mdnsMap[ip].name = fnMatch[1].trim();
+      }
+
+      const mdMatch = str.match(/md=([^\x00\r\n\t]+)/);
+      if (mdMatch && !mdnsMap[ip].model) {
+        mdnsMap[ip].model = mdMatch[1].replace(/[\x00-\x1f].*$/, '').trim();
+      }
+
+      // HP / Network Printer name patterns
+      const hpMatch = str.match(/(HP [A-Za-z0-9\- ]+(?:MFP|LaserJet|DeskJet|ENVY|OfficeJet)[A-Za-z0-9\- ]*)/);
+      if (hpMatch && !mdnsMap[ip].name) {
+        mdnsMap[ip].name = hpMatch[1].trim();
+      }
+
+      // Service detection
+      if (str.includes('_googlecast')) mdnsMap[ip].services.add('Google Cast');
+      if (str.includes('_spotify-connect')) mdnsMap[ip].services.add('Spotify Connect');
+      if (str.includes('_androidtvremote')) mdnsMap[ip].services.add('Android TV');
+      if (str.includes('_airplay')) mdnsMap[ip].services.add('AirPlay');
+      if (str.includes('_raop')) mdnsMap[ip].services.add('AirPlay Audio');
+      if (str.includes('_companion-link')) mdnsMap[ip].services.add('Apple Home');
+      if (str.includes('_ipp') || str.includes('_printer')) mdnsMap[ip].services.add('Printer (IPP)');
+      if (str.includes('_scanner')) mdnsMap[ip].services.add('Scanner');
+      if (str.includes('_smb')) mdnsMap[ip].services.add('Samba (SMB)');
+    });
+
+    socket.on('error', () => {
+      try { socket.close(); } catch (e) {}
+      resolve({});
+    });
+
+    socket.bind(5353, () => {
+      try {
+        if (localIp) {
+          socket.addMembership('224.0.0.251', localIp);
+          socket.setMulticastInterface(localIp);
+        } else {
+          socket.addMembership('224.0.0.251');
+        }
+      } catch (e) {}
+
+      // Build standard DNS query packet
+      const buildQuery = (domain) => {
+        const parts = domain.split('.');
+        const labels = [];
+        for (const p of parts) {
+          labels.push(Buffer.from([p.length]));
+          labels.push(Buffer.from(p, 'ascii'));
+        }
+        labels.push(Buffer.from([0]));
+        const header = Buffer.from([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+        const qTypeClass = Buffer.from([0, 12, 0, 1]); // QTYPE=PTR, QCLASS=IN
+        return Buffer.concat([header, Buffer.concat(labels), qTypeClass]);
+      };
+
+      const queries = [
+        '_services._dns-sd._udp.local',
+        '_googlecast._tcp.local',
+        '_airplay._tcp.local',
+        '_companion-link._tcp.local',
+        '_spotify-connect._tcp.local',
+        '_ipp._tcp.local',
+        '_printer._tcp.local'
+      ];
+
+      for (const q of queries) {
+        try {
+          const packet = buildQuery(q);
+          socket.send(packet, 5353, '224.0.0.251');
+        } catch (e) {}
+      }
+    });
+
+    setTimeout(() => {
+      try { socket.close(); } catch (e) {}
+      const finalResult = {};
+      for (const [ip, d] of Object.entries(mdnsMap)) {
+        finalResult[ip] = {
+          name: d.name,
+          model: d.model,
+          services: Array.from(d.services)
+        };
+      }
+      resolve(finalResult);
     }, timeoutMs);
   });
 }
@@ -422,15 +578,18 @@ async function scanLan(options = { sweep: true }) {
   const gwInfo = await getDefaultGateway();
   const gatewayIp = gwInfo?.gatewayIp || (localIp !== '127.0.0.1' ? `${localIp.split('.').slice(0, 3).join('.')}.1` : '192.168.1.1');
 
-  // 3. Sweep subnet and discover SSDP in parallel
+  // 3. Sweep subnet, discover SSDP and mDNS in parallel
   let ssdpMap = {};
+  let mdnsMap = {};
   if (options.sweep !== false && localIp !== '127.0.0.1') {
     const subnetPrefix = localIp.split('.').slice(0, 3).join('.');
-    const [_, ssdpResult] = await Promise.all([
+    const [_, ssdpResult, mdnsResult] = await Promise.all([
       sweepSubnet(subnetPrefix, 1, 254),
-      discoverSsdpNames(1500)
+      discoverSsdpNames(1500),
+      discoverMdns(localIp, 1500)
     ]);
     ssdpMap = ssdpResult || {};
+    mdnsMap = mdnsResult || {};
   }
 
   // 4. Read ARP table
@@ -455,7 +614,9 @@ async function scanLan(options = { sweep: true }) {
     isGateway: true,
     isThisDevice: false,
     latency: null,
-    type: 'dynamic'
+    type: 'dynamic',
+    ssdp: ssdpMap[gatewayIp] || null,
+    mdns: mdnsMap[gatewayIp] || null
   };
 
   // Identify "This Device" (host PC running VNI)
@@ -470,7 +631,9 @@ async function scanLan(options = { sweep: true }) {
     isGateway: false,
     isThisDevice: true,
     latency: 0,
-    type: 'local'
+    type: 'local',
+    ssdp: ssdpMap[localIp] || null,
+    mdns: mdnsMap[localIp] || null
   };
 
   // Build client devices
@@ -483,10 +646,24 @@ async function scanLan(options = { sweep: true }) {
 
     const { vendor, isRandomized } = lookupVendor(entry.mac);
     const ssdpInfo = ssdpMap[entry.ip];
-    const friendlyName = ssdpInfo?.name || null;
-    const dType = guessDeviceType({ vendor, isGateway: false, isThisDevice: false, hostname: friendlyName });
+    const mdnsInfo = mdnsMap[entry.ip];
 
-    // Derive display hostname
+    const friendlyName = mdnsInfo?.name || ssdpInfo?.name || null;
+    const modelName = mdnsInfo?.model || ssdpInfo?.model || null;
+    const mdnsServices = mdnsInfo?.services || [];
+
+    const dType = guessDeviceType({
+      vendor,
+      isGateway: false,
+      isThisDevice: false,
+      hostname: friendlyName,
+      mdnsServices
+    });
+
+    // Derive display hostname:
+    // 1. mDNS / SSDP friendly name if discovered
+    // 2. Specific vendor / appliance defaults
+    // 3. Raw IP
     let displayHostname = friendlyName || entry.ip;
     if (!friendlyName) {
       if (vendor.includes('Zaptec')) displayHostname = 'Zaptec Go (EV Charger)';
@@ -503,12 +680,24 @@ async function scanLan(options = { sweep: true }) {
       vendor: isRandomized ? `${vendor} (Randomized)` : vendor,
       hostname: displayHostname,
       friendlyName,
+      modelName,
       deviceType: dType,
       isGateway: false,
       isThisDevice: false,
       isRandomized,
       latency: null,
-      type: entry.type
+      type: entry.type,
+      ssdp: ssdpInfo ? {
+        name: ssdpInfo.name,
+        model: ssdpInfo.model,
+        location: ssdpInfo.location,
+        rawXml: ssdpInfo.rawXml
+      } : null,
+      mdns: mdnsInfo ? {
+        name: mdnsInfo.name,
+        model: mdnsInfo.model,
+        services: mdnsServices
+      } : null
     });
   }
 
@@ -559,5 +748,6 @@ module.exports = {
   scanLan,
   measurePing,
   lookupVendor,
-  formatMac
+  formatMac,
+  fetchDeviceXml
 };

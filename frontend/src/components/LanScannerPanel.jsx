@@ -17,8 +17,10 @@ import {
   Wifi,
   Radio,
   Edit2,
-  ExternalLink
+  ExternalLink,
+  FileCode
 } from 'lucide-react';
+import XmlViewerModal from './XmlViewerModal';
 
 function getDeviceIcon(type) {
   switch (type) {
@@ -85,6 +87,7 @@ export default function LanScannerPanel({
   });
   const [editingKey, setEditingKey] = useState(null);
   const [editValue, setEditValue] = useState('');
+  const [xmlModalDevice, setXmlModalDevice] = useState(null);
 
   // Sync nicknames across components
   React.useEffect(() => {
@@ -378,6 +381,18 @@ export default function LanScannerPanel({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    setXmlModalDevice(gateway);
+                  }}
+                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition flex items-center gap-1"
+                  title="Visa UPnP / SSDP XML-beskrivning"
+                >
+                  <FileCode size={11} className={gateway.ssdp ? 'text-sky-400' : 'text-gray-400'} />
+                  <span className="text-[10px]">XML</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
                     window.open(`http://${gateway.ip}`, '_blank', 'noopener,noreferrer');
                   }}
                   className="px-2 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 hover:text-emerald-200 transition flex items-center gap-1"
@@ -579,6 +594,26 @@ export default function LanScannerPanel({
                           {dev.vendor}
                         </div>
                       )}
+
+                      {/* Model & mDNS Services */}
+                      {dev.modelName && dev.modelName !== devTitle && (
+                        <div className="text-[10px] text-gray-400 truncate mt-0.5">
+                          Modell: {dev.modelName}
+                        </div>
+                      )}
+
+                      {dev.mdns?.services?.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
+                          {dev.mdns.services.map((srv, sIdx) => (
+                            <span
+                              key={sIdx}
+                              className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-indigo-950/80 border border-indigo-500/30 text-indigo-300"
+                            >
+                              {srv}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -603,6 +638,18 @@ export default function LanScannerPanel({
                     {dev.deviceType} • {dev.type}
                   </span>
                   <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setXmlModalDevice(dev);
+                      }}
+                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition flex items-center gap-1"
+                      title="Visa UPnP / SSDP XML-beskrivning"
+                    >
+                      <FileCode size={11} className={dev.ssdp ? 'text-sky-400' : 'text-gray-400'} />
+                      <span className="text-[10px]">XML</span>
+                    </button>
                     <button
                       type="button"
                       onClick={(e) => {
@@ -661,6 +708,13 @@ export default function LanScannerPanel({
           })
         )}
       </div>
+
+      {/* UPnP / SSDP XML Viewer Modal */}
+      <XmlViewerModal
+        isOpen={!!xmlModalDevice}
+        onClose={() => setXmlModalDevice(null)}
+        device={xmlModalDevice}
+      />
     </div>
   );
 }

@@ -5,7 +5,7 @@ const { runTraceroute } = require('./traceroute');
 const { performDig } = require('./dns');
 const { checkSsl } = require('./ssl');
 const { getLiveConnections } = require('./netstat');
-const { scanLan } = require('./arp');
+const { scanLan, fetchDeviceXml } = require('./arp');
 
 const path = require('path');
 const readline = require('readline');
@@ -196,6 +196,24 @@ app.get('/api/lan-scan', async (req, res) => {
         res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message || 'Failed to scan local network (ARP)' });
+    }
+});
+
+app.get('/api/device-xml', async (req, res) => {
+    const ip = req.query.ip;
+    if (!ip || !/^[0-9\.]+$/.test(ip)) {
+        return res.status(400).json({ ok: false, error: 'Valid target IP is required' });
+    }
+    const location = req.query.location || null;
+    try {
+        const result = await fetchDeviceXml(ip, location);
+        if (result && result.xml) {
+            res.json({ ok: true, ip, location: result.location, xml: result.xml });
+        } else {
+            res.status(404).json({ ok: false, error: 'No UPnP / SSDP XML found on this device' });
+        }
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
     }
 });
 

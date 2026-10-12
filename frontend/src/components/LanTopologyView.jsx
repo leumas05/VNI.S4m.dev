@@ -16,8 +16,10 @@ import {
   Check,
   Share2,
   CircleDot,
-  ExternalLink
+  ExternalLink,
+  FileCode
 } from 'lucide-react';
+import XmlViewerModal from './XmlViewerModal';
 
 function getDeviceIcon(type) {
   switch (type) {
@@ -79,6 +81,7 @@ export default function LanTopologyView({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [copiedId, setCopiedId] = useState(null);
+  const [xmlModalDevice, setXmlModalDevice] = useState(null);
   const [nicknames, setNicknames] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('vni_lan_nicknames')) || {};
@@ -590,10 +593,31 @@ export default function LanTopologyView({
                     </span>
                   )}
                 </div>
+                {selectedDevice.mdns?.services?.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1 mt-1">
+                    {selectedDevice.mdns.services.map((srv, sIdx) => (
+                      <span
+                        key={sIdx}
+                        className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-indigo-950 border border-indigo-500/40 text-indigo-300"
+                      >
+                        {srv}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setXmlModalDevice(selectedDevice)}
+                className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition text-[11px] font-mono flex items-center gap-1"
+                title="Visa UPnP / SSDP XML"
+              >
+                <FileCode size={11} className={selectedDevice.ssdp ? 'text-sky-400' : 'text-gray-400'} />
+                <span className="text-[10px]">XML</span>
+              </button>
               <button
                 type="button"
                 onClick={() => copyToClipboard(selectedDevice.ip, `pop-${selectedDevice.id}`)}
@@ -714,6 +738,13 @@ export default function LanTopologyView({
           boxShadow: 'inset 0 0 120px rgba(0,0,0,0.85)'
         }}
       ></div>
+
+      {/* UPnP / SSDP XML Viewer Modal */}
+      <XmlViewerModal
+        isOpen={!!xmlModalDevice}
+        onClose={() => setXmlModalDevice(null)}
+        device={xmlModalDevice}
+      />
     </div>
   );
 }
