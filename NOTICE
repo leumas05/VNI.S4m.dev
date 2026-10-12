@@ -41,6 +41,15 @@ developed or provided by third parties:
 6. IP Geolocation, ASN & Routing Data
    - Geolocation data provided by IP2Location.io (https://www.ip2location.io/)
    - Registry and WHOIS data provided by RIPE NCC RIPEstat (https://stat.ripe.net/)
+   - Regional Internet Registries (RIRs) referenced for WHOIS & IP delegation lookups:
+     * RIPE NCC (https://www.ripe.net/)
+     * ARIN (https://www.arin.net/)
+     * APNIC (https://www.apnic.net/)
+     * LACNIC (https://www.lacnic.net/)
+     * AFRINIC (https://afrinic.net/)
+   - External network intelligence references:
+     * DNSChecker (https://dnschecker.org/)
+     * NetworksDB (https://networksdb.io/)
 
 7. Lucide Icons
    - Copyright (c) 2022-2026 Lucide Contributors
@@ -57,7 +66,7 @@ developed or provided by third parties:
    - Vite: Copyright (c) 2019-2026 Evan You & Vite Contributors (MIT License)
    - Tailwind CSS: Copyright (c) Tailwind Labs, Inc. (MIT License)
 
-10. DNS Resolvers & Network Diagnostics
+10. DNS Resolvers & Cryptographic Diagnostics
     - DNS resolution powered by Node.js DNS subsystem (c-ares)
     - Preconfigured public resolvers referenced:
       * Cloudflare DNS (1.1.1.1)
@@ -65,3 +74,22 @@ developed or provided by third parties:
       * Quad9 DNS (9.9.9.9)
       * Cisco OpenDNS (208.67.222.222)
     - SSL/TLS cryptographic diagnostics powered by Node.js TLS / OpenSSL
+
+11. IEEE OUI & Hardware Vendor Database
+    - MAC address vendor prefix allocations compiled from IEEE Standards Association
+      (https://standards.ieee.org/) and Wireshark Manuf Database (https://www.wireshark.org/).
+    - Used for offline MAC-to-vendor resolution in LAN Scanner.
+
+12. Local Network Discovery & Diagnostic Protocols
+    - Implementations based on public IETF and open networking specifications:
+      * Multicast DNS (mDNS): RFC 6762
+      * DNS-Based Service Discovery (DNS-SD / Bonjour): RFC 6763
+      * Simple Service Discovery Protocol (SSDP / UPnP): UPnP Forum / ISO/IEC 29341
+      * NetBIOS Name Service (NBNS): RFC 1001 & RFC 1002
+      * Link-Local Multicast Name Resolution (LLMNR): RFC 4795
+      * Simple Network Management Protocol (SNMP) & MIBs: RFC 1157, RFC 1901, RFC 1213, RFC 3805, RFC 2790
+
+13. Backend Server & HTTP Libraries
+    - Express: Copyright (c) StrongLoop, Inc., OpenJS Foundation (MIT License)
+    - Axios: Copyright (c) Matt Zabriskie (MIT License)
+    - CORS: Copyright (c) Troy Goode (MIT License)
