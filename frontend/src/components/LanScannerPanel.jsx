@@ -26,6 +26,7 @@ import {
 import XmlViewerModal from './XmlViewerModal';
 import MdnsViewerModal from './MdnsViewerModal';
 import DeviceInspectModal from './DeviceInspectModal';
+import { formatOsName } from '../utils/formatters';
 
 function getDeviceIcon(type) {
   switch (type) {
@@ -668,7 +669,7 @@ export default function LanScannerPanel({
                       {dev.osFingerprint?.osName && (
                         <div className="text-[10px] text-cyan-400/90 truncate mt-0.5 flex items-center gap-1">
                           <Cpu size={10} className="text-cyan-400 shrink-0" />
-                          <span className="font-medium">{dev.osFingerprint.osName}</span>
+                          <span className="font-medium">{formatOsName(dev.osFingerprint.osName)}</span>
                           {dev.ttl && <span className="text-[9px] text-slate-500 font-mono">(TTL={dev.ttl})</span>}
                         </div>
                       )}

@@ -27,6 +27,7 @@ import {
 import XmlViewerModal from './XmlViewerModal';
 import MdnsViewerModal from './MdnsViewerModal';
 import DeviceInspectModal from './DeviceInspectModal';
+import { formatOsName } from '../utils/formatters';
 
 function getDeviceIcon(type) {
   switch (type) {
@@ -619,7 +620,7 @@ export default function LanTopologyView({
                   </div>
                   {selectedDevice.osFingerprint?.osName && (
                     <span className="text-[10px] text-cyan-400 font-medium ml-1">
-                      • {selectedDevice.osFingerprint.osName}
+                      • {formatOsName(selectedDevice.osFingerprint.osName)}
                     </span>
                   )}
                   {selectedDevice.latency !== null && (
