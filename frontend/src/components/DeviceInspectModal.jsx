@@ -24,6 +24,25 @@ import {
   HardDrive
 } from 'lucide-react';
 
+function formatConfidence(val) {
+  if (!val) return 'Estimated';
+  const v = String(val).trim().toLowerCase();
+  if (v === 'hög' || v === 'high') return 'High';
+  if (v === 'medel' || v === 'med' || v === 'medium') return 'Medium';
+  if (v === 'låg' || v === 'low') return 'Low';
+  return val;
+}
+
+function formatBasis(basis) {
+  if (!basis) return 'No specific heuristics confirmed';
+  return basis
+    .replace(/\bstandardmässig för\b/gi, 'standard default for')
+    .replace(/\bIdentifierad via\b/gi, 'Identified via')
+    .replace(/\bHårdvaru-OUI\b/gi, 'Hardware OUI')
+    .replace(/\bverifierad\b/gi, 'verified')
+    .replace(/\baktiv\b/gi, 'active');
+}
+
 export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = '' }) {
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'os' | 'ports' | 'hardware' | 'raw'
   const [loading, setLoading] = useState(false);
@@ -264,7 +283,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                     <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 font-mono text-[10px]">
                       TTL={os.ttl || ping.ttl || '–'}
                     </span>
-                    <span>Confidence: {os.confidence || 'Estimated'}</span>
+                    <span>Confidence: {formatConfidence(os.confidence)}</span>
                   </div>
                 </div>
 
@@ -451,7 +470,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                       {os.osName || 'Unknown Operating System'}
                     </h3>
                     <p className="text-xs text-slate-400 mt-1">
-                      Kernel Family: <span className="font-semibold text-slate-200">{os.osFamily || 'Unknown'}</span> • Confidence: <span className="font-semibold text-emerald-400">{os.confidence || 'Estimated'}</span>
+                      Kernel Family: <span className="font-semibold text-slate-200">{os.osFamily || 'Unknown'}</span> • Confidence: <span className="font-semibold text-emerald-400">{formatConfidence(os.confidence)}</span>
                     </p>
                   </div>
                   <div className="text-right">
@@ -466,7 +485,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                     Detection Basis & Heuristics
                   </h4>
                   <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 text-xs text-slate-300 font-mono leading-relaxed">
-                    {os.basis || 'No specific heuristics confirmed'}
+                    {formatBasis(os.basis)}
                   </div>
                 </div>
               </div>
