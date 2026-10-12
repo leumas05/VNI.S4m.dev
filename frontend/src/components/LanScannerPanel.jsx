@@ -452,18 +452,20 @@ export default function LanScannerPanel({
                     <span className="text-[10px]">XML</span>
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    window.open(`http://${gateway.ip}`, '_blank', 'noopener,noreferrer');
-                  }}
-                  className="px-2 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 hover:text-emerald-200 transition flex items-center gap-1"
-                  title="Open Router Web Admin Interface in browser"
-                >
-                  <ExternalLink size={11} />
-                  <span className="text-[10px] font-semibold">Web Admin</span>
-                </button>
+                {(gateway.webPortal || gateway.ip) && (
+                  <a
+                    href={gateway.webPortal || `http://${gateway.ip}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="px-2 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-emerald-100 transition flex items-center gap-1 cursor-pointer"
+                    title={`Open Router Web Portal (${gateway.webPortal || `http://${gateway.ip}`})`}
+                  >
+                    <Globe size={11} className="text-emerald-400" />
+                    <span className="text-[10px] font-semibold">Web Portal</span>
+                    <ExternalLink size={9} className="opacity-70" />
+                  </a>
+                )}
               </div>
             </div>
           </div>
@@ -756,6 +758,20 @@ export default function LanScannerPanel({
                         <FileCode size={11} className="text-sky-400" />
                         <span className="text-[10px]">XML</span>
                       </button>
+                    )}
+                    {dev.webPortal && (
+                      <a
+                        href={dev.webPortal}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="px-1.5 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-emerald-100 transition flex items-center gap-1 cursor-pointer"
+                        title={`Open device web portal (${dev.webPortal})`}
+                      >
+                        <Globe size={11} className="text-emerald-400" />
+                        <span className="text-[10px] font-semibold">Web Portal</span>
+                        <ExternalLink size={9} className="opacity-70" />
+                      </a>
                     )}
 
                     <button

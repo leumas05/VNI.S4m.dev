@@ -1429,6 +1429,18 @@ async function inspectDevice(ip, mac = null, vendor = null) {
     cast: bannerInfo.castInfo || null
   };
 
+  const openWebPorts = portResults.filter(p => p.open && [80, 443, 8080, 8443].includes(p.port)).map(p => p.port);
+  let webPortal = mdnsInfo?.adminUrl || null;
+  if (!webPortal) {
+    if (openWebPorts.includes(443)) webPortal = `https://${ip}`;
+    else if (openWebPorts.includes(80)) webPortal = `http://${ip}`;
+    else if (openWebPorts.includes(8443)) webPortal = `https://${ip}:8443`;
+    else if (openWebPorts.includes(8080)) webPortal = `http://${ip}:8080`;
+  }
+  if (webPortal) {
+    networkCapabilities.push({ id: 'web', label: 'Web Management Portal', icon: 'Globe', url: webPortal });
+  }
+
   const serialNumber = snmpRes?.serialNumber || null;
   const firmware = snmpRes?.firmware || bannerInfo.firmwareVersion || null;
   const modelName = snmpRes?.model || bannerInfo.title || mdnsInfo?.model || ssdpInfo?.model || null;
@@ -1438,6 +1450,7 @@ async function inspectDevice(ip, mac = null, vendor = null) {
     mac,
     vendor,
     modelName,
+    webPortal,
     ping: {
       alive: pingRes.alive,
       latency: pingRes.latency,
@@ -1664,14 +1677,15 @@ async function scanLan(options = { sweep: true }) {
     return 0;
   });
 
-  // 6. Ping Gateway and client devices concurrently for quick latency checks & OS / NetBIOS enrichment
+  // 6. Ping Gateway and client devices concurrently for quick latency checks, web portal discovery & OS / NetBIOS enrichment
   const pingTargets = [gatewayDevice, ...clientDevices];
   await Promise.all(
     pingTargets.map(async (dev) => {
       try {
-        const [pingRes, nbRes] = await Promise.all([
+        const [pingRes, nbRes, webPorts] = await Promise.all([
           measurePing(dev.ip, 600),
-          (!dev.friendlyName && !dev.isGateway && !dev.isThisDevice) ? queryNetbios(dev.ip, 400) : Promise.resolve(null)
+          (!dev.friendlyName && !dev.isGateway && !dev.isThisDevice) ? queryNetbios(dev.ip, 400) : Promise.resolve(null),
+          (!dev.isThisDevice) ? probeTcpPorts(dev.ip, [80, 443, 8080, 8443], 350) : Promise.resolve([])
         ]);
 
         dev.latency = pingRes.latency;
@@ -1686,13 +1700,31 @@ async function scanLan(options = { sweep: true }) {
           }
         }
 
+        // Web portal detection
+        const openWeb = (webPorts || []).filter(p => p.open).map(p => p.port);
+        let portalUrl = null;
+        if (dev.mdns?.adminUrl) {
+          portalUrl = dev.mdns.adminUrl;
+        } else if (openWeb.includes(443)) {
+          portalUrl = `https://${dev.ip}`;
+        } else if (openWeb.includes(80)) {
+          portalUrl = `http://${dev.ip}`;
+        } else if (openWeb.includes(8443)) {
+          portalUrl = `https://${dev.ip}:8443`;
+        } else if (openWeb.includes(8080)) {
+          portalUrl = `http://${dev.ip}:8080`;
+        } else if (dev.isGateway) {
+          portalUrl = `http://${dev.ip}`;
+        }
+        dev.webPortal = portalUrl;
+
         // Quick OS fingerprint for table/card view
         dev.osFingerprint = guessOsFingerprint({
           ttl: pingRes.ttl,
           vendor: dev.vendor,
           mdns: dev.mdns,
           ssdp: dev.ssdp,
-          openPorts: [],
+          openPorts: (webPorts || []).filter(p => p.open),
           netbios: nbRes
         });
 
@@ -1704,11 +1736,13 @@ async function scanLan(options = { sweep: true }) {
         if (mdnsTypes.some(t => t.includes('spotify-connect'))) caps.push('Spotify');
         if (mdnsTypes.some(t => t.includes('ipp') || t.includes('printer'))) caps.push('Print');
         if (dev.ssdp) caps.push('UPnP');
+        if (dev.webPortal) caps.push('Web');
         dev.networkCapabilities = caps;
       } catch (e) {
         dev.latency = null;
         dev.isAlive = false;
         dev.ttl = null;
+        dev.webPortal = dev.isGateway ? `http://${dev.ip}` : null;
       }
     })
   );

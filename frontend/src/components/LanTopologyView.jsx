@@ -22,7 +22,8 @@ import {
   Printer,
   Zap,
   Sun,
-  Gamepad2
+  Gamepad2,
+  Globe
 } from 'lucide-react';
 import XmlViewerModal from './XmlViewerModal';
 import MdnsViewerModal from './MdnsViewerModal';
@@ -680,6 +681,19 @@ export default function LanTopologyView({
                   <FileCode size={11} className="text-sky-400" />
                   <span className="text-[10px]">XML</span>
                 </button>
+              )}
+              {(selectedDevice.webPortal || (selectedDevice.isGateway && `http://${selectedDevice.ip}`)) && (
+                <a
+                  href={selectedDevice.webPortal || `http://${selectedDevice.ip}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-emerald-100 transition text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                  title={`Open device web portal (${selectedDevice.webPortal || `http://${selectedDevice.ip}`})`}
+                >
+                  <Globe size={11} className="text-emerald-400" />
+                  <span>Web Portal</span>
+                  <ExternalLink size={9} className="opacity-70" />
+                </a>
               )}
               <button
                 type="button"
