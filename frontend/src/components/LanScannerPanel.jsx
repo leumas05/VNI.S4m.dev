@@ -73,7 +73,8 @@ export default function LanScannerPanel({
   onSelectDevice,
   onPing,
   onDig,
-  onSslCheck
+  onSslCheck,
+  apiBase
 }) {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -714,6 +715,7 @@ export default function LanScannerPanel({
         isOpen={!!xmlModalDevice}
         onClose={() => setXmlModalDevice(null)}
         device={xmlModalDevice}
+        apiBase={apiBase}
       />
     </div>
   );

@@ -71,7 +71,8 @@ export default function LanTopologyView({
   lanData,
   selectedDevice,
   setSelectedDevice,
-  onPing
+  onPing,
+  apiBase
 }) {
   const containerRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 1000, height: 700 });
@@ -744,6 +745,7 @@ export default function LanTopologyView({
         isOpen={!!xmlModalDevice}
         onClose={() => setXmlModalDevice(null)}
         device={xmlModalDevice}
+        apiBase={apiBase}
       />
     </div>
   );

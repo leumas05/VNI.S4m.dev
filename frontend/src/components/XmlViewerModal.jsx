@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, ExternalLink, Download, FileCode, RefreshCw, AlertCircle } from 'lucide-react';
 
-export default function XmlViewerModal({ isOpen, onClose, device }) {
+const getApiBaseUrl = () => {
+  if (typeof window !== 'undefined' && (window.location.protocol === 'file:' || window.location.hostname === 'vni.s4m.dev' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return 'http://127.0.0.1:3001';
+  }
+  return '';
+};
+
+export default function XmlViewerModal({ isOpen, onClose, device, apiBase }) {
   const [loading, setLoading] = useState(false);
   const [xmlContent, setXmlContent] = useState('');
   const [xmlUrl, setXmlUrl] = useState('');
@@ -25,13 +32,14 @@ export default function XmlViewerModal({ isOpen, onClose, device }) {
       return;
     }
 
-    // Fetch XML on demand
+    // Fetch XML on demand from backend engine
     const loadXml = async () => {
       setLoading(true);
       setError(null);
       try {
+        const base = apiBase || getApiBaseUrl();
         const locParam = device.ssdp?.location ? `&location=${encodeURIComponent(device.ssdp.location)}` : '';
-        const res = await fetch(`/api/device-xml?ip=${device.ip}${locParam}`);
+        const res = await fetch(`${base}/api/device-xml?ip=${device.ip}${locParam}`);
         const data = await res.json();
         if (data.ok && data.xml) {
           setXmlContent(data.xml);
@@ -47,7 +55,7 @@ export default function XmlViewerModal({ isOpen, onClose, device }) {
     };
 
     loadXml();
-  }, [isOpen, device]);
+  }, [isOpen, device, apiBase]);
 
   if (!isOpen || !device) return null;
 

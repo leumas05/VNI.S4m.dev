@@ -40,6 +40,7 @@ export default function Sidebar({
   setLanAutoRefresh,
   selectedLanDevice,
   setSelectedLanDevice,
+  apiBase
 }) {
   const [input, setInput] = useState('');
   const [showHistory, setShowHistory] = useState(false);
@@ -226,6 +227,7 @@ export default function Sidebar({
           onPing={onPing}
           onDig={onDig}
           onSslCheck={onSslCheck}
+          apiBase={apiBase}
         />
       ) : activeMode === 'radar' ? (
         <LiveRadarPanel

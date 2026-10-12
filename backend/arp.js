@@ -339,7 +339,7 @@ function getArpTable() {
 }
 
 // SSDP UPnP device friendlyName & XML discovery
-function discoverSsdpNames(timeoutMs = 1500) {
+function discoverSsdpNames(timeoutMs = 1500, localIp = null) {
   return new Promise((resolve) => {
     let client;
     try {
@@ -364,6 +364,11 @@ function discoverSsdpNames(timeoutMs = 1500) {
     });
 
     client.bind(0, () => {
+      if (localIp) {
+        try {
+          client.setMulticastInterface(localIp);
+        } catch (e) {}
+      }
       const query = 'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: ssdp:all\r\n\r\n';
       client.send(Buffer.from(query), 1900, '239.255.255.250');
     });
@@ -585,11 +590,36 @@ async function scanLan(options = { sweep: true }) {
     const subnetPrefix = localIp.split('.').slice(0, 3).join('.');
     const [_, ssdpResult, mdnsResult] = await Promise.all([
       sweepSubnet(subnetPrefix, 1, 254),
-      discoverSsdpNames(1500),
+      discoverSsdpNames(1500, localIp),
       discoverMdns(localIp, 1500)
     ]);
     ssdpMap = ssdpResult || {};
     mdnsMap = mdnsResult || {};
+
+    // For devices detected with Google Cast / TV / DIAL services that didn't reply to SSDP multicast M-SEARCH, probe port 8008 directly
+    const candidateXmlIps = Object.keys(mdnsMap).filter(ip => {
+      if (ssdpMap[ip]) return false;
+      const servs = (mdnsMap[ip].services || []).join(' ').toLowerCase();
+      return servs.includes('cast') || servs.includes('android tv') || servs.includes('dial');
+    });
+
+    if (candidateXmlIps.length > 0) {
+      await Promise.all(candidateXmlIps.map(async (ip) => {
+        try {
+          const xmlRes = await fetchDeviceXml(ip);
+          if (xmlRes) {
+            const fnMatch = xmlRes.xml.match(/<friendlyName>([^<]+)<\/friendlyName>/i);
+            const mnMatch = xmlRes.xml.match(/<modelName>([^<]+)<\/modelName>/i);
+            ssdpMap[ip] = {
+              name: fnMatch ? fnMatch[1].trim() : (mnMatch ? mnMatch[1].trim() : null),
+              model: mnMatch ? mnMatch[1].trim() : null,
+              location: xmlRes.location,
+              rawXml: xmlRes.xml
+            };
+          }
+        } catch (e) {}
+      }));
+    }
   }
 
   // 4. Read ARP table

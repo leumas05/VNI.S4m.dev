@@ -517,6 +517,7 @@ function App() {
                  setLanAutoRefresh={setLanAutoRefresh}
                  selectedLanDevice={selectedLanDevice}
                  setSelectedLanDevice={setSelectedLanDevice}
+                 apiBase={API_BASE}
               />
            </div>
            <div className="w-full lg:w-3/5 h-[45%] lg:h-full relative z-0 flex-1">
@@ -528,6 +529,7 @@ function App() {
               onPing={handlePing}
               onDig={(ip) => setDiggingHop(typeof ip === 'object' ? ip : { ip, hostname: ip })}
               onSslCheck={(ip) => setDiggingHop({ ip: typeof ip === 'object' ? ip.ip : ip, hostname: ip, initialTab: 'ssl' })}
+              apiBase={API_BASE}
             />
           ) : (
             <ErrorBoundary>
