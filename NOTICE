@@ -38,18 +38,11 @@ developed or provided by third parties:
    - Website: https://www.esri.com/
    - Used for the 2D Leaflet dark base map layer.
 
-6. IP Geolocation, ASN & Routing Data
+6. IP Geolocation, ASN, RIR & Routing Data
    - Geolocation data provided by IP2Location.io (https://www.ip2location.io/)
    - Registry and WHOIS data provided by RIPE NCC RIPEstat (https://stat.ripe.net/)
-   - Regional Internet Registries (RIRs) referenced for WHOIS & IP delegation lookups:
-     * RIPE NCC (https://www.ripe.net/)
-     * ARIN (https://www.arin.net/)
-     * APNIC (https://www.apnic.net/)
-     * LACNIC (https://www.lacnic.net/)
-     * AFRINIC (https://afrinic.net/)
-   - External network intelligence references:
-     * DNSChecker (https://dnschecker.org/)
-     * NetworksDB (https://networksdb.io/)
+   - Authoritative regional internet registry lookups referenced via ARIN, APNIC, LACNIC, and AFRINIC
+   - External routing and AS topology verification references via DNSChecker (https://dnschecker.org/) and NetworksDB (https://networksdb.io/)
 
 7. Lucide Icons
    - Copyright (c) 2022-2026 Lucide Contributors
@@ -66,7 +59,7 @@ developed or provided by third parties:
    - Vite: Copyright (c) 2019-2026 Evan You & Vite Contributors (MIT License)
    - Tailwind CSS: Copyright (c) Tailwind Labs, Inc. (MIT License)
 
-10. DNS Resolvers & Cryptographic Diagnostics
+10. DNS Resolvers & Network Diagnostics
     - DNS resolution powered by Node.js DNS subsystem (c-ares)
     - Preconfigured public resolvers referenced:
       * Cloudflare DNS (1.1.1.1)
@@ -78,18 +71,22 @@ developed or provided by third parties:
 11. IEEE OUI & Hardware Vendor Database
     - MAC address vendor prefix allocations compiled from IEEE Standards Association
       (https://standards.ieee.org/) and Wireshark Manuf Database (https://www.wireshark.org/).
-    - Used for offline MAC-to-vendor resolution in LAN Scanner.
+    - Used for offline Organizationally Unique Identifier (OUI) vendor resolution in LAN Scanner.
 
 12. Local Network Discovery & Diagnostic Protocols
-    - Implementations based on public IETF and open networking specifications:
-      * Multicast DNS (mDNS): RFC 6762
-      * DNS-Based Service Discovery (DNS-SD / Bonjour): RFC 6763
+    - Native zero-dependency Node.js UDP/TCP implementations compliant with open networking specifications:
+      * Multicast DNS (mDNS / Zeroconf): RFC 6762
+      * DNS-Based Service Discovery (DNS-SD / Apple Bonjour): RFC 6763
       * Simple Service Discovery Protocol (SSDP / UPnP): UPnP Forum / ISO/IEC 29341
       * NetBIOS Name Service (NBNS): RFC 1001 & RFC 1002
       * Link-Local Multicast Name Resolution (LLMNR): RFC 4795
-      * Simple Network Management Protocol (SNMP) & MIBs: RFC 1157, RFC 1901, RFC 1213, RFC 3805, RFC 2790
+      * Simple Network Management Protocol (SNMPv1 / SNMPv2c): RFC 1157 & RFC 1901
+      * Management Information Bases (MIBs): RFC 1213 (MIB-II), RFC 3805 (Printer MIB), RFC 2790 (Host Resources)
+      * Internet Control Message Protocol (ICMP): RFC 792 (Ping & Echo Request/Reply)
 
-13. Backend Server & HTTP Libraries
-    - Express: Copyright (c) StrongLoop, Inc., OpenJS Foundation (MIT License)
-    - Axios: Copyright (c) Matt Zabriskie (MIT License)
-    - CORS: Copyright (c) Troy Goode (MIT License)
+13. Backend Server & Runtime Libraries
+    - Express: Copyright (c) StrongLoop, Inc., OpenJS Foundation (MIT License, https://expressjs.com/)
+    - Axios: Copyright (c) 2014-present Matt Zabriskie & Axios Contributors (MIT License, https://axios-http.com/)
+    - CORS: Copyright (c) 2013 Troy Goode (MIT License)
+    - Jimp: Copyright (c) 2018 Oliver Moran (MIT License)
+    - Electron-Log & Electron-Updater: Copyright (c) Megafon, Alexey Prokhorov (MIT License)
