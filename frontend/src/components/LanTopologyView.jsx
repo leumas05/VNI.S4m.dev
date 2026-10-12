@@ -480,7 +480,7 @@ export default function LanTopologyView({
                       fontFamily="system-ui, sans-serif"
                       dx={7}
                     >
-                      ⭐ DU
+                      ⭐ YOU
                     </tspan>
                   )}
                 </text>
@@ -584,7 +584,7 @@ export default function LanTopologyView({
                   </span>
                   {selectedDevice.isThisDevice && (
                     <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-950 border border-sky-500/40 text-sky-300">
-                      DIN DATOR
+                      THIS PC (YOU)
                     </span>
                   )}
                 </div>
@@ -612,7 +612,7 @@ export default function LanTopologyView({
                         type="button"
                         onClick={() => setMdnsModalDevice(selectedDevice)}
                         className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-indigo-950/90 hover:bg-indigo-900 border border-indigo-500/40 hover:border-indigo-500/70 text-indigo-300 hover:text-indigo-200 transition cursor-pointer flex items-center gap-1"
-                        title="Klicka för att se mDNS & Bonjour-information"
+                        title="Click to view mDNS & Bonjour details"
                       >
                         <Radio size={9} />
                         <span>{srv}</span>
@@ -628,10 +628,10 @@ export default function LanTopologyView({
                 type="button"
                 onClick={() => setInspectModalDevice(selectedDevice)}
                 className="px-2 py-0.5 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/30 hover:border-cyan-400/60 text-cyan-300 hover:text-cyan-100 transition text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
-                title="Kör djup enhetsanalys & fingeravtryck (12/12 funktioner: OS, SNMP, Uptime, Portar, etc.)"
+                title="Run deep device inspection & fingerprinting (12/12 features: OS, SNMP, Uptime, Ports, etc.)"
               >
                 <Cpu size={12} className="text-cyan-400" />
-                <span>Analys</span>
+                <span>Inspect</span>
               </button>
 
               {selectedDevice.mdns && (
@@ -639,7 +639,7 @@ export default function LanTopologyView({
                   type="button"
                   onClick={() => setMdnsModalDevice(selectedDevice)}
                   className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-indigo-950 border border-transparent hover:border-indigo-500/40 text-gray-300 hover:text-indigo-300 transition text-[11px] font-mono flex items-center gap-1 cursor-pointer"
-                  title="Visa mDNS / Bonjour information"
+                  title="View mDNS / Bonjour information (TXT records, port, services)"
                 >
                   <Radio size={11} className="text-indigo-400" />
                   <span className="text-[10px]">mDNS</span>
@@ -650,7 +650,7 @@ export default function LanTopologyView({
                   type="button"
                   onClick={() => setXmlModalDevice(selectedDevice)}
                   className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition text-[11px] font-mono flex items-center gap-1 cursor-pointer"
-                  title="Visa UPnP / SSDP XML"
+                  title="View UPnP / SSDP XML description"
                 >
                   <FileCode size={11} className="text-sky-400" />
                   <span className="text-[10px]">XML</span>

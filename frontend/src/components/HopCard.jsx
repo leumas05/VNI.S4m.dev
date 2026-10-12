@@ -224,7 +224,7 @@ export default function HopCard({ hop, isSelected, onClick, pastHop, compareMode
                      if (onDig) onDig({ ...hop, initialTab: 'ssl' });
                    }}
                    className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-gray-950/80 hover:bg-emerald-950 text-gray-400 hover:text-emerald-400 border border-gray-700/80 hover:border-emerald-500/60 text-[11px] font-mono transition cursor-pointer shadow-sm group"
-                   title={`SSL-kontroll för ${hop.ip}`}
+                   title={`SSL inspection for ${hop.ip}`}
                  >
                    <ShieldCheck size={12} className="text-emerald-400" />
                    <span>SSL</span>

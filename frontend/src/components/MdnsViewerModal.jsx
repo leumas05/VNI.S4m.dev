@@ -15,53 +15,52 @@ import {
   Cast,
   FileText,
   Info,
-  ShieldCheck,
   Sliders
 } from 'lucide-react';
 
 // Friendly descriptions for known mDNS / DNS-SD TXT keys
 const TXT_DESCRIPTIONS = {
-  fn: 'Vänligt visningsnamn (Friendly Name)',
-  md: 'Enhetsmodell (Hardware Model)',
-  id: 'Unikt enhets-ID (Device Identifier)',
-  cd: 'Konfigurations-ID / App-ID',
-  rm: 'Fjärrhanterings-ID (Remote Management ID)',
-  ve: 'Protokollversion (Cast / Protocol Version)',
-  ic: 'Ikon-sökväg (Device Icon Path)',
-  ca: 'Egenskapsflaggor (Capabilities Bitmask)',
-  st: 'Enhetsstatus (State / Status)',
-  bs: 'Bluetooth/MAC-hårdvarureferens',
-  nf: 'Nätverksflaggor (Network Flags)',
-  ct: 'Klientspecifikation (Client Spec)',
-  rs: 'Tjänstestatus (Resolved Service State)',
-  wp: 'Webbport / API-port',
-  ty: 'Skrivarmodell / Utrustningstyp',
-  product: 'Fullständigt produktnamn',
-  adminurl: 'Webbadministration / Kontrollpanel',
-  pdl: 'Stödda dokument- & utskriftsformat (PDL)',
-  rp: 'Utskriftskö / Protokollsökväg (Resource Path)',
-  URF: 'AirPrint Universal Raster Format specifikationer',
-  Scan: 'Inbyggd skannerfunktion (T = Ja, F = Nej)',
-  Duplex: 'Dubbelsidig utskrift (Duplex printing)',
-  Color: 'Färgutskrift (Color support)',
-  Fax: 'Inbyggd faxfunktion',
-  TLS: 'Kryptering / TLS-version',
-  mac: 'Fysisk MAC-adress',
-  usb_MFG: 'USB-tillverkare (Hardware Manufacturer)',
-  usb_MDL: 'USB-modellbeteckning (Hardware Model)',
-  'mopria-certified': 'Mopria-certifierad mobilutskrift',
-  UUID: 'Universellt unikt enhets-ID (UUID)',
-  kind: 'Stödda medietyper (dokument, kuvert, foto)',
-  PaperMax: 'Maximal pappersstorlek',
-  priority: 'Tjänsteprioritet',
-  qtotal: 'Antal utskriftsköer (Queue Total)',
-  txtvers: 'TXT-protokollversion',
-  CPath: 'Spotify Connect API-sökväg',
-  VERSION: 'Spotify Connect protokollversion',
-  Stack: 'Ljudstack / Spelarmotor',
-  model: 'Apple hårdvarukod (t.ex. AppleTV / iPhone)',
-  flags: 'Apple AirPlay funktionsflaggor',
-  pk: 'Apple AirPlay publik krypteringsnyckel'
+  fn: 'Friendly Display Name',
+  md: 'Hardware Model',
+  id: 'Unique Device Identifier',
+  cd: 'Configuration / App ID',
+  rm: 'Remote Management ID',
+  ve: 'Protocol Version',
+  ic: 'Device Icon Path',
+  ca: 'Capabilities Bitmask',
+  st: 'Device State / Status',
+  bs: 'Bluetooth / MAC Hardware Reference',
+  nf: 'Network Flags',
+  ct: 'Client Specification',
+  rs: 'Resolved Service State',
+  wp: 'Web / API Port',
+  ty: 'Printer Model / Equipment Type',
+  product: 'Full Product Name',
+  adminurl: 'Web Admin / Control Panel URL',
+  pdl: 'Supported Page Description Languages (PDL)',
+  rp: 'Resource Path / Print Queue',
+  URF: 'AirPrint Universal Raster Format Specs',
+  Scan: 'Built-in Scanner Support (T = Yes, F = No)',
+  Duplex: 'Duplex Printing Support',
+  Color: 'Color Printing Support',
+  Fax: 'Built-in Fax Support',
+  TLS: 'Encryption / TLS Version',
+  mac: 'Physical MAC Address',
+  usb_MFG: 'USB Hardware Manufacturer',
+  usb_MDL: 'USB Hardware Model',
+  'mopria-certified': 'Mopria Certified Mobile Printing',
+  UUID: 'Universal Unique Identifier (UUID)',
+  kind: 'Supported Media Kinds (document, envelope, photo)',
+  PaperMax: 'Maximum Paper Size',
+  priority: 'Service Priority',
+  qtotal: 'Print Queue Total',
+  txtvers: 'TXT Protocol Version',
+  CPath: 'Spotify Connect API Path',
+  VERSION: 'Spotify Connect Protocol Version',
+  Stack: 'Audio Engine / Player Stack',
+  model: 'Apple Hardware Code (e.g. AppleTV / iPhone)',
+  flags: 'Apple AirPlay Capability Flags',
+  pk: 'Apple AirPlay Public Encryption Key'
 };
 
 function getServiceIcon(serviceName) {
@@ -123,7 +122,8 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+      style={{ backgroundColor: 'rgba(5, 7, 15, 0.85)', backdropFilter: 'blur(8px)' }}
       onClick={onClose}
     >
       <div
@@ -139,7 +139,7 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-bold text-white tracking-wide flex items-center gap-1.5">
-                  <span>mDNS & Bonjour Tjänsteutforskare</span>
+                  <span>mDNS & Bonjour Service Explorer</span>
                 </h3>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-950/90 border border-indigo-500/40 text-indigo-300">
                   {device.ip}
@@ -151,7 +151,7 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
                 )}
               </div>
               <p className="text-xs text-gray-400 truncate mt-0.5">
-                {mdns.name || device.hostname || device.vendor || 'Nätverksenhet'}
+                {mdns.name || device.hostname || device.vendor || 'Network Device'}
                 {mdns.model ? ` • ${mdns.model}` : ''}
                 {device.mac ? ` • ${device.mac}` : ''}
               </p>
@@ -163,7 +163,7 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
               type="button"
               onClick={onClose}
               className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition cursor-pointer"
-              title="Stäng"
+              title="Close"
             >
               <X size={18} />
             </button>
@@ -173,7 +173,7 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
         {/* Quick Links & Info Strip */}
         <div className="px-6 py-2.5 bg-gray-900/50 border-b border-gray-850 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
           <div className="flex items-center gap-3 text-gray-400 text-[11px] truncate">
-            <span className="text-gray-500 uppercase font-bold text-[10px]">Protokoll:</span>
+            <span className="text-gray-500 uppercase font-bold text-[10px]">Protocol:</span>
             <span className="text-indigo-300">Multicast DNS (RFC 6762) & DNS-SD (RFC 6763)</span>
             {mdns.hostname && (
               <>
@@ -190,10 +190,10 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
               target="_blank"
               rel="noopener noreferrer"
               className="px-2.5 py-1 rounded bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-300 hover:text-white transition flex items-center gap-1.5 text-[11px] font-sans font-semibold cursor-pointer"
-              title="Öppna enhetens webbadministration"
+              title="Open device web management"
             >
               <ExternalLink size={12} />
-              <span>Öppna Web Admin</span>
+              <span>Open Web Admin</span>
             </a>
           )}
         </div>
@@ -211,7 +211,7 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
               }`}
             >
               <Sliders size={13} />
-              <span>Översikt & Tjänster ({services.length})</span>
+              <span>Overview & Services ({services.length})</span>
             </button>
 
             <button
@@ -237,7 +237,7 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
               }`}
             >
               <FileText size={13} />
-              <span>Rådata & JSON</span>
+              <span>Raw Data & JSON</span>
             </button>
           </div>
 
@@ -249,7 +249,7 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Filtrera nyckel eller värde..."
+                  placeholder="Filter key or value..."
                   className="bg-gray-900 border border-gray-800 rounded-lg pl-7 pr-3 py-1 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500 w-44 font-sans"
                 />
               </div>
@@ -259,20 +259,20 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
               type="button"
               onClick={handleCopyJson}
               className="px-2.5 py-1 rounded-lg bg-gray-900 hover:bg-gray-850 border border-gray-700/80 text-gray-300 hover:text-white transition flex items-center gap-1.5 text-xs font-medium cursor-pointer"
-              title="Kopiera mDNS-data till urklipp"
+              title="Copy mDNS data to clipboard"
             >
               {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-              <span>{copied ? 'Kopierat!' : 'Kopiera'}</span>
+              <span>{copied ? 'Copied!' : 'Copy'}</span>
             </button>
 
             <button
               type="button"
               onClick={handleDownloadJson}
               className="px-2.5 py-1 rounded-lg bg-gray-900 hover:bg-gray-850 border border-gray-700/80 text-gray-300 hover:text-white transition flex items-center gap-1.5 text-xs font-medium cursor-pointer"
-              title="Ladda ner som JSON-fil"
+              title="Download as JSON file"
             >
               <Download size={13} />
-              <span>Spara</span>
+              <span>Download</span>
             </button>
           </div>
         </div>
@@ -286,35 +286,35 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
               <div className="bg-gray-900/70 border border-gray-800 rounded-xl p-4">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-400 mb-3 flex items-center gap-1.5">
                   <Info size={14} />
-                  <span>Enhetsprofil & Detaljer</span>
+                  <span>Device Profile & Details</span>
                 </h4>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                   <div className="bg-gray-950/70 border border-gray-850 rounded-lg p-2.5">
-                    <span className="text-[10px] text-gray-500 uppercase font-bold block">Visningsnamn (mDNS Name)</span>
+                    <span className="text-[10px] text-gray-500 uppercase font-bold block">Display Name (mDNS Name)</span>
                     <span className="text-white font-semibold text-sm mt-0.5 block truncate">
-                      {mdns.name || 'Ej angivet'}
+                      {mdns.name || 'Not specified'}
                     </span>
                   </div>
 
-                  <div className="bg-gray-950/70 border border-gray-850 rounded-lg p-2.5">
-                    <span className="text-[10px] text-gray-500 uppercase font-bold block">Modell (Model Name)</span>
+                  <div className="bg-gray-950/70 border border-gray-855 rounded-lg p-2.5">
+                    <span className="text-[10px] text-gray-500 uppercase font-bold block">Model (Model Name)</span>
                     <span className="text-indigo-300 font-semibold text-sm mt-0.5 block truncate">
-                      {mdns.model || device.modelName || 'Ej angivet'}
+                      {mdns.model || device.modelName || 'Not specified'}
                     </span>
                   </div>
 
                   <div className="bg-gray-950/70 border border-gray-850 rounded-lg p-2.5">
-                    <span className="text-[10px] text-gray-500 uppercase font-bold block">Lokal Domän / Hostname</span>
+                    <span className="text-[10px] text-gray-500 uppercase font-bold block">Local Domain / Hostname</span>
                     <span className="text-amber-300 font-mono text-xs mt-0.5 block truncate">
                       {mdns.hostname || `${device.ip}.local`}
                     </span>
                   </div>
 
                   <div className="bg-gray-950/70 border border-gray-850 rounded-lg p-2.5">
-                    <span className="text-[10px] text-gray-500 uppercase font-bold block">Tjänsteport (SRV Port)</span>
+                    <span className="text-[10px] text-gray-500 uppercase font-bold block">Service Port (SRV Port)</span>
                     <span className="text-emerald-400 font-mono text-xs mt-0.5 block truncate">
-                      {mdns.port ? `TCP/UDP Port ${mdns.port}` : 'Standardport / Ej specificerad'}
+                      {mdns.port ? `TCP/UDP Port ${mdns.port}` : 'Default / Not specified'}
                     </span>
                   </div>
                 </div>
@@ -324,12 +324,12 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
               <div className="bg-gray-900/70 border border-gray-800 rounded-xl p-4">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-400 mb-3 flex items-center gap-1.5">
                   <Server size={14} />
-                  <span>Upptäckta Bonjour / Zeroconf-tjänster</span>
+                  <span>Discovered Bonjour / Zeroconf Services</span>
                 </h4>
 
                 {services.length === 0 ? (
                   <div className="text-xs text-gray-500 italic p-3 text-center">
-                    Inga namngivna tjänstekategorier identifierades på denna enhet.
+                    No named service categories identified on this device.
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
@@ -346,7 +346,7 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
                           <div className="min-w-0">
                             <div className="text-xs font-bold text-white truncate">{srv}</div>
                             <div className="text-[10px] text-indigo-300/80 font-mono truncate">
-                              Aktiv Bonjour-tjänst
+                              Active Bonjour Service
                             </div>
                           </div>
                         </div>
@@ -359,7 +359,7 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
                 {serviceTypes.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-800">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 block mb-1.5">
-                      Registrerade PTR Tjänstetyper:
+                      Registered PTR Service Types:
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                       {serviceTypes.map((st, sIdx) => (
@@ -382,7 +382,7 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
             <div className="space-y-3">
               <div className="flex items-center justify-between text-xs text-gray-400 px-1">
                 <span>
-                  Visar {filteredTxtEntries.length} av {txtEntries.length} TXT-parametrar
+                  Showing {filteredTxtEntries.length} of {txtEntries.length} TXT parameters
                 </span>
                 <span className="text-[11px] text-gray-500 font-mono">
                   DNS-SD TXT RDATA (RFC 6763 §6)
@@ -391,12 +391,12 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
 
               {filteredTxtEntries.length === 0 ? (
                 <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-8 text-center text-gray-500 text-xs">
-                  {search ? 'Inga attribut matchar din sökning.' : 'Inga TXT-attribut mottogs från denna enhet.'}
+                  {search ? 'No attributes matched your search query.' : 'No TXT attributes received from this device.'}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-2">
                   {filteredTxtEntries.map(([k, v]) => {
-                    const desc = TXT_DESCRIPTIONS[k] || 'DNS-SD enhetsparameter';
+                    const desc = TXT_DESCRIPTIONS[k] || 'DNS-SD device parameter';
                     const isCopied = copiedKey === k;
                     const isUrl = String(v).startsWith('http://') || String(v).startsWith('https://');
 
@@ -437,10 +437,10 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
                             type="button"
                             onClick={() => handleCopyValue(v, k)}
                             className="px-2 py-1 rounded bg-gray-800 hover:bg-gray-750 text-gray-300 hover:text-white transition flex items-center gap-1 text-[11px] font-mono cursor-pointer"
-                            title="Kopiera värde"
+                            title="Copy value"
                           >
                             {isCopied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                            <span>{isCopied ? 'Kopierat' : 'Kopiera'}</span>
+                            <span>{isCopied ? 'Copied' : 'Copy'}</span>
                           </button>
                         </div>
                       </div>
@@ -458,13 +458,13 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
                     <FileText size={14} />
-                    <span>Råa mDNS-strängar ({rawEntries.length})</span>
+                    <span>Raw mDNS Strings ({rawEntries.length})</span>
                   </h4>
                 </div>
 
                 <div className="bg-black/80 rounded-lg p-3 font-mono text-xs text-gray-300 border border-gray-850 max-h-56 overflow-auto space-y-1">
                   {rawEntries.length === 0 ? (
-                    <span className="text-gray-600">Inga råa strängar loggade.</span>
+                    <span className="text-gray-600">No raw strings logged.</span>
                   ) : (
                     rawEntries.map((line, idx) => (
                       <div key={idx} className="flex gap-3 hover:bg-gray-900/50 py-0.5 px-1 rounded">
@@ -480,7 +480,7 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
                     <Server size={14} />
-                    <span>Fullständigt mDNS JSON-objekt</span>
+                    <span>Complete mDNS JSON Payload</span>
                   </h4>
                 </div>
 
@@ -502,11 +502,10 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
             onClick={onClose}
             className="px-3 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition font-medium cursor-pointer"
           >
-            Stäng
+            Close
           </button>
         </div>
       </div>
     </div>
   );
 }
-

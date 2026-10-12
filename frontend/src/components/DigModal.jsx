@@ -117,7 +117,7 @@ function SoaDetailsCard({ soa, onCopy, copiedId, rowId }) {
     {
       label: 'Start of authority',
       code: 'MNAME',
-      desc: 'Primär namnserver med zonens auktoritativa master-kopia',
+      desc: 'Primary nameserver with the zone authoritative master copy',
       value: soa.primaryNs,
       rawValue: soa.primaryNs,
       copyable: true
@@ -125,7 +125,7 @@ function SoaDetailsCard({ soa, onCopy, copiedId, rowId }) {
     {
       label: 'Email',
       code: 'RNAME',
-      desc: 'Zonadministratörens e-postadress (ansvarig för DNS-zonsfilen)',
+      desc: 'Zone administrator email address (responsible for DNS zone file)',
       value: email,
       rawValue: email,
       copyable: true,
@@ -134,7 +134,7 @@ function SoaDetailsCard({ soa, onCopy, copiedId, rowId }) {
     {
       label: 'Serial',
       code: 'SERIAL',
-      desc: 'Zonens versionsnummer (ökas vid varje ändring så sekundära servrar vet att de ska synka)',
+      desc: 'Zone version number (incremented on changes to trigger secondary sync)',
       value: typeof soa.serial === 'number' ? soa.serial.toLocaleString() : soa.serial,
       rawValue: String(soa.serial),
       copyable: true
@@ -142,28 +142,28 @@ function SoaDetailsCard({ soa, onCopy, copiedId, rowId }) {
     {
       label: 'Refresh',
       code: 'REFRESH',
-      desc: 'Hur ofta sekundära namnservrar frågar den primära servern efter uppdateringar',
+      desc: 'Interval at which secondary nameservers query primary server for zone updates',
       value: formatTtl(soa.refresh),
       extra: typeof soa.refresh === 'number' ? `(${soa.refresh.toLocaleString()} s)` : null
     },
     {
       label: 'Retry',
       code: 'RETRY',
-      desc: 'Väntetid innan återförsök om primär server inte svarar vid uppdateringsförsök',
+      desc: 'Wait time before retrying if primary server does not respond during refresh',
       value: formatTtl(soa.retry),
       extra: typeof soa.retry === 'number' ? `(${soa.retry.toLocaleString()} s)` : null
     },
     {
       label: 'Expire',
       code: 'EXPIRE',
-      desc: 'Hur länge sekundära servrar fortsätter svara om primär server slutar svara helt',
+      desc: 'Upper limit secondary servers continue answering queries if primary remains unreachable',
       value: formatTtl(soa.expire),
-      extra: typeof soa.expire === 'number' ? `(${Math.round(soa.expire / 86400)} dagar / ${soa.expire.toLocaleString()} s)` : null
+      extra: typeof soa.expire === 'number' ? `(${Math.round(soa.expire / 86400)} days / ${soa.expire.toLocaleString()} s)` : null
     },
     {
       label: 'Negative cache TTL',
       code: 'MINIMUM',
-      desc: 'Hur länge negativa DNS-svar (t.ex. NXDOMAIN för namn som inte finns) får sparas i cachen',
+      desc: 'Maximum time negative DNS responses (e.g. NXDOMAIN) may be cached by resolvers',
       value: formatTtl(soa.minttl),
       extra: typeof soa.minttl === 'number' ? `(${soa.minttl.toLocaleString()} s)` : null
     }
@@ -174,9 +174,9 @@ function SoaDetailsCard({ soa, onCopy, copiedId, rowId }) {
       <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-gray-800">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
-          <span className="font-semibold text-gray-200">Start of Authority (SOA) — Detaljerad översikt</span>
+          <span className="font-semibold text-gray-200">Start of Authority (SOA) — Detailed Overview</span>
         </div>
-        <span className="text-[10px] text-gray-500 font-mono">RFC 1035 specifikation</span>
+        <span className="text-[10px] text-gray-500 font-mono">RFC 1035 specification</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -271,9 +271,9 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
       <div className="flex flex-col items-center justify-center py-20 text-gray-500 gap-3">
         <RefreshCw size={28} className="animate-spin text-emerald-400" />
         <p className="text-sm">
-          Ansluter och hämtar SSL/TLS-certifikat för <span className="text-gray-200">{target}:{port || 443}</span>...
+          Connecting and retrieving SSL/TLS certificate for <span className="text-gray-200">{target}:{port || 443}</span>...
         </p>
-        <span className="text-xs text-gray-600 font-sans">Utför TLS-handskakning och validerar certifikatkedjan...</span>
+        <span className="text-xs text-gray-600 font-sans">Performing TLS handshake and validating certificate chain...</span>
       </div>
     );
   }
@@ -282,9 +282,9 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center p-6 bg-gray-950/60 rounded-xl border border-gray-800">
         <Lock size={28} className="text-gray-600 mb-3" />
-        <h3 className="text-sm font-semibold text-gray-300 mb-1">Ingen SSL-kontroll utförd än</h3>
+        <h3 className="text-sm font-semibold text-gray-300 mb-1">No SSL Inspection Performed Yet</h3>
         <p className="text-xs text-gray-500 max-w-md mb-4 font-sans">
-          Klicka på knappen nedan för att inspektera SSL/TLS-certifikatet för {target}.
+          Click the button below to inspect the SSL/TLS certificate for {target}.
         </p>
         <button
           type="button"
@@ -292,7 +292,7 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
           className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-2 transition cursor-pointer"
         >
           <ShieldCheck size={14} />
-          <span>Starta SSL-kontroll</span>
+          <span>Start SSL Inspection</span>
         </button>
       </div>
     );
@@ -305,13 +305,13 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
           <ShieldAlert size={22} className="text-rose-400 shrink-0 mt-0.5" />
           <div className="flex-1 text-xs">
             <div className="font-semibold text-rose-300 text-sm mb-1">
-              Inget giltigt SSL/TLS-certifikat hittades
+              No Valid SSL/TLS Certificate Found
             </div>
             <p className="text-gray-300 mb-2 font-sans">
-              Kunde inte upprätta en säker TLS-anslutning till <strong className="text-white font-mono">{sslData.host}:{sslData.port}</strong>.
+              Could not establish a secure TLS connection to <strong className="text-white font-mono">{sslData.host}:{sslData.port}</strong>.
             </p>
             <div className="p-2.5 rounded bg-gray-950 border border-rose-900/40 font-mono text-rose-300 text-[11px] break-all">
-              Fel: {sslData.error || sslData.code || 'Anslutningsfel'}
+              Error: {sslData.error || sslData.code || 'Connection error'}
             </div>
             <div className="mt-3 flex items-center gap-2">
               <button
@@ -320,7 +320,7 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
                 className="px-3 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-gray-200 border border-gray-700 hover:border-gray-600 text-xs flex items-center gap-1.5 transition cursor-pointer"
               >
                 <RefreshCw size={12} />
-                <span>Försök igen</span>
+                <span>Retry</span>
               </button>
             </div>
           </div>
@@ -363,10 +363,10 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-white tracking-wide">
                 {isTrusted
-                  ? 'Giltigt och betrott SSL/TLS-certifikat'
+                  ? 'Valid and Trusted SSL/TLS Certificate'
                   : sslData.isExpired
-                  ? 'Certifikatet har gått ut!'
-                  : 'Certifikatet är inte betrott'}
+                  ? 'Certificate Has Expired!'
+                  : 'Certificate Is Not Trusted'}
               </h3>
               <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider border ${
                 isTrusted
@@ -390,14 +390,14 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
 
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right">
-            <div className="text-[10px] uppercase tracking-wider text-gray-400">Handskakningstid</div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-400">Handshake Time</div>
             <div className="text-sm font-bold text-gray-200 font-mono">{sslData.handshakeTime} ms</div>
           </div>
           <button
             type="button"
             onClick={() => onRefresh(target, port)}
             className="p-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-gray-300 hover:text-white border border-gray-800 transition cursor-pointer"
-            title="Uppdatera SSL-kontroll"
+            title="Refresh SSL inspection"
           >
             <RefreshCw size={14} />
           </button>
@@ -406,12 +406,12 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
 
       {/* Main Details Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {/* Card 1: Giltighet */}
+        {/* Card 1: Validity */}
         <div className="p-3.5 rounded-xl bg-gray-950/80 border border-gray-800 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
-                <Calendar size={14} className="text-emerald-400" /> Giltighet & Återstående tid
+                <Calendar size={14} className="text-emerald-400" /> Validity & Time Remaining
               </span>
               <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
                 sslData.daysRemaining > 30
@@ -420,7 +420,7 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
                   ? 'bg-amber-950/70 border-amber-500/40 text-amber-400'
                   : 'bg-rose-950/70 border-rose-500/40 text-rose-400'
               }`}>
-                {sslData.daysRemaining > 0 ? `${sslData.daysRemaining} dagar kvar` : 'Utgånget'}
+                {sslData.daysRemaining > 0 ? `${sslData.daysRemaining} days remaining` : 'Expired'}
               </span>
             </div>
 
@@ -431,17 +431,17 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
                   sslData.daysRemaining > 30 ? 'bg-emerald-500' : sslData.daysRemaining > 0 ? 'bg-amber-500' : 'bg-rose-500'
                 }`}
                 style={{ width: `${lifePercent}%` }}
-                title={`${lifePercent}% av certifikatets livslängd har passerat`}
+                title={`${lifePercent}% of certificate lifespan has elapsed`}
               />
             </div>
 
             <div className="space-y-1.5 text-xs font-mono">
               <div className="flex justify-between items-center text-gray-400">
-                <span>Utfärdat:</span>
+                <span>Issued:</span>
                 <span className="text-gray-200">{formatSslDate(sslData.validFrom)}</span>
               </div>
               <div className="flex justify-between items-center text-gray-400">
-                <span>Förfaller:</span>
+                <span>Expires:</span>
                 <span className={`font-semibold ${sslData.isExpired ? 'text-rose-400' : 'text-gray-200'}`}>
                   {formatSslDate(sslData.validTo)}
                 </span>
@@ -450,33 +450,33 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
           </div>
         </div>
 
-        {/* Card 2: Utfärdare & Ägare */}
+        {/* Card 2: Issuer & Subject */}
         <div className="p-3.5 rounded-xl bg-gray-950/80 border border-gray-800 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
-                <Award size={14} className="text-sky-400" /> Certifikatutfärdare (CA)
+                <Award size={14} className="text-sky-400" /> Certificate Authority (CA)
               </span>
               <span className="text-[10px] text-gray-500 font-mono">Issuer</span>
             </div>
 
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between items-center">
-                <span className="text-gray-400">Primär domän (CN):</span>
+                <span className="text-gray-400">Primary Domain (CN):</span>
                 <span className="text-white font-mono font-semibold truncate max-w-[200px]" title={sslData.subject?.cn}>
                   {sslData.subject?.cn}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-400">Utfärdare:</span>
+                <span className="text-gray-400">Issuer:</span>
                 <span className="text-emerald-400 font-medium truncate max-w-[200px]" title={sslData.issuer?.o || sslData.issuer?.cn}>
-                  {sslData.issuer?.o || sslData.issuer?.cn || 'Okänd'}
+                  {sslData.issuer?.o || sslData.issuer?.cn || 'Unknown'}
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-400">Organisation (O):</span>
-                <span className="text-gray-300 truncate max-w-[200px]" title={sslData.subject?.o || 'Ej angiven'}>
-                  {sslData.subject?.o || 'Ej angiven'}
+                <span className="text-gray-400">Organization (O):</span>
+                <span className="text-gray-300 truncate max-w-[200px]" title={sslData.subject?.o || 'Not specified'}>
+                  {sslData.subject?.o || 'Not specified'}
                 </span>
               </div>
             </div>
@@ -488,10 +488,10 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5 pb-2 border-b border-gray-900">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-gray-200 flex items-center gap-1.5">
-                <Globe size={14} className="text-indigo-400" /> Täckta domäner (SANs — Subject Alternative Names)
+                <Globe size={14} className="text-indigo-400" /> Protected Domains (SANs — Subject Alternative Names)
               </span>
               <span className="px-2 py-0.5 rounded-full bg-indigo-950/80 border border-indigo-500/30 text-[10px] font-mono font-bold text-indigo-300">
-                {allSans.length} st domäner
+                {allSans.length} domains
               </span>
             </div>
 
@@ -502,7 +502,7 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
                     type="text"
                     value={sanFilter}
                     onChange={(e) => setSanFilter(e.target.value)}
-                    placeholder="Filtrera domäner..."
+                    placeholder="Filter domains..."
                     className="w-36 sm:w-44 px-2 py-1 pl-6 rounded bg-gray-900 border border-gray-800 text-[11px] text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500 font-mono transition"
                   />
                   <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
@@ -527,10 +527,10 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
                     setTimeout(() => setCopiedSans(false), 2000);
                   }}
                   className="px-2 py-1 rounded bg-gray-900 hover:bg-gray-800 border border-gray-800 text-[11px] text-gray-400 hover:text-sky-400 flex items-center gap-1 transition cursor-pointer shrink-0"
-                  title="Kopiera alla domännamn till urklipp"
+                  title="Copy all domain names to clipboard"
                 >
                   {copiedSans ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                  <span className="hidden sm:inline">{copiedSans ? 'Kopierade!' : 'Kopiera alla'}</span>
+                  <span className="hidden sm:inline">{copiedSans ? 'Copied!' : 'Copy all'}</span>
                 </button>
               )}
             </div>
@@ -555,7 +555,7 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
                         ? 'bg-gray-900/90 border-purple-500/30 text-purple-300 hover:border-purple-400 hover:bg-purple-950/40'
                         : 'bg-gray-900 border-gray-800 text-gray-300 hover:border-indigo-500/50 hover:bg-indigo-950/30 hover:text-white'
                     }`}
-                    title={`Klicka för att kontrollera SSL för ${cleanName}`}
+                    title={`Click to inspect SSL for ${cleanName}`}
                   >
                     <span>{name}</span>
                     {isCurrent && (
@@ -566,15 +566,15 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
               })
             ) : (
               <span className="text-gray-500 italic text-[11px] py-1">
-                {sanFilter ? `Inga domäner matchade "${sanFilter}"` : 'Inga alternativa namn listade'}
+                {sanFilter ? `No domains matched "${sanFilter}"` : 'No alternative names listed'}
               </span>
             )}
           </div>
 
           <div className="mt-2 pt-2 border-t border-gray-900/80 flex items-center justify-between text-[10px] text-gray-500 font-sans">
-            <span>Visar alternativa namn (SANs) som certifikatet skyddar. Klicka på ett namn för att inspektera det.</span>
+            <span>Showing Subject Alternative Names (SANs) protected by this certificate. Click a name to inspect it.</span>
             {filteredSans.length !== allSans.length && (
-              <span>Visar {filteredSans.length} av {allSans.length}</span>
+              <span>Showing {filteredSans.length} of {allSans.length}</span>
             )}
           </div>
         </div>
@@ -584,10 +584,10 @@ function SslCheckerView({ sslData, loading, onRefresh, target, port, setPort, on
           <div className="p-3.5 rounded-xl bg-gray-900/60 border border-gray-800 md:col-span-2">
             <div className="flex items-center justify-between mb-2.5">
               <span className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
-                <Layers size={14} className="text-amber-400" /> Förtroendekedja (Certificate Chain)
+                <Layers size={14} className="text-amber-400" /> Certificate Chain
               </span>
               <span className="text-[10px] text-gray-500 font-mono">
-                {sslData.chain.length} nivåer
+                {sslData.chain.length} levels
               </span>
             </div>
 
@@ -917,7 +917,7 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
           ok: false,
           host: qTarget,
           port: qPort,
-          error: errJson.error || `HTTP ${response.status} error under SSL-kontroll`
+          error: errJson.error || `HTTP ${response.status} error during SSL inspection`
         };
       }
 
@@ -930,7 +930,7 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
           ok: false,
           host: qTarget,
           port: qPort,
-          error: err.message || 'Kunde inte ansluta till VNI Engine för SSL-kontroll'
+          error: err.message || 'Could not connect to VNI Engine for SSL inspection'
         });
       }
     } finally {
@@ -1093,7 +1093,7 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
                   ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 shadow-sm shadow-emerald-950'
                   : 'bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-emerald-400 border-gray-800'
               }`}
-              title={viewMode === 'ssl' ? 'Tillbaka till DNS DiG' : 'Kontrollera målets SSL/TLS-certifikat'}
+              title={viewMode === 'ssl' ? 'Back to DNS DiG' : 'Inspect target SSL/TLS certificate'}
             >
               <ShieldCheck size={14} className={viewMode === 'ssl' ? 'text-emerald-400' : 'text-emerald-500'} />
               <span>SSL</span>
@@ -1393,9 +1393,9 @@ export default function DigModal({ hop, traceTarget, onClose, apiBase }) {
                                     type="button"
                                     onClick={() => setCollapsedSoa(prev => ({ ...prev, [rowId]: !prev[rowId] }))}
                                     className="text-indigo-400 hover:text-indigo-300 bg-indigo-950/70 hover:bg-indigo-900/70 border border-indigo-500/40 px-2 py-0.5 rounded text-[10px] font-sans flex items-center gap-1 transition cursor-pointer"
-                                    title={isCollapsed ? 'Visa detaljerad SOA-översikt' : 'Dölj SOA-översikt'}
+                                    title={isCollapsed ? 'Show detailed SOA overview' : 'Hide SOA overview'}
                                   >
-                                    <span>{isCollapsed ? 'Visa SOA' : 'Dölj'}</span>
+                                    <span>{isCollapsed ? 'Show SOA' : 'Hide'}</span>
                                     {isCollapsed ? <ChevronDown size={11} /> : <ChevronUp size={11} />}
                                   </button>
                                 )}

@@ -46,10 +46,10 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
       if (data.ok && data.inspection) {
         setInspectData(data.inspection);
       } else {
-        setError(data.error || 'Kunde inte slutföra djupanalysen');
+        setError(data.error || 'Failed to complete deep inspection');
       }
     } catch (err) {
-      setError(err.message || 'Nätverksfel vid enhetsanalys');
+      setError(err.message || 'Network error during device inspection');
     } finally {
       setLoading(false);
     }
@@ -119,7 +119,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                 {ping.alive && (
                   <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                    Aktiv ({ping.latency != null ? (ping.latency === 1 ? '<1 ms' : `${ping.latency} ms`) : 'Online'})
+                    Active ({ping.latency != null ? (ping.latency === 1 ? '<1 ms' : `${ping.latency} ms`) : 'Online'})
                   </span>
                 )}
               </div>
@@ -133,21 +133,21 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
             <button
               onClick={fetchInspection}
               disabled={loading}
-              title="Kör om enhetsanalys"
+              title="Re-run device inspection"
               className="p-2 rounded-lg bg-slate-800/60 border border-slate-700/60 text-slate-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
             </button>
             <button
               onClick={handleCopyJson}
-              title="Kopiera diagnostik som JSON"
+              title="Copy diagnostics as JSON"
               className="p-2 rounded-lg bg-slate-800/60 border border-slate-700/60 text-slate-300 hover:text-cyan-400 hover:border-cyan-500/40 transition-colors"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
             </button>
             <button
               onClick={onClose}
-              title="Stäng"
+              title="Close"
               className="p-2 rounded-lg bg-slate-800/60 border border-slate-700/60 text-slate-400 hover:text-rose-400 hover:border-rose-500/40 transition-colors"
             >
               <X className="w-4 h-4" />
@@ -166,7 +166,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
             }`}
           >
             <Activity className="w-3.5 h-3.5" />
-            Översikt
+            Overview
           </button>
           <button
             onClick={() => setActiveTab('os')}
@@ -177,7 +177,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
             }`}
           >
             <Cpu className="w-3.5 h-3.5" />
-            Operativsystem & Kärna
+            OS & Kernel
           </button>
           <button
             onClick={() => setActiveTab('ports')}
@@ -188,7 +188,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            Öppna Portar ({ports.openCount || ports.open?.length || 0})
+            Open Ports ({ports.openCount || ports.open?.length || 0})
           </button>
           <button
             onClick={() => setActiveTab('hardware')}
@@ -199,7 +199,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
             }`}
           >
             <Sliders className="w-3.5 h-3.5" />
-            Hårdvara & Drifttid
+            Hardware & Uptime
           </button>
           <button
             onClick={() => setActiveTab('raw')}
@@ -210,7 +210,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
             }`}
           >
             <Terminal className="w-3.5 h-3.5" />
-            Diagnostisk Rådata
+            Diagnostic Raw Data
           </button>
         </div>
 
@@ -224,10 +224,10 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                 <Cpu className="absolute inset-0 m-auto w-6 h-6 text-cyan-400 animate-pulse" />
               </div>
               <p className="text-sm text-cyan-300 font-medium tracking-wide">
-                Genomför djupanalys av {device.ip}...
+                Running deep inspection on {device.ip}...
               </p>
               <p className="text-xs text-slate-400">
-                Frågar SNMP, NetBIOS, mDNS, ICMP TTL, banner grabbing och scannar aktiva portar
+                Querying SNMP, NetBIOS, mDNS, ICMP TTL, banner grabbing, and scanning open ports
               </p>
             </div>
           )}
@@ -235,14 +235,14 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
           {!loading && error && (
             <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm flex items-center justify-between">
               <div>
-                <p className="font-semibold">Fel vid enhetsinspektion</p>
+                <p className="font-semibold">Error during device inspection</p>
                 <p className="text-xs text-rose-400 mt-1">{error}</p>
               </div>
               <button
                 onClick={fetchInspection}
                 className="px-3 py-1.5 text-xs bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 rounded-lg text-rose-200 transition-colors"
               >
-                Försök igen
+                Retry
               </button>
             </div>
           )}
@@ -254,59 +254,59 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                 {/* OS */}
                 <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-cyan-500/30 transition-all">
                   <div className="flex items-center justify-between text-slate-400 mb-1.5">
-                    <span className="text-xs uppercase tracking-wider font-semibold">Operativsystem</span>
+                    <span className="text-xs uppercase tracking-wider font-semibold">Operating System</span>
                     <Cpu className="w-4 h-4 text-cyan-400" />
                   </div>
                   <div className="text-base font-bold text-slate-100 truncate" title={os.osName}>
-                    {os.osName || 'Inbäddat OS'}
+                    {os.osName || 'Embedded OS'}
                   </div>
                   <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
                     <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 font-mono text-[10px]">
                       TTL={os.ttl || ping.ttl || '–'}
                     </span>
-                    <span>Konfidens: {os.confidence || 'Uppskattad'}</span>
+                    <span>Confidence: {os.confidence || 'Estimated'}</span>
                   </div>
                 </div>
 
                 {/* Uptime */}
                 <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-cyan-500/30 transition-all">
                   <div className="flex items-center justify-between text-slate-400 mb-1.5">
-                    <span className="text-xs uppercase tracking-wider font-semibold">Drifttid (Uptime)</span>
+                    <span className="text-xs uppercase tracking-wider font-semibold">Uptime</span>
                     <Clock className="w-4 h-4 text-emerald-400" />
                   </div>
                   <div className="text-base font-bold text-emerald-300 truncate">
-                    {uptime?.formatted || 'Ej tillgänglig'}
+                    {uptime?.formatted || 'Not Available'}
                   </div>
                   <div className="text-[11px] text-slate-400 mt-1 truncate" title={uptime?.source}>
-                    Källa: {uptime?.source ? uptime.source.split(' ')[0] : 'SNMP / ICMP'}
+                    Source: {uptime?.source ? uptime.source.split(' ')[0] : 'SNMP / ICMP'}
                   </div>
                 </div>
 
                 {/* Latency / Ping */}
                 <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-cyan-500/30 transition-all">
                   <div className="flex items-center justify-between text-slate-400 mb-1.5">
-                    <span className="text-xs uppercase tracking-wider font-semibold">Svarstid (Latens)</span>
+                    <span className="text-xs uppercase tracking-wider font-semibold">Latency (Ping)</span>
                     <Zap className="w-4 h-4 text-amber-400" />
                   </div>
                   <div className="text-base font-bold text-amber-300">
                     {ping.latency != null ? (ping.latency === 1 ? '<1 ms' : `${ping.latency} ms`) : 'Offline'}
                   </div>
                   <div className="text-[11px] text-slate-400 mt-1">
-                    ICMP Echo • {ping.alive ? 'Online & Svarar' : 'Inget svar'}
+                    ICMP Echo • {ping.alive ? 'Online & Responding' : 'No Response'}
                   </div>
                 </div>
 
                 {/* Ports Count */}
                 <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-cyan-500/30 transition-all">
                   <div className="flex items-center justify-between text-slate-400 mb-1.5">
-                    <span className="text-xs uppercase tracking-wider font-semibold">Öppna Portar</span>
+                    <span className="text-xs uppercase tracking-wider font-semibold">Open Ports</span>
                     <Layers className="w-4 h-4 text-purple-400" />
                   </div>
                   <div className="text-base font-bold text-purple-300">
-                    {ports.openCount || ports.open?.length || 0} st aktiva
+                    {ports.openCount || ports.open?.length || 0} active
                   </div>
                   <div className="text-[11px] text-slate-400 mt-1 truncate">
-                    {ports.open?.slice(0, 3).map(p => p.port).join(', ') || 'Inga portar svarade'}
+                    {ports.open?.slice(0, 3).map(p => p.port).join(', ') || 'No open ports'}
                   </div>
                 </div>
               </div>
@@ -318,12 +318,12 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                     <div className="flex items-center gap-2">
                       <Printer className="w-5 h-5 text-cyan-400" />
                       <h3 className="text-sm font-semibold text-slate-100">
-                        Skrivarstatus & Förbrukningsartiklar
+                        Printer Status & Consumables
                       </h3>
                     </div>
                     {devSpec.printer.tonerLevel && (
                       <span className="px-2.5 py-0.5 text-xs font-bold rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                        Tonernivå: {devSpec.printer.tonerLevel}
+                        Toner Level: {devSpec.printer.tonerLevel}
                       </span>
                     )}
                   </div>
@@ -338,15 +338,15 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-slate-400 mt-3 pt-2 border-t border-slate-800">
                     <div>
-                      <span className="text-slate-500 block text-[10px]">Patronserienummer:</span>
+                      <span className="text-slate-500 block text-[10px]">Cartridge Serial:</span>
                       <span className="font-mono text-slate-200">{devSpec.printer.cartridgeSerial || '–'}</span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[10px]">Hårdvarumodell:</span>
+                      <span className="text-slate-500 block text-[10px]">Hardware Model:</span>
                       <span className="text-slate-200">{banners.webTitle || devSpec.snmp?.model || 'HP LaserJet'}</span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[10px]">Firmware:</span>
+                      <span className="text-slate-500 block text-[10px]">Firmware Datecode:</span>
                       <span className="font-mono text-slate-200">{banners.firmware || '–'}</span>
                     </div>
                   </div>
@@ -358,7 +358,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                 <div className="flex items-center gap-2 mb-3">
                   <Radio className="w-4 h-4 text-cyan-400" />
                   <h3 className="text-xs uppercase font-bold text-slate-300 tracking-wider">
-                    Identifierade Nätverksfunktioner & Protokoll (mDNS / Zeroconf)
+                    Discovered Network Features & Protocols (mDNS / Zeroconf)
                   </h3>
                 </div>
                 {capabilities.length > 0 ? (
@@ -375,7 +375,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                   </div>
                 ) : (
                   <p className="text-xs text-slate-400 italic">
-                    Inga mDNS Zeroconf-tjänster (AirPlay/Cast/Spotify) annonserades aktivt vid scanning.
+                    No mDNS Zeroconf services (AirPlay/Cast/Spotify) actively advertised during scan.
                   </p>
                 )}
               </div>
@@ -386,23 +386,23 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                   <div className="flex items-center gap-2 mb-2">
                     <Globe className="w-4 h-4 text-cyan-400" />
                     <span className="font-bold text-slate-200 uppercase tracking-wider text-[11px]">
-                      Värdnamn & Namnuppslag
+                      Hostnames & Name Resolution
                     </span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/60">
-                    <span className="text-slate-400">NetBIOS-namn:</span>
+                    <span className="text-slate-400">NetBIOS Name:</span>
                     <span className="font-mono font-bold text-cyan-300">{names.netbios || '–'}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/60">
-                    <span className="text-slate-400">Arbetsgrupp / Domän:</span>
+                    <span className="text-slate-400">Workgroup / Domain:</span>
                     <span className="font-mono text-slate-200">{names.workgroup || '–'}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/60">
-                    <span className="text-slate-400">mDNS Bonjour-namn:</span>
+                    <span className="text-slate-400">mDNS Bonjour Name:</span>
                     <span className="text-slate-200">{names.mdns || '–'}</span>
                   </div>
                   <div className="flex justify-between py-1">
-                    <span className="text-slate-400">Webbtitel:</span>
+                    <span className="text-slate-400">Web Page Title:</span>
                     <span className="text-slate-200 truncate max-w-[200px]" title={names.webTitle}>
                       {names.webTitle || '–'}
                     </span>
@@ -413,23 +413,23 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                   <div className="flex items-center gap-2 mb-2">
                     <HardDrive className="w-4 h-4 text-cyan-400" />
                     <span className="font-bold text-slate-200 uppercase tracking-wider text-[11px]">
-                      Hårdvaruidentitet
+                      Hardware Identity
                     </span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/60">
-                    <span className="text-slate-400">Fysisk MAC:</span>
+                    <span className="text-slate-400">Physical MAC:</span>
                     <span className="font-mono text-slate-200">{device.mac}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/60">
-                    <span className="text-slate-400">Hårdvarutillverkare:</span>
+                    <span className="text-slate-400">Hardware Vendor:</span>
                     <span className="text-slate-200 font-semibold">{device.vendor}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/60">
-                    <span className="text-slate-400">Serienummer (SNMP):</span>
+                    <span className="text-slate-400">Serial Number (SNMP):</span>
                     <span className="font-mono text-cyan-300">{devSpec.snmp?.serialNumber || banners.serialNumber || '–'}</span>
                   </div>
                   <div className="flex justify-between py-1">
-                    <span className="text-slate-400">Webbserver (Banner):</span>
+                    <span className="text-slate-400">Web Server (Banner):</span>
                     <span className="font-mono text-slate-300 truncate max-w-[200px]" title={banners.httpServer}>
                       {banners.httpServer || '–'}
                     </span>
@@ -445,13 +445,13 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                 <div className="flex items-start justify-between">
                   <div>
                     <span className="text-xs text-cyan-400 font-mono uppercase tracking-wider">
-                      Identifierat Operativsystem
+                      Identified Operating System
                     </span>
                     <h3 className="text-xl font-bold text-slate-100 mt-1">
-                      {os.osName || 'Okänt Operativsystem'}
+                      {os.osName || 'Unknown Operating System'}
                     </h3>
                     <p className="text-xs text-slate-400 mt-1">
-                      Kärnfamilj: <span className="font-semibold text-slate-200">{os.osFamily || 'Unknown'}</span> • Konfidens: <span className="font-semibold text-emerald-400">{os.confidence || 'Uppskattad'}</span>
+                      Kernel Family: <span className="font-semibold text-slate-200">{os.osFamily || 'Unknown'}</span> • Confidence: <span className="font-semibold text-emerald-400">{os.confidence || 'Estimated'}</span>
                     </p>
                   </div>
                   <div className="text-right">
@@ -463,10 +463,10 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
 
                 <div className="mt-4 pt-4 border-t border-slate-800 space-y-2">
                   <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wide">
-                    Identifieringsgrund & Heuristik
+                    Detection Basis & Heuristics
                   </h4>
                   <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 text-xs text-slate-300 font-mono leading-relaxed">
-                    {os.basis || 'Ingen specifik heuristik kunde bekräftas'}
+                    {os.basis || 'No specific heuristics confirmed'}
                   </div>
                 </div>
               </div>
@@ -474,25 +474,25 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
               {/* TTL Fingerprint Reference Card */}
               <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs space-y-3">
                 <h4 className="font-semibold text-slate-200 uppercase tracking-wider text-[11px]">
-                  Om ICMP TTL Fingerprinting i VNI
+                  About ICMP TTL Fingerprinting in VNI
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className={`p-3 rounded-lg border ${ping.ttl <= 64 ? 'bg-cyan-500/10 border-cyan-500/40' : 'bg-slate-950/40 border-slate-800'}`}>
                     <div className="font-bold text-cyan-300 mb-1">TTL ≈ 64</div>
                     <p className="text-slate-400 text-[11px]">
-                      Linux, Unix, Android, macOS, iOS eller Raspberry Pi RTOS-kärnor.
+                      Linux, Unix, Android, macOS, iOS, or Raspberry Pi RTOS kernels.
                     </p>
                   </div>
                   <div className={`p-3 rounded-lg border ${ping.ttl > 64 && ping.ttl <= 128 ? 'bg-cyan-500/10 border-cyan-500/40' : 'bg-slate-950/40 border-slate-800'}`}>
                     <div className="font-bold text-cyan-300 mb-1">TTL ≈ 128</div>
                     <p className="text-slate-400 text-[11px]">
-                      Microsoft Windows NT-kärna (Windows 10, Windows 11, Windows Server).
+                      Microsoft Windows NT kernel (Windows 10, Windows 11, Windows Server).
                     </p>
                   </div>
                   <div className={`p-3 rounded-lg border ${ping.ttl > 128 ? 'bg-cyan-500/10 border-cyan-500/40' : 'bg-slate-950/40 border-slate-800'}`}>
                     <div className="font-bold text-cyan-300 mb-1">TTL ≈ 255</div>
                     <p className="text-slate-400 text-[11px]">
-                      Cisco IOS, nätverksswitchar eller inbäddade protokollstackar (t.ex. Virata / JetDirect).
+                      Cisco IOS, network switches, or embedded protocol microstacks (e.g. Virata / JetDirect).
                     </p>
                   </div>
                 </div>
@@ -503,9 +503,9 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
           {!loading && activeTab === 'ports' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>Scannade diagnostiska portar ({ports.all?.length || 0} st)</span>
+                <span>Scanned Diagnostic Ports ({ports.all?.length || 0} total)</span>
                 <span className="font-semibold text-cyan-400">
-                  {ports.openCount || ports.open?.length || 0} öppna portar identifierade
+                  {ports.openCount || ports.open?.length || 0} open ports identified
                 </span>
               </div>
 
@@ -514,8 +514,8 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                   <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 text-[11px] uppercase tracking-wider font-semibold">
                     <tr>
                       <th className="py-2.5 px-4">Port</th>
-                      <th className="py-2.5 px-4">Tjänst</th>
-                      <th className="py-2.5 px-4">Kategori</th>
+                      <th className="py-2.5 px-4">Service</th>
+                      <th className="py-2.5 px-4">Category</th>
                       <th className="py-2.5 px-4 text-right">Status</th>
                     </tr>
                   </thead>
@@ -535,11 +535,11 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                           {p.open ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                              Öppen
+                              Open
                             </span>
                           ) : (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] text-slate-500 bg-slate-800/40">
-                              Stängd
+                              Closed
                             </span>
                           )}
                         </td>
@@ -559,7 +559,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                   <div className="flex items-center gap-2 mb-2">
                     <Server className="w-4 h-4 text-cyan-400" />
                     <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                      SNMP MIB-II Beskrivning (Community: public)
+                      SNMP MIB-II Description (Community: public)
                     </h4>
                   </div>
                   <div className="p-3 rounded-lg bg-slate-950 font-mono text-xs text-slate-300 break-all border border-slate-800">
@@ -567,15 +567,15 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-xs">
                     <div>
-                      <span className="text-slate-500 text-[10px] block">Modell:</span>
+                      <span className="text-slate-500 text-[10px] block">Model:</span>
                       <span className="font-semibold text-slate-200">{devSpec.snmp.model || '–'}</span>
                     </div>
                     <div>
-                      <span className="text-slate-500 text-[10px] block">Serienummer:</span>
+                      <span className="text-slate-500 text-[10px] block">Serial Number:</span>
                       <span className="font-mono text-cyan-300">{devSpec.snmp.serialNumber || '–'}</span>
                     </div>
                     <div>
-                      <span className="text-slate-500 text-[10px] block">Firmwarekod:</span>
+                      <span className="text-slate-500 text-[10px] block">Firmware Code:</span>
                       <span className="font-mono text-slate-200">{devSpec.snmp.firmware || '–'}</span>
                     </div>
                     <div>
@@ -591,20 +591,20 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                 <div className="flex items-center gap-2 mb-2">
                   <Globe className="w-4 h-4 text-cyan-400" />
                   <h4 className="font-bold text-slate-200 uppercase tracking-wider text-[11px]">
-                    Webbserver & Banner Grabbing
+                    Web Server & Banner Grabbing
                   </h4>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <span className="text-slate-400 block mb-1">Server: Header</span>
                     <div className="p-2 rounded bg-slate-950 font-mono text-slate-300 border border-slate-800">
-                      {banners.httpServer || 'Ingen Server-header returnerades'}
+                      {banners.httpServer || 'No Server header returned'}
                     </div>
                   </div>
                   <div>
-                    <span className="text-slate-400 block mb-1">HTML Webbtitel</span>
+                    <span className="text-slate-400 block mb-1">HTML Page Title</span>
                     <div className="p-2 rounded bg-slate-950 font-mono text-slate-300 border border-slate-800">
-                      {banners.webTitle || 'Ingen titel tag hittades'}
+                      {banners.webTitle || 'No title tag found'}
                     </div>
                   </div>
                 </div>
@@ -616,12 +616,12 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                   <div className="flex items-center gap-2 mb-2">
                     <Tv className="w-4 h-4 text-cyan-400" />
                     <h4 className="font-bold text-slate-200 uppercase tracking-wider text-[11px]">
-                      Google Cast / Eureka API Specifikation
+                      Google Cast / Eureka API Specification
                     </h4>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     <div>
-                      <span className="text-slate-500 text-[10px] block">Cast Modell:</span>
+                      <span className="text-slate-500 text-[10px] block">Cast Model:</span>
                       <span className="text-slate-200 font-semibold">{devSpec.cast.modelName || '–'}</span>
                     </div>
                     <div>
@@ -633,7 +633,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                       <span className="font-mono text-slate-200">{devSpec.cast.releaseTrack || '–'}</span>
                     </div>
                     <div>
-                      <span className="text-slate-500 text-[10px] block">Wi-Fi Nätverk (SSID):</span>
+                      <span className="text-slate-500 text-[10px] block">Wi-Fi Network (SSID):</span>
                       <span className="text-slate-200">{devSpec.cast.ssid || '–'}</span>
                     </div>
                   </div>
@@ -646,14 +646,14 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-400">
-                  Fullständigt JSON-diagnostikobjekt för {device.ip}
+                  Full JSON diagnostic object for {device.ip}
                 </span>
                 <button
                   onClick={handleCopyJson}
                   className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/20 transition-colors"
                 >
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copied ? 'Kopierad!' : 'Kopiera JSON'}
+                  {copied ? 'Copied!' : 'Copy JSON'}
                 </button>
               </div>
               <pre className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 font-mono text-[11px] text-cyan-300/90 overflow-x-auto max-h-[500px]">
@@ -667,13 +667,13 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
         <div className="flex items-center justify-between px-6 py-3 border-t border-slate-800/80 bg-slate-900/60 text-xs text-slate-400">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            <span>VNI Deep Device Profiler • 12/12 standardmetoder</span>
+            <span>VNI Deep Device Profiler • 12/12 Standard Methods</span>
           </div>
           <button
             onClick={onClose}
             className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors font-medium"
           >
-            Stäng
+            Close
           </button>
         </div>
       </div>

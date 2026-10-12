@@ -928,22 +928,22 @@ function querySnmp(ip, timeoutMs = 700) {
 
 // 3. Fast Concurrent TCP Port Probing
 const DIAGNOSTIC_PORTS = [
-  { port: 21, service: 'FTP', category: 'Fildelning' },
-  { port: 22, service: 'SSH', category: 'Fjärradministration' },
-  { port: 53, service: 'DNS', category: 'Nätverkstjänst' },
-  { port: 80, service: 'HTTP', category: 'Webbportal' },
+  { port: 21, service: 'FTP', category: 'File Sharing' },
+  { port: 22, service: 'SSH', category: 'Remote Administration' },
+  { port: 53, service: 'DNS', category: 'Network Service' },
+  { port: 80, service: 'HTTP', category: 'Web Portal' },
   { port: 135, service: 'MS-RPC', category: 'Windows RPC' },
-  { port: 139, service: 'NetBIOS-SSN', category: 'SMB Fildelning' },
-  { port: 443, service: 'HTTPS', category: 'Säker webbportal' },
-  { port: 445, service: 'SMB', category: 'Windows Fildelning' },
-  { port: 554, service: 'RTSP', category: 'Videoström / Kamera' },
-  { port: 631, service: 'IPP', category: 'Nätverksutskrift' },
-  { port: 3389, service: 'RDP', category: 'Fjärrskrivbord' },
-  { port: 5000, service: 'UPnP / DSM', category: 'Synology / Kontroll' },
-  { port: 8008, service: 'Google Cast HTTP', category: 'Medieströmning' },
-  { port: 8009, service: 'Google Cast Control', category: 'Mediekontroll' },
-  { port: 8080, service: 'HTTP-Alt', category: 'Webbgränssnitt' },
-  { port: 9100, service: 'RAW JetDirect', category: 'Direktutskrift' }
+  { port: 139, service: 'NetBIOS-SSN', category: 'SMB File Sharing' },
+  { port: 443, service: 'HTTPS', category: 'Secure Web Portal' },
+  { port: 445, service: 'SMB', category: 'Windows File Sharing' },
+  { port: 554, service: 'RTSP', category: 'Video Stream / Camera' },
+  { port: 631, service: 'IPP', category: 'Network Printing' },
+  { port: 3389, service: 'RDP', category: 'Remote Desktop' },
+  { port: 5000, service: 'UPnP / DSM', category: 'Synology / Management' },
+  { port: 8008, service: 'Google Cast HTTP', category: 'Media Streaming' },
+  { port: 8009, service: 'Google Cast Control', category: 'Media Control' },
+  { port: 8080, service: 'HTTP-Alt', category: 'Web Interface' },
+  { port: 9100, service: 'RAW JetDirect', category: 'Direct Printing' }
 ];
 
 function probeTcpPort(ip, port, timeoutMs = 400) {
@@ -970,7 +970,7 @@ async function probeTcpPorts(ip, customPorts = null, timeoutMs = 400) {
     portsToProbe.map(async (item) => {
       const portNum = typeof item === 'number' ? item : item.port;
       const serviceName = item.service || `Port ${portNum}`;
-      const category = item.category || 'Tjänst';
+      const category = item.category || 'Service';
       const isOpen = await probeTcpPort(ip, portNum, timeoutMs);
       return {
         port: portNum,
@@ -1057,7 +1057,7 @@ async function inspectHttpBannersAndStatus(ip, openPortResults, vendor = '') {
         if (pctMatch) {
           consumableStatus = {
             tonerLevel: pctMatch[1].replace(/&nbsp;/g, ' ').replace('†', '').replace(/\s+/g, ' ').trim(),
-            details: 'Tonernivå (Kassett)'
+            details: 'Toner Level (Cartridge)'
           };
         }
         const cartMatch = html.match(/([0-9]{10}-[0-9A-Z]{4})/);
@@ -1095,9 +1095,9 @@ async function inspectHttpBannersAndStatus(ip, openPortResults, vendor = '') {
 
 // 5. Operating System Fingerprinting (TTL + Ports + Zeroconf + NetBIOS)
 function guessOsFingerprint({ ttl, vendor = '', mdns = null, ssdp = null, openPorts = [], netbios = null }) {
-  let osName = 'Okänt / Inbäddat OS';
+  let osName = 'Unknown / Embedded OS';
   let osFamily = 'Unknown';
-  let confidence = 'Låg';
+  let confidence = 'Low';
   let basis = [];
 
   const openPortNumbers = openPorts.map(p => typeof p === 'object' ? p.port : p);
@@ -1109,18 +1109,18 @@ function guessOsFingerprint({ ttl, vendor = '', mdns = null, ssdp = null, openPo
     if (ttl >= 100 && ttl <= 128) {
       osName = 'Microsoft Windows';
       osFamily = 'Windows';
-      confidence = 'Medel';
-      basis.push(`ICMP TTL=${ttl} (standardvärde för Windows NT-kärna)`);
+      confidence = 'Medium';
+      basis.push(`ICMP TTL=${ttl} (standard default for Windows NT kernel)`);
     } else if (ttl >= 50 && ttl <= 64) {
       osName = 'Linux / Unix / RTOS';
       osFamily = 'Unix/Linux';
-      confidence = 'Medel';
-      basis.push(`ICMP TTL=${ttl} (standardvärde för Linux / Unix / Darwin-kärna)`);
+      confidence = 'Medium';
+      basis.push(`ICMP TTL=${ttl} (standard default for Linux / Unix / Darwin kernel)`);
     } else if (ttl >= 200 && ttl <= 255) {
-      osName = 'Nätverksstack / Cisco / Inbäddad RTOS';
+      osName = 'Network Stack / Cisco / Embedded RTOS';
       osFamily = 'Embedded/Network';
-      confidence = 'Medel';
-      basis.push(`ICMP TTL=${ttl} (standardvärde för nätverks- och mikrostacks)`);
+      confidence = 'Medium';
+      basis.push(`ICMP TTL=${ttl} (standard default for network appliances & microstacks)`);
     }
   }
 
@@ -1135,53 +1135,53 @@ function guessOsFingerprint({ ttl, vendor = '', mdns = null, ssdp = null, openPo
   if (hasCast) {
     osName = 'Google CastOS / Android TV';
     osFamily = 'Android';
-    confidence = 'Hög';
-    basis.push('Google Cast-tjänst (port 8008/8009 / mDNS _googlecast) aktiv');
+    confidence = 'High';
+    basis.push('Google Cast service (port 8008/8009 / mDNS _googlecast) active');
   } else if (hasAirplay || vendorLower.includes('apple')) {
     osName = 'Apple Darwin (iOS / iPadOS / macOS / tvOS)';
     osFamily = 'Apple Darwin';
-    confidence = 'Hög';
-    basis.push('Apple mDNS Zeroconf / AirPlay-tjänster eller Apple MAC-adress');
+    confidence = 'High';
+    basis.push('Apple mDNS Zeroconf / AirPlay services or Apple MAC address verified');
   } else if (hasIpp || vendorLower.includes('printer')) {
     osName = 'Printer Embedded RTOS / CUPS';
     osFamily = 'Embedded RTOS';
-    confidence = 'Hög';
-    basis.push('Skrivartjänster (IPP port 631 / RAW port 9100) eller skrivarhårdvara identifierad');
+    confidence = 'High';
+    basis.push('Printer services (IPP port 631 / RAW port 9100) or printer hardware verified');
   } else if (hasSmb && hasRpc) {
     osName = 'Microsoft Windows (10 / 11 / Server)';
     osFamily = 'Windows';
-    confidence = 'Hög';
-    basis.push('Öppna Windows-portar 135 (RPC) och 445 (SMB) verifierade');
-    if (hasRdp) basis.push('Fjärrskrivbord (RDP port 3389) öppen');
+    confidence = 'High';
+    basis.push('Open Windows ports 135 (RPC) and 445 (SMB) verified');
+    if (hasRdp) basis.push('Remote Desktop (RDP port 3389) open');
   } else if (netbios && netbios.name && (osFamily === 'Windows' || ttl === 128)) {
-    osName = 'Microsoft Windows (NT-kärna)';
+    osName = 'Microsoft Windows (NT Kernel)';
     osFamily = 'Windows';
-    confidence = 'Hög';
-    basis.push(`Windows NetBIOS-namn identifierat: ${netbios.name}`);
+    confidence = 'High';
+    basis.push(`Windows NetBIOS name identified: ${netbios.name}`);
   } else if (hasSsh && (ttl === null || ttl <= 64)) {
     osName = 'Linux Server / Raspberry Pi / OpenWrt';
     osFamily = 'Linux';
-    confidence = 'Hög';
-    basis.push('SSH (port 22) öppen med Linux TTL');
+    confidence = 'High';
+    basis.push('SSH (port 22) open with Linux TTL');
   } else if (vendorLower.includes('zaptec')) {
     osName = 'Zaptec Charger OS (FreeRTOS / ESP-IDF)';
     osFamily = 'Embedded RTOS';
-    confidence = 'Hög';
-    basis.push('Zaptec EV Charger hårdvaru-fingeravtryck');
+    confidence = 'High';
+    basis.push('Zaptec EV Charger hardware fingerprint');
   } else if (vendorLower.includes('samsung') && (vendorLower.includes('oven') || vendorLower.includes('appliance'))) {
     osName = 'Samsung Smart Appliance (Tizen RT / FreeRTOS)';
     osFamily = 'Embedded IoT';
-    confidence = 'Hög';
+    confidence = 'High';
     basis.push('Samsung Smart Home IoT appliance');
   } else if (vendorLower.includes('vestel') || vendorLower.includes('tcl') || vendorLower.includes('earda')) {
     osName = 'Smart TV OS (Android TV / Linux)';
     osFamily = 'Smart TV';
-    confidence = 'Hög';
+    confidence = 'High';
     basis.push('Smart TV SoC / DVB Display stack');
   }
 
   if (netbios && netbios.name && !basis.some(b => b.includes('NetBIOS'))) {
-    basis.push(`NetBIOS-namn: ${netbios.name}`);
+    basis.push(`NetBIOS Name: ${netbios.name}`);
   }
 
   return {
@@ -1189,7 +1189,7 @@ function guessOsFingerprint({ ttl, vendor = '', mdns = null, ssdp = null, openPo
     osFamily,
     confidence,
     ttl: ttl || null,
-    basis: basis.length > 0 ? basis.join(' • ') : 'Uppskattning baserad på hårdvara och MAC-adress'
+    basis: basis.length > 0 ? basis.join(' • ') : 'Estimated based on hardware and MAC address'
   };
 }
 
@@ -1262,10 +1262,10 @@ async function inspectDevice(ip, mac = null, vendor = null) {
     networkCapabilities.push({ id: 'spotify', label: 'Spotify Connect', icon: 'Music' });
   }
   if (mdnsTypes.some(t => t.includes('ipp') || t.includes('printer')) || portResults.some(p => (p.port === 631 || p.port === 9100) && p.open)) {
-    networkCapabilities.push({ id: 'print', label: 'IPP / AirPrint Utskrift', icon: 'Printer' });
+    networkCapabilities.push({ id: 'print', label: 'IPP / AirPrint Printing', icon: 'Printer' });
   }
   if (portResults.some(p => p.port === 445 && p.open)) {
-    networkCapabilities.push({ id: 'smb', label: 'SMB Fildelning (Windows / Samba)', icon: 'Folder' });
+    networkCapabilities.push({ id: 'smb', label: 'SMB File Sharing (Windows / Samba)', icon: 'Folder' });
   }
   if (portResults.some(p => p.port === 22 && p.open)) {
     networkCapabilities.push({ id: 'ssh', label: 'SSH Shell', icon: 'Terminal' });
@@ -1273,6 +1273,7 @@ async function inspectDevice(ip, mac = null, vendor = null) {
   if (portResults.some(p => (p.port === 80 || p.port === 443 || p.port === 8080) && p.open)) {
     networkCapabilities.push({ id: 'web', label: 'Web Management (HTTP/S)', icon: 'Globe' });
   }
+
 
   const deviceSpecific = {
     printer: bannerInfo.consumableStatus ? {
