@@ -344,14 +344,357 @@ function getArpTable() {
   });
 }
 
+// ==========================================
+// Persistent Background Discovery Engine
+// ==========================================
+const persistentMdnsCache = {};
+const persistentSsdpCache = {};
+let bgMdnsSocket = null;
+let bgSsdpSocket = null;
+let bgKeepAliveTimer = null;
+let bgListenersStarted = false;
+
+// Parse standard and raw mDNS / Bonjour records into the target map
+function parseMdnsMessage(msg, ip, targetMap) {
+  if (!ip) return;
+  if (!targetMap[ip]) {
+    targetMap[ip] = {
+      services: new Set(),
+      serviceTypes: new Set(),
+      name: null,
+      model: null,
+      hostname: null,
+      port: null,
+      txtRecords: {},
+      rawEntries: [],
+      adminUrl: null
+    };
+  }
+
+  const entry = targetMap[ip];
+  const str = msg.toString('latin1');
+
+  // 1. Parse standard DNS TXT records (TYPE 16 = 0x0010)
+  for (let i = 0; i < msg.length - 10; i++) {
+    if (msg[i] === 0x00 && msg[i + 1] === 0x10 && (msg[i + 2] === 0x00 || msg[i + 2] === 0x80) && msg[i + 3] === 0x01) {
+      const rdlength = msg.readUInt16BE(i + 8);
+      let rdataPos = i + 10;
+      const rdataEnd = Math.min(msg.length, rdataPos + rdlength);
+
+      while (rdataPos < rdataEnd) {
+        const strLen = msg[rdataPos];
+        if (strLen === 0) break;
+        if (rdataPos + 1 + strLen <= rdataEnd) {
+          const item = msg.slice(rdataPos + 1, rdataPos + 1 + strLen).toString('utf8');
+          const eq = item.indexOf('=');
+          if (eq > 0) {
+            const k = item.substring(0, eq).trim();
+            const v = item.substring(eq + 1).trim();
+            if (k && !entry.txtRecords[k]) {
+              entry.txtRecords[k] = v;
+            }
+          }
+          if (!entry.rawEntries.includes(item)) {
+            entry.rawEntries.push(item);
+          }
+          rdataPos += 1 + strLen;
+        } else {
+          break;
+        }
+      }
+    }
+  }
+
+  // Regex fallback for any key=value pairs in buffer that weren't inside standard TXT blocks
+  const kvRegex = /(?:[\x01-\x1f]|^)([a-zA-Z0-9_\-]{1,32})=([^\x00\r\n\t\x1b\x7f]{1,250})/g;
+  let kvMatch;
+  while ((kvMatch = kvRegex.exec(str)) !== null) {
+    const k = kvMatch[1].trim();
+    const v = kvMatch[2].replace(/[\x00-\x1f].*$/, '').trim();
+    if (k && v && !entry.txtRecords[k]) {
+      entry.txtRecords[k] = v;
+      if (!entry.rawEntries.includes(`${k}=${v}`)) entry.rawEntries.push(`${k}=${v}`);
+    }
+  }
+
+  // 2. Parse SRV records for port (TYPE 33 = 0x0021)
+  for (let i = 0; i < msg.length - 16; i++) {
+    if (msg[i] === 0x00 && msg[i + 1] === 0x21 && (msg[i + 2] === 0x00 || msg[i + 2] === 0x80) && msg[i + 3] === 0x01) {
+      const srvPort = msg.readUInt16BE(i + 14);
+      if (srvPort > 0 && srvPort < 65535 && !entry.port) {
+        entry.port = srvPort;
+      }
+    }
+  }
+
+  // 3. Extract hostnames (*.local)
+  const hostMatches = str.match(/([a-zA-Z0-9\-]{2,64}\.local)/g) || [];
+  for (const h of hostMatches) {
+    if (!h.startsWith('_') && !entry.hostname) {
+      entry.hostname = h.replace(/\.$/, '');
+    }
+  }
+
+  // 4. Extract Friendly Name from parsed records or string
+  if (entry.txtRecords.fn && !entry.name) {
+    entry.name = entry.txtRecords.fn;
+  }
+  if (entry.txtRecords.ty && !entry.name) {
+    entry.name = entry.txtRecords.ty;
+  }
+  if (entry.txtRecords.product && !entry.name) {
+    entry.name = entry.txtRecords.product.replace(/[()]/g, '').trim();
+  }
+  if (!entry.name) {
+    const fnMatch = str.match(/fn=([^\x00\r\n\t]+)/);
+    if (fnMatch) entry.name = fnMatch[1].trim();
+    const hpMatch = str.match(/(HP [A-Za-z0-9\- ]+(?:MFP|LaserJet|DeskJet|ENVY|OfficeJet)[A-Za-z0-9\- ]*)/);
+    if (hpMatch) entry.name = hpMatch[1].trim();
+  }
+
+  // 5. Extract Model Name
+  if (entry.txtRecords.md && !entry.model) {
+    entry.model = entry.txtRecords.md;
+  }
+  if (entry.txtRecords.usb_MDL && !entry.model) {
+    entry.model = entry.txtRecords.usb_MDL;
+  }
+  if (!entry.model) {
+    const mdMatch = str.match(/md=([^\x00\r\n\t]+)/);
+    if (mdMatch) entry.model = mdMatch[1].replace(/[\x00-\x1f].*$/, '').trim();
+  }
+
+  // 6. Extract admin url
+  if (entry.txtRecords.adminurl && !entry.adminUrl) {
+    entry.adminUrl = entry.txtRecords.adminurl;
+  }
+
+  // 7. Service detection & registration
+  if (str.includes('_googlecast')) {
+    entry.services.add('Google Cast');
+    entry.serviceTypes.add('_googlecast._tcp.local');
+  }
+  if (str.includes('_spotify-connect')) {
+    entry.services.add('Spotify Connect');
+    entry.serviceTypes.add('_spotify-connect._tcp.local');
+  }
+  if (str.includes('_androidtvremote')) {
+    entry.services.add('Android TV');
+    entry.serviceTypes.add('_androidtvremote._tcp.local');
+  }
+  if (str.includes('_airplay')) {
+    entry.services.add('AirPlay');
+    entry.serviceTypes.add('_airplay._tcp.local');
+  }
+  if (str.includes('_raop')) {
+    entry.services.add('AirPlay Audio');
+    entry.serviceTypes.add('_raop._tcp.local');
+  }
+  if (str.includes('_companion-link')) {
+    entry.services.add('Apple Home / Companion');
+    entry.serviceTypes.add('_companion-link._tcp.local');
+  }
+  if (str.includes('_airdrop')) {
+    entry.services.add('AirDrop');
+    entry.serviceTypes.add('_airdrop._tcp.local');
+  }
+  if (str.includes('_ipp') || str.includes('_printer')) {
+    entry.services.add('Printer (IPP)');
+    entry.serviceTypes.add('_ipp._tcp.local');
+  }
+  if (str.includes('_scanner')) {
+    entry.services.add('Scanner');
+    entry.serviceTypes.add('_scanner._tcp.local');
+  }
+  if (str.includes('_smb')) {
+    entry.services.add('Samba (SMB)');
+    entry.serviceTypes.add('_smb._tcp.local');
+  }
+  if (str.includes('_hap')) {
+    entry.services.add('HomeKit');
+    entry.serviceTypes.add('_hap._tcp.local');
+  }
+  if (str.includes('_matter')) {
+    entry.services.add('Matter');
+    entry.serviceTypes.add('_matter._tcp.local');
+  }
+  if (str.includes('_http.')) {
+    entry.services.add('Web Server');
+    entry.serviceTypes.add('_http._tcp.local');
+  }
+  if (str.includes('_ssh.')) {
+    entry.services.add('SSH');
+    entry.serviceTypes.add('_ssh._tcp.local');
+  }
+  if (str.includes('_sftp-ssh.')) {
+    entry.services.add('SFTP');
+    entry.serviceTypes.add('_sftp-ssh._tcp.local');
+  }
+  if (str.includes('_sleep-proxy.')) {
+    entry.services.add('Apple Sleep Proxy');
+    entry.serviceTypes.add('_sleep-proxy._udp.local');
+  }
+}
+
+// Handle incoming SSDP location URL and fetch root description XML asynchronously
+async function handleSsdpLocation(ip, locUrl) {
+  if (!ip || !locUrl) return;
+  if (persistentSsdpCache[ip]?.location === locUrl && persistentSsdpCache[ip]?.rawXml) {
+    return;
+  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 1200);
+      const res = await fetch(locUrl, { signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const xml = await res.text();
+        const fnMatch = xml.match(/<friendlyName>([^<]+)<\/friendlyName>/i);
+        const mnMatch = xml.match(/<modelName>([^<]+)<\/modelName>/i);
+        persistentSsdpCache[ip] = {
+          name: fnMatch ? fnMatch[1].trim() : (mnMatch ? mnMatch[1].trim() : null),
+          model: mnMatch ? mnMatch[1].trim() : null,
+          location: locUrl,
+          rawXml: xml
+        };
+        break;
+      }
+    } catch (e) {
+      if (attempt === 0) await new Promise(r => setTimeout(r, 120));
+    }
+  }
+}
+
+// Build standard DNS query packet
+function buildDnsQueryPacket(domain) {
+  const parts = domain.split('.');
+  const labels = [];
+  for (const p of parts) {
+    labels.push(Buffer.from([p.length]));
+    labels.push(Buffer.from(p, 'ascii'));
+  }
+  labels.push(Buffer.from([0]));
+  const header = Buffer.from([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
+  const qTypeClass = Buffer.from([0, 12, 0, 1]); // QTYPE=PTR, QCLASS=IN
+  return Buffer.concat([header, Buffer.concat(labels), qTypeClass]);
+}
+
+// Broadcast mDNS discovery query burst
+function sendMdnsQueryBurst(socket) {
+  if (!socket) return;
+  const queries = [
+    '_services._dns-sd._udp.local',
+    '_googlecast._tcp.local',
+    '_airplay._tcp.local',
+    '_raop._tcp.local',
+    '_companion-link._tcp.local',
+    '_airdrop._tcp.local',
+    '_spotify-connect._tcp.local',
+    '_ipp._tcp.local',
+    '_printer._tcp.local',
+    '_hap._tcp.local',
+    '_matter._tcp.local',
+    '_smb._tcp.local',
+    '_http._tcp.local',
+    '_device-info._tcp.local',
+    '_sleep-proxy._udp.local'
+  ];
+  for (const q of queries) {
+    try {
+      const packet = buildDnsQueryPacket(q);
+      socket.send(packet, 5353, '224.0.0.251');
+    } catch (e) {}
+  }
+}
+
+// Broadcast SSDP M-SEARCH burst
+function sendSsdpQueryBurst(socket) {
+  if (!socket) return;
+  const queries = [
+    'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: ssdp:all\r\n\r\n',
+    'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: upnp:rootdevice\r\n\r\n'
+  ];
+  for (const q of queries) {
+    try {
+      socket.send(Buffer.from(q), 1900, '239.255.255.250');
+    } catch (e) {}
+  }
+}
+
+// Start permanent background listeners for continuous mDNS & SSDP observation
+function startPermanentBackgroundListeners(localIp = null) {
+  if (bgListenersStarted) return;
+  bgListenersStarted = true;
+
+  // 1. Permanent mDNS listener on port 5353
+  try {
+    bgMdnsSocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    bgMdnsSocket.on('message', (msg, rinfo) => {
+      parseMdnsMessage(msg, rinfo.address, persistentMdnsCache);
+    });
+    bgMdnsSocket.on('error', () => {
+      // Non-fatal
+    });
+    bgMdnsSocket.bind(5353, () => {
+      try {
+        if (localIp) {
+          bgMdnsSocket.addMembership('224.0.0.251', localIp);
+          bgMdnsSocket.setMulticastInterface(localIp);
+        } else {
+          bgMdnsSocket.addMembership('224.0.0.251');
+        }
+      } catch (e) {}
+      sendMdnsQueryBurst(bgMdnsSocket);
+    });
+  } catch (e) {}
+
+  // 2. Permanent SSDP listener on port 1900
+  try {
+    bgSsdpSocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    bgSsdpSocket.on('message', (msg, rinfo) => {
+      const text = msg.toString();
+      const locMatch = text.match(/LOCATION:\s*([^\r\n]+)/i);
+      if (locMatch) {
+        handleSsdpLocation(rinfo.address, locMatch[1].trim());
+      }
+    });
+    bgSsdpSocket.on('error', () => {
+      // Non-fatal
+    });
+    bgSsdpSocket.bind(1900, () => {
+      try {
+        if (localIp) {
+          bgSsdpSocket.setMulticastInterface(localIp);
+          bgSsdpSocket.addMembership('239.255.255.250', localIp);
+        } else {
+          bgSsdpSocket.addMembership('239.255.255.250');
+        }
+      } catch (e) {}
+      sendSsdpQueryBurst(bgSsdpSocket);
+    });
+  } catch (e) {}
+
+  // 3. Periodic low-rate heartbeat refresh every 60 seconds
+  if (!bgKeepAliveTimer) {
+    bgKeepAliveTimer = setInterval(() => {
+      if (bgMdnsSocket) sendMdnsQueryBurst(bgMdnsSocket);
+      if (bgSsdpSocket) sendSsdpQueryBurst(bgSsdpSocket);
+    }, 60000);
+    if (bgKeepAliveTimer.unref) bgKeepAliveTimer.unref();
+  }
+}
+
 // SSDP UPnP device friendlyName & XML discovery
 function discoverSsdpNames(timeoutMs = 1600, localIp = null) {
+  startPermanentBackgroundListeners(localIp);
+
   return new Promise((resolve) => {
     let client;
     try {
       client = dgram.createSocket({ type: 'udp4', reuseAddr: true });
     } catch (e) {
-      return resolve({});
+      return resolve({ ...persistentSsdpCache });
     }
 
     const discovered = {};
@@ -359,83 +702,47 @@ function discoverSsdpNames(timeoutMs = 1600, localIp = null) {
     client.on('message', (msg, rinfo) => {
       const text = msg.toString();
       const locMatch = text.match(/LOCATION:\s*([^\r\n]+)/i);
-      if (locMatch && !discovered[rinfo.address]) {
-        discovered[rinfo.address] = locMatch[1].trim();
+      if (locMatch) {
+        const url = locMatch[1].trim();
+        discovered[rinfo.address] = url;
+        handleSsdpLocation(rinfo.address, url);
       }
     });
 
     client.on('error', () => {
       try { client.close(); } catch (e) {}
-      resolve({});
+      resolve({ ...persistentSsdpCache });
     });
 
     client.bind(0, () => {
       if (localIp) {
-        try {
-          client.setMulticastInterface(localIp);
-        } catch (e) {}
+        try { client.setMulticastInterface(localIp); } catch (e) {}
       }
 
-      const queries = [
-        'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: ssdp:all\r\n\r\n',
-        'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: upnp:rootdevice\r\n\r\n'
-      ];
+      sendSsdpQueryBurst(client);
 
-      // Burst 1 (immediate)
-      for (const q of queries) {
-        try { client.send(Buffer.from(q), 1900, '239.255.255.250'); } catch (e) {}
-      }
-
-      // Burst 2 (after 250ms) to ensure slow or sleeping Wi-Fi devices are caught
       setTimeout(() => {
-        try {
-          for (const q of queries) {
-            client.send(Buffer.from(q), 1900, '239.255.255.250');
-          }
-        } catch (e) {}
+        sendSsdpQueryBurst(client);
       }, 250);
 
-      // Burst 3 (after 500ms)
       setTimeout(() => {
-        try {
-          for (const q of queries) {
-            client.send(Buffer.from(q), 1900, '239.255.255.250');
-          }
-        } catch (e) {}
+        sendSsdpQueryBurst(client);
       }, 500);
     });
 
     setTimeout(async () => {
       try { client.close(); } catch (e) {}
-      const results = {};
+
+      // Fetch any newly discovered locations that aren't yet in persistent cache
       await Promise.all(
         Object.entries(discovered).map(async ([ip, locUrl]) => {
-          // Retry fetching location up to 2 times
-          for (let attempt = 0; attempt < 2; attempt++) {
-            try {
-              const controller = new AbortController();
-              const timer = setTimeout(() => controller.abort(), 900);
-              const res = await fetch(locUrl, { signal: controller.signal });
-              clearTimeout(timer);
-              if (res.ok) {
-                const xml = await res.text();
-                const fnMatch = xml.match(/<friendlyName>([^<]+)<\/friendlyName>/i);
-                const mnMatch = xml.match(/<modelName>([^<]+)<\/modelName>/i);
-                results[ip] = {
-                  name: fnMatch ? fnMatch[1].trim() : (mnMatch ? mnMatch[1].trim() : null),
-                  model: mnMatch ? mnMatch[1].trim() : null,
-                  location: locUrl,
-                  rawXml: xml
-                };
-                break;
-              }
-            } catch (e) {
-              if (attempt === 0) await new Promise(r => setTimeout(r, 120));
-            }
+          if (!persistentSsdpCache[ip]) {
+            await handleSsdpLocation(ip, locUrl);
           }
         })
       );
-      resolve(results);
+
+      resolve({ ...persistentSsdpCache });
     }, timeoutMs);
   });
 }
@@ -443,16 +750,24 @@ function discoverSsdpNames(timeoutMs = 1600, localIp = null) {
 // Fetch UPnP / SSDP XML on demand (either from cached location or common local endpoints)
 async function fetchDeviceXml(ip, cachedLocation = null, cachedXml = null) {
   if (cachedXml) return { location: cachedLocation || `http://${ip}:1900/description.xml`, xml: cachedXml };
-  if (cachedLocation) {
+  if (persistentSsdpCache[ip]?.rawXml) {
+    return {
+      location: persistentSsdpCache[ip].location || cachedLocation || `http://${ip}:1900/description.xml`,
+      xml: persistentSsdpCache[ip].rawXml
+    };
+  }
+
+  const loc = cachedLocation || persistentSsdpCache[ip]?.location;
+  if (loc) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 1000);
-        const res = await fetch(cachedLocation, { signal: controller.signal });
+        const res = await fetch(loc, { signal: controller.signal });
         clearTimeout(timer);
         if (res.ok) {
           const xml = await res.text();
-          return { location: cachedLocation, xml };
+          return { location: loc, xml };
         }
       } catch (e) {
         if (attempt === 0) await new Promise(r => setTimeout(r, 100));
@@ -490,253 +805,58 @@ async function fetchDeviceXml(ip, cachedLocation = null, cachedXml = null) {
 
 // Pure Node.js mDNS / Bonjour Service & Hostname Discovery (zero external deps)
 function discoverMdns(localIp, timeoutMs = 1800) {
+  startPermanentBackgroundListeners(localIp);
+
   return new Promise((resolve) => {
     let socket;
     try {
       socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
     } catch (e) {
-      return resolve({});
+      return resolve(getPersistentMdnsSnapshot());
     }
 
-    const mdnsMap = {};
-
     socket.on('message', (msg, rinfo) => {
-      const ip = rinfo.address;
-      if (!mdnsMap[ip]) {
-        mdnsMap[ip] = {
-          services: new Set(),
-          serviceTypes: new Set(),
-          name: null,
-          model: null,
-          hostname: null,
-          port: null,
-          txtRecords: {},
-          rawEntries: [],
-          adminUrl: null
-        };
-      }
-
-      const entry = mdnsMap[ip];
-      const str = msg.toString('latin1');
-
-      // 1. Parse standard DNS TXT records (TYPE 16 = 0x0010)
-      for (let i = 0; i < msg.length - 10; i++) {
-        if (msg[i] === 0x00 && msg[i + 1] === 0x10 && (msg[i + 2] === 0x00 || msg[i + 2] === 0x80) && msg[i + 3] === 0x01) {
-          const rdlength = msg.readUInt16BE(i + 8);
-          let rdataPos = i + 10;
-          const rdataEnd = Math.min(msg.length, rdataPos + rdlength);
-
-          while (rdataPos < rdataEnd) {
-            const strLen = msg[rdataPos];
-            if (strLen === 0) break;
-            if (rdataPos + 1 + strLen <= rdataEnd) {
-              const item = msg.slice(rdataPos + 1, rdataPos + 1 + strLen).toString('utf8');
-              const eq = item.indexOf('=');
-              if (eq > 0) {
-                const k = item.substring(0, eq).trim();
-                const v = item.substring(eq + 1).trim();
-                if (k && !entry.txtRecords[k]) {
-                  entry.txtRecords[k] = v;
-                }
-              }
-              if (!entry.rawEntries.includes(item)) {
-                entry.rawEntries.push(item);
-              }
-              rdataPos += 1 + strLen;
-            } else {
-              break;
-            }
-          }
-        }
-      }
-
-      // Regex fallback for any key=value pairs in buffer that weren't inside standard TXT blocks
-      const kvRegex = /(?:[\x01-\x1f]|^)([a-zA-Z0-9_\-]{1,32})=([^\x00\r\n\t\x1b\x7f]{1,250})/g;
-      let kvMatch;
-      while ((kvMatch = kvRegex.exec(str)) !== null) {
-        const k = kvMatch[1].trim();
-        const v = kvMatch[2].replace(/[\x00-\x1f].*$/, '').trim();
-        if (k && v && !entry.txtRecords[k]) {
-          entry.txtRecords[k] = v;
-          if (!entry.rawEntries.includes(`${k}=${v}`)) entry.rawEntries.push(`${k}=${v}`);
-        }
-      }
-
-      // 2. Parse SRV records for port (TYPE 33 = 0x0021)
-      for (let i = 0; i < msg.length - 16; i++) {
-        if (msg[i] === 0x00 && msg[i + 1] === 0x21 && (msg[i + 2] === 0x00 || msg[i + 2] === 0x80) && msg[i + 3] === 0x01) {
-          const srvPort = msg.readUInt16BE(i + 14);
-          if (srvPort > 0 && srvPort < 65535 && !entry.port) {
-            entry.port = srvPort;
-          }
-        }
-      }
-
-      // 3. Extract hostnames (*.local)
-      const hostMatches = str.match(/([a-zA-Z0-9\-]{2,64}\.local)/g) || [];
-      for (const h of hostMatches) {
-        if (!h.startsWith('_') && !entry.hostname) {
-          entry.hostname = h.replace(/\.$/, '');
-        }
-      }
-
-      // 4. Extract Friendly Name from parsed records or string
-      if (entry.txtRecords.fn && !entry.name) {
-        entry.name = entry.txtRecords.fn;
-      }
-      if (entry.txtRecords.ty && !entry.name) {
-        entry.name = entry.txtRecords.ty;
-      }
-      if (entry.txtRecords.product && !entry.name) {
-        entry.name = entry.txtRecords.product.replace(/[()]/g, '').trim();
-      }
-      if (!entry.name) {
-        const fnMatch = str.match(/fn=([^\x00\r\n\t]+)/);
-        if (fnMatch) entry.name = fnMatch[1].trim();
-        const hpMatch = str.match(/(HP [A-Za-z0-9\- ]+(?:MFP|LaserJet|DeskJet|ENVY|OfficeJet)[A-Za-z0-9\- ]*)/);
-        if (hpMatch) entry.name = hpMatch[1].trim();
-      }
-
-      // 5. Extract Model Name
-      if (entry.txtRecords.md && !entry.model) {
-        entry.model = entry.txtRecords.md;
-      }
-      if (entry.txtRecords.usb_MDL && !entry.model) {
-        entry.model = entry.txtRecords.usb_MDL;
-      }
-      if (!entry.model) {
-        const mdMatch = str.match(/md=([^\x00\r\n\t]+)/);
-        if (mdMatch) entry.model = mdMatch[1].replace(/[\x00-\x1f].*$/, '').trim();
-      }
-
-      // 6. Extract admin url
-      if (entry.txtRecords.adminurl && !entry.adminUrl) {
-        entry.adminUrl = entry.txtRecords.adminurl;
-      }
-
-      // 7. Service detection & registration
-      if (str.includes('_googlecast')) {
-        entry.services.add('Google Cast');
-        entry.serviceTypes.add('_googlecast._tcp.local');
-      }
-      if (str.includes('_spotify-connect')) {
-        entry.services.add('Spotify Connect');
-        entry.serviceTypes.add('_spotify-connect._tcp.local');
-      }
-      if (str.includes('_androidtvremote')) {
-        entry.services.add('Android TV');
-        entry.serviceTypes.add('_androidtvremote._tcp.local');
-      }
-      if (str.includes('_airplay')) {
-        entry.services.add('AirPlay');
-        entry.serviceTypes.add('_airplay._tcp.local');
-      }
-      if (str.includes('_raop')) {
-        entry.services.add('AirPlay Audio');
-        entry.serviceTypes.add('_raop._tcp.local');
-      }
-      if (str.includes('_companion-link')) {
-        entry.services.add('Apple Home');
-        entry.serviceTypes.add('_companion-link._tcp.local');
-      }
-      if (str.includes('_ipp') || str.includes('_printer')) {
-        entry.services.add('Printer (IPP)');
-        entry.serviceTypes.add('_ipp._tcp.local');
-      }
-      if (str.includes('_scanner')) {
-        entry.services.add('Scanner');
-        entry.serviceTypes.add('_scanner._tcp.local');
-      }
-      if (str.includes('_smb')) {
-        entry.services.add('Samba (SMB)');
-        entry.serviceTypes.add('_smb._tcp.local');
-      }
-      if (str.includes('_hap')) {
-        entry.services.add('HomeKit');
-        entry.serviceTypes.add('_hap._tcp.local');
-      }
-      if (str.includes('_matter')) {
-        entry.services.add('Matter');
-        entry.serviceTypes.add('_matter._tcp.local');
-      }
-      if (str.includes('_http.')) {
-        entry.services.add('Web Server');
-        entry.serviceTypes.add('_http._tcp.local');
-      }
+      parseMdnsMessage(msg, rinfo.address, persistentMdnsCache);
     });
 
     socket.on('error', () => {
       try { socket.close(); } catch (e) {}
-      resolve({});
+      resolve(getPersistentMdnsSnapshot());
     });
 
-    socket.bind(5353, () => {
+    socket.bind(0, () => {
       try {
         if (localIp) {
-          socket.addMembership('224.0.0.251', localIp);
           socket.setMulticastInterface(localIp);
-        } else {
-          socket.addMembership('224.0.0.251');
         }
       } catch (e) {}
 
-      // Build standard DNS query packet
-      const buildQuery = (domain) => {
-        const parts = domain.split('.');
-        const labels = [];
-        for (const p of parts) {
-          labels.push(Buffer.from([p.length]));
-          labels.push(Buffer.from(p, 'ascii'));
-        }
-        labels.push(Buffer.from([0]));
-        const header = Buffer.from([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
-        const qTypeClass = Buffer.from([0, 12, 0, 1]); // QTYPE=PTR, QCLASS=IN
-        return Buffer.concat([header, Buffer.concat(labels), qTypeClass]);
-      };
-
-      const queries = [
-        '_services._dns-sd._udp.local',
-        '_googlecast._tcp.local',
-        '_airplay._tcp.local',
-        '_raop._tcp.local',
-        '_companion-link._tcp.local',
-        '_spotify-connect._tcp.local',
-        '_ipp._tcp.local',
-        '_printer._tcp.local',
-        '_hap._tcp.local',
-        '_matter._tcp.local',
-        '_smb._tcp.local',
-        '_http._tcp.local',
-        '_device-info._tcp.local'
-      ];
-
-      for (const q of queries) {
-        try {
-          const packet = buildQuery(q);
-          socket.send(packet, 5353, '224.0.0.251');
-        } catch (e) {}
-      }
+      sendMdnsQueryBurst(socket);
     });
 
     setTimeout(() => {
       try { socket.close(); } catch (e) {}
-      const finalResult = {};
-      for (const [ip, d] of Object.entries(mdnsMap)) {
-        finalResult[ip] = {
-          name: d.name,
-          model: d.model,
-          hostname: d.hostname,
-          port: d.port,
-          services: Array.from(d.services),
-          serviceTypes: Array.from(d.serviceTypes),
-          txtRecords: d.txtRecords,
-          rawEntries: d.rawEntries,
-          adminUrl: d.adminUrl
-        };
-      }
-      resolve(finalResult);
+      resolve(getPersistentMdnsSnapshot());
     }, timeoutMs);
   });
+}
+
+function getPersistentMdnsSnapshot() {
+  const finalResult = {};
+  for (const [ip, d] of Object.entries(persistentMdnsCache)) {
+    finalResult[ip] = {
+      name: d.name,
+      model: d.model,
+      hostname: d.hostname,
+      port: d.port,
+      services: Array.from(d.services || []),
+      serviceTypes: Array.from(d.serviceTypes || []),
+      txtRecords: d.txtRecords || {},
+      rawEntries: d.rawEntries || [],
+      adminUrl: d.adminUrl || null
+    };
+  }
+  return finalResult;
 }
 
 // ==========================================
@@ -1206,7 +1326,18 @@ async function inspectDevice(ip, mac = null, vendor = null) {
     fetchDeviceXml(ip)
   ]);
 
-  const mdnsInfo = mdnsMapResult ? mdnsMapResult[ip] || null : null;
+  const mdnsInfo = mdnsMapResult ? (mdnsMapResult[ip] || null) : (persistentMdnsCache[ip] ? {
+    name: persistentMdnsCache[ip].name,
+    model: persistentMdnsCache[ip].model,
+    hostname: persistentMdnsCache[ip].hostname,
+    port: persistentMdnsCache[ip].port,
+    services: Array.from(persistentMdnsCache[ip].services || []),
+    serviceTypes: Array.from(persistentMdnsCache[ip].serviceTypes || []),
+    txtRecords: persistentMdnsCache[ip].txtRecords || {},
+    rawEntries: persistentMdnsCache[ip].rawEntries || [],
+    adminUrl: persistentMdnsCache[ip].adminUrl || null
+  } : null);
+
   let ssdpInfo = null;
   if (xmlRes && xmlRes.xml) {
     const fnMatch = xmlRes.xml.match(/<friendlyName>([^<]+)<\/friendlyName>/i);
@@ -1217,6 +1348,8 @@ async function inspectDevice(ip, mac = null, vendor = null) {
       location: xmlRes.location,
       rawXml: xmlRes.xml
     };
+  } else if (persistentSsdpCache[ip]) {
+    ssdpInfo = persistentSsdpCache[ip];
   }
 
 
@@ -1608,6 +1741,7 @@ module.exports = {
   queryNetbios,
   querySnmp,
   probeTcpPorts,
-  guessOsFingerprint
+  guessOsFingerprint,
+  startPermanentBackgroundListeners
 };
 

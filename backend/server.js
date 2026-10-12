@@ -5,7 +5,7 @@ const { runTraceroute } = require('./traceroute');
 const { performDig } = require('./dns');
 const { checkSsl } = require('./ssl');
 const { getLiveConnections } = require('./netstat');
-const { scanLan, fetchDeviceXml, inspectDevice } = require('./arp');
+const { scanLan, fetchDeviceXml, inspectDevice, startPermanentBackgroundListeners } = require('./arp');
 
 const path = require('path');
 const readline = require('readline');
@@ -350,6 +350,8 @@ ${reset}`);
     console.log(`  ${gray}>> Ready to bridge local network traceroutes${reset}`);
     console.log(`  ${gray}>> You can now use the browser version at: ${cyan}https://vni.s4m.dev${reset}`);
     console.log(`  ${gray}>> Press Ctrl+C or type 'quit' to stop the engine${reset}\n`);
+
+    startPermanentBackgroundListeners();
 
     const rl = readline.createInterface({
         input: process.stdin,
