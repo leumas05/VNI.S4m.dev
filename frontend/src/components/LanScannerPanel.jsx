@@ -18,7 +18,10 @@ import {
   Radio,
   Edit2,
   ExternalLink,
-  FileCode
+  FileCode,
+  Printer,
+  Sun,
+  Gamepad2
 } from 'lucide-react';
 import XmlViewerModal from './XmlViewerModal';
 import MdnsViewerModal from './MdnsViewerModal';
@@ -33,12 +36,25 @@ function getDeviceIcon(type) {
       return Laptop;
     case 'mobile':
       return Smartphone;
-    case 'iot':
-      return Cpu;
-    case 'console':
+    case 'printer':
+      return Printer;
+    case 'ev_charger':
+      return Zap;
+    case 'solar':
+      return Sun;
+    case 'tv':
       return Tv;
+    case 'console':
+      return Gamepad2;
     case 'server':
+    case 'nas':
       return Server;
+    case 'mesh_node':
+    case 'network':
+      return Wifi;
+    case 'iot':
+    case 'smart_home':
+      return Cpu;
     default:
       return Wifi;
   }
@@ -49,18 +65,52 @@ function getDeviceColor(type, isThisDevice, isGateway) {
   if (isThisDevice) return '#38bdf8'; // Sky blue
   switch (type) {
     case 'mobile':
-      return '#ec4899'; // Pink / Apple / Mobile
+      return '#ec4899'; // Pink / Mobile
+    case 'printer':
+      return '#0ea5e9'; // Sky Blue / Printer
+    case 'ev_charger':
+      return '#eab308'; // Amber / EV Charger
+    case 'solar':
+      return '#f59e0b'; // Amber / Solar
     case 'iot':
+    case 'smart_home':
       return '#f59e0b'; // Amber / Smart Home
+    case 'tv':
+      return '#a855f7'; // Purple / Smart TV
     case 'console':
-      return '#a855f7'; // Purple / Console
+      return '#8b5cf6'; // Violet / Console
     case 'server':
+    case 'nas':
       return '#6366f1'; // Indigo
     case 'computer':
+    case 'desktop':
       return '#06b6d4'; // Cyan
+    case 'mesh_node':
+    case 'network':
+      return '#14b8a6'; // Teal
     default:
       return '#94a3b8'; // Slate
   }
+}
+
+function formatDeviceType(type) {
+  const map = {
+    'router': 'Router',
+    'computer': 'PC / Laptop',
+    'desktop': 'Desktop PC',
+    'mobile': 'Mobile',
+    'printer': 'Printer',
+    'ev_charger': 'EV Charger',
+    'solar': 'Solar / Battery',
+    'iot': 'Smart Home IoT',
+    'tv': 'Smart TV',
+    'console': 'Game Console',
+    'server': 'Server / NAS',
+    'mesh_node': 'Mesh Node',
+    'network': 'Network Device',
+    'device': 'Client Device'
+  };
+  return map[type] || (type ? type.replace(/_/g, ' ') : 'Device');
 }
 
 export default function LanScannerPanel({
@@ -135,8 +185,13 @@ export default function LanScannerPanel({
   // Filter client devices
   const filteredDevices = useMemo(() => {
     return devices.filter(dev => {
-      if (filterType !== 'all' && dev.deviceType !== filterType) {
-        return false;
+      if (filterType !== 'all') {
+        const t = dev.deviceType || '';
+        if (filterType === 'mobile' && t !== 'mobile') return false;
+        if (filterType === 'computer' && t !== 'computer' && t !== 'desktop') return false;
+        if (filterType === 'iot' && !['iot', 'ev_charger', 'solar', 'smart_home', 'printer'].includes(t)) return false;
+        if (filterType === 'console' && !['console', 'tv'].includes(t)) return false;
+        if (filterType === 'server' && !['server', 'nas'].includes(t)) return false;
       }
       if (!search.trim()) return true;
       const s = search.toLowerCase();
@@ -657,8 +712,8 @@ export default function LanScannerPanel({
 
                 {/* Bottom Action strip */}
                 <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
-                  <span className="text-gray-500 text-[10px] capitalize">
-                    {dev.deviceType} • {dev.type}
+                  <span className="text-gray-500 text-[10px]">
+                    {formatDeviceType(dev.deviceType)} • {dev.type}
                   </span>
                   <div className="flex items-center gap-1.5">
                     <button

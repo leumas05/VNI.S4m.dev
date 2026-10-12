@@ -18,7 +18,11 @@ import {
   CircleDot,
   ExternalLink,
   FileCode,
-  Radio
+  Radio,
+  Printer,
+  Zap,
+  Sun,
+  Gamepad2
 } from 'lucide-react';
 import XmlViewerModal from './XmlViewerModal';
 import MdnsViewerModal from './MdnsViewerModal';
@@ -33,15 +37,25 @@ function getDeviceIcon(type) {
       return Laptop;
     case 'mobile':
       return Smartphone;
-    case 'iot':
+    case 'printer':
+      return Printer;
     case 'ev_charger':
+      return Zap;
     case 'solar':
-      return Cpu;
-    case 'console':
+      return Sun;
     case 'tv':
       return Tv;
+    case 'console':
+      return Gamepad2;
     case 'server':
+    case 'nas':
       return Server;
+    case 'mesh_node':
+    case 'network':
+      return Wifi;
+    case 'iot':
+    case 'smart_home':
+      return Cpu;
     default:
       return Wifi;
   }
@@ -53,18 +67,28 @@ function getDeviceColor(type, isThisDevice, isGateway) {
   switch (type) {
     case 'mobile':
       return '#ec4899'; // Pink
-    case 'iot':
+    case 'printer':
+      return '#0ea5e9'; // Sky Blue
     case 'ev_charger':
+      return '#eab308'; // Amber / EV Charger
     case 'solar':
+      return '#f59e0b'; // Amber / Solar
+    case 'iot':
+    case 'smart_home':
       return '#f59e0b'; // Amber
-    case 'console':
     case 'tv':
       return '#a855f7'; // Purple
+    case 'console':
+      return '#8b5cf6'; // Violet
     case 'server':
+    case 'nas':
       return '#6366f1'; // Indigo
     case 'computer':
     case 'desktop':
       return '#06b6d4'; // Cyan
+    case 'mesh_node':
+    case 'network':
+      return '#14b8a6'; // Teal
     default:
       return '#94a3b8'; // Slate
   }
