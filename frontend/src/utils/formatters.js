@@ -46,3 +46,4 @@ export function formatBasis(basis) {
     .replace(/öppen/gi, 'open')
     .replace(/öppna/gi, 'open');
 }
+
