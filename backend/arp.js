@@ -445,7 +445,7 @@ async function fetchDeviceXml(ip, cachedLocation = null, cachedXml = null) {
 }
 
 // Pure Node.js mDNS / Bonjour Service & Hostname Discovery (zero external deps)
-function discoverMdns(localIp, timeoutMs = 1500) {
+function discoverMdns(localIp, timeoutMs = 1800) {
   return new Promise((resolve) => {
     let socket;
     try {
@@ -459,38 +459,166 @@ function discoverMdns(localIp, timeoutMs = 1500) {
     socket.on('message', (msg, rinfo) => {
       const ip = rinfo.address;
       if (!mdnsMap[ip]) {
-        mdnsMap[ip] = { services: new Set(), name: null, model: null };
+        mdnsMap[ip] = {
+          services: new Set(),
+          serviceTypes: new Set(),
+          name: null,
+          model: null,
+          hostname: null,
+          port: null,
+          txtRecords: {},
+          rawEntries: [],
+          adminUrl: null
+        };
       }
 
+      const entry = mdnsMap[ip];
       const str = msg.toString('latin1');
 
-      // Google Cast / Android TV TXT attributes (fn=Friendly Name, md=Model Name)
-      const fnMatch = str.match(/fn=([^\x00\r\n\t]+)/);
-      if (fnMatch && !mdnsMap[ip].name) {
-        mdnsMap[ip].name = fnMatch[1].trim();
+      // 1. Parse standard DNS TXT records (TYPE 16 = 0x0010)
+      for (let i = 0; i < msg.length - 10; i++) {
+        if (msg[i] === 0x00 && msg[i + 1] === 0x10 && (msg[i + 2] === 0x00 || msg[i + 2] === 0x80) && msg[i + 3] === 0x01) {
+          const rdlength = msg.readUInt16BE(i + 8);
+          let rdataPos = i + 10;
+          const rdataEnd = Math.min(msg.length, rdataPos + rdlength);
+
+          while (rdataPos < rdataEnd) {
+            const strLen = msg[rdataPos];
+            if (strLen === 0) break;
+            if (rdataPos + 1 + strLen <= rdataEnd) {
+              const item = msg.slice(rdataPos + 1, rdataPos + 1 + strLen).toString('utf8');
+              const eq = item.indexOf('=');
+              if (eq > 0) {
+                const k = item.substring(0, eq).trim();
+                const v = item.substring(eq + 1).trim();
+                if (k && !entry.txtRecords[k]) {
+                  entry.txtRecords[k] = v;
+                }
+              }
+              if (!entry.rawEntries.includes(item)) {
+                entry.rawEntries.push(item);
+              }
+              rdataPos += 1 + strLen;
+            } else {
+              break;
+            }
+          }
+        }
       }
 
-      const mdMatch = str.match(/md=([^\x00\r\n\t]+)/);
-      if (mdMatch && !mdnsMap[ip].model) {
-        mdnsMap[ip].model = mdMatch[1].replace(/[\x00-\x1f].*$/, '').trim();
+      // Regex fallback for any key=value pairs in buffer that weren't inside standard TXT blocks
+      const kvRegex = /(?:[\x01-\x1f]|^)([a-zA-Z0-9_\-]{1,32})=([^\x00\r\n\t\x1b\x7f]{1,250})/g;
+      let kvMatch;
+      while ((kvMatch = kvRegex.exec(str)) !== null) {
+        const k = kvMatch[1].trim();
+        const v = kvMatch[2].replace(/[\x00-\x1f].*$/, '').trim();
+        if (k && v && !entry.txtRecords[k]) {
+          entry.txtRecords[k] = v;
+          if (!entry.rawEntries.includes(`${k}=${v}`)) entry.rawEntries.push(`${k}=${v}`);
+        }
       }
 
-      // HP / Network Printer name patterns
-      const hpMatch = str.match(/(HP [A-Za-z0-9\- ]+(?:MFP|LaserJet|DeskJet|ENVY|OfficeJet)[A-Za-z0-9\- ]*)/);
-      if (hpMatch && !mdnsMap[ip].name) {
-        mdnsMap[ip].name = hpMatch[1].trim();
+      // 2. Parse SRV records for port (TYPE 33 = 0x0021)
+      for (let i = 0; i < msg.length - 16; i++) {
+        if (msg[i] === 0x00 && msg[i + 1] === 0x21 && (msg[i + 2] === 0x00 || msg[i + 2] === 0x80) && msg[i + 3] === 0x01) {
+          const srvPort = msg.readUInt16BE(i + 14);
+          if (srvPort > 0 && srvPort < 65535 && !entry.port) {
+            entry.port = srvPort;
+          }
+        }
       }
 
-      // Service detection
-      if (str.includes('_googlecast')) mdnsMap[ip].services.add('Google Cast');
-      if (str.includes('_spotify-connect')) mdnsMap[ip].services.add('Spotify Connect');
-      if (str.includes('_androidtvremote')) mdnsMap[ip].services.add('Android TV');
-      if (str.includes('_airplay')) mdnsMap[ip].services.add('AirPlay');
-      if (str.includes('_raop')) mdnsMap[ip].services.add('AirPlay Audio');
-      if (str.includes('_companion-link')) mdnsMap[ip].services.add('Apple Home');
-      if (str.includes('_ipp') || str.includes('_printer')) mdnsMap[ip].services.add('Printer (IPP)');
-      if (str.includes('_scanner')) mdnsMap[ip].services.add('Scanner');
-      if (str.includes('_smb')) mdnsMap[ip].services.add('Samba (SMB)');
+      // 3. Extract hostnames (*.local)
+      const hostMatches = str.match(/([a-zA-Z0-9\-]{2,64}\.local)/g) || [];
+      for (const h of hostMatches) {
+        if (!h.startsWith('_') && !entry.hostname) {
+          entry.hostname = h.replace(/\.$/, '');
+        }
+      }
+
+      // 4. Extract Friendly Name from parsed records or string
+      if (entry.txtRecords.fn && !entry.name) {
+        entry.name = entry.txtRecords.fn;
+      }
+      if (entry.txtRecords.ty && !entry.name) {
+        entry.name = entry.txtRecords.ty;
+      }
+      if (entry.txtRecords.product && !entry.name) {
+        entry.name = entry.txtRecords.product.replace(/[()]/g, '').trim();
+      }
+      if (!entry.name) {
+        const fnMatch = str.match(/fn=([^\x00\r\n\t]+)/);
+        if (fnMatch) entry.name = fnMatch[1].trim();
+        const hpMatch = str.match(/(HP [A-Za-z0-9\- ]+(?:MFP|LaserJet|DeskJet|ENVY|OfficeJet)[A-Za-z0-9\- ]*)/);
+        if (hpMatch) entry.name = hpMatch[1].trim();
+      }
+
+      // 5. Extract Model Name
+      if (entry.txtRecords.md && !entry.model) {
+        entry.model = entry.txtRecords.md;
+      }
+      if (entry.txtRecords.usb_MDL && !entry.model) {
+        entry.model = entry.txtRecords.usb_MDL;
+      }
+      if (!entry.model) {
+        const mdMatch = str.match(/md=([^\x00\r\n\t]+)/);
+        if (mdMatch) entry.model = mdMatch[1].replace(/[\x00-\x1f].*$/, '').trim();
+      }
+
+      // 6. Extract admin url
+      if (entry.txtRecords.adminurl && !entry.adminUrl) {
+        entry.adminUrl = entry.txtRecords.adminurl;
+      }
+
+      // 7. Service detection & registration
+      if (str.includes('_googlecast')) {
+        entry.services.add('Google Cast');
+        entry.serviceTypes.add('_googlecast._tcp.local');
+      }
+      if (str.includes('_spotify-connect')) {
+        entry.services.add('Spotify Connect');
+        entry.serviceTypes.add('_spotify-connect._tcp.local');
+      }
+      if (str.includes('_androidtvremote')) {
+        entry.services.add('Android TV');
+        entry.serviceTypes.add('_androidtvremote._tcp.local');
+      }
+      if (str.includes('_airplay')) {
+        entry.services.add('AirPlay');
+        entry.serviceTypes.add('_airplay._tcp.local');
+      }
+      if (str.includes('_raop')) {
+        entry.services.add('AirPlay Audio');
+        entry.serviceTypes.add('_raop._tcp.local');
+      }
+      if (str.includes('_companion-link')) {
+        entry.services.add('Apple Home');
+        entry.serviceTypes.add('_companion-link._tcp.local');
+      }
+      if (str.includes('_ipp') || str.includes('_printer')) {
+        entry.services.add('Printer (IPP)');
+        entry.serviceTypes.add('_ipp._tcp.local');
+      }
+      if (str.includes('_scanner')) {
+        entry.services.add('Scanner');
+        entry.serviceTypes.add('_scanner._tcp.local');
+      }
+      if (str.includes('_smb')) {
+        entry.services.add('Samba (SMB)');
+        entry.serviceTypes.add('_smb._tcp.local');
+      }
+      if (str.includes('_hap')) {
+        entry.services.add('HomeKit');
+        entry.serviceTypes.add('_hap._tcp.local');
+      }
+      if (str.includes('_matter')) {
+        entry.services.add('Matter');
+        entry.serviceTypes.add('_matter._tcp.local');
+      }
+      if (str.includes('_http.')) {
+        entry.services.add('Web Server');
+        entry.serviceTypes.add('_http._tcp.local');
+      }
     });
 
     socket.on('error', () => {
@@ -526,10 +654,16 @@ function discoverMdns(localIp, timeoutMs = 1500) {
         '_services._dns-sd._udp.local',
         '_googlecast._tcp.local',
         '_airplay._tcp.local',
+        '_raop._tcp.local',
         '_companion-link._tcp.local',
         '_spotify-connect._tcp.local',
         '_ipp._tcp.local',
-        '_printer._tcp.local'
+        '_printer._tcp.local',
+        '_hap._tcp.local',
+        '_matter._tcp.local',
+        '_smb._tcp.local',
+        '_http._tcp.local',
+        '_device-info._tcp.local'
       ];
 
       for (const q of queries) {
@@ -547,7 +681,13 @@ function discoverMdns(localIp, timeoutMs = 1500) {
         finalResult[ip] = {
           name: d.name,
           model: d.model,
-          services: Array.from(d.services)
+          hostname: d.hostname,
+          port: d.port,
+          services: Array.from(d.services),
+          serviceTypes: Array.from(d.serviceTypes),
+          txtRecords: d.txtRecords,
+          rawEntries: d.rawEntries,
+          adminUrl: d.adminUrl
         };
       }
       resolve(finalResult);
@@ -726,7 +866,13 @@ async function scanLan(options = { sweep: true }) {
       mdns: mdnsInfo ? {
         name: mdnsInfo.name,
         model: mdnsInfo.model,
-        services: mdnsServices
+        hostname: mdnsInfo.hostname || null,
+        port: mdnsInfo.port || null,
+        services: mdnsServices,
+        serviceTypes: mdnsInfo.serviceTypes || [],
+        txtRecords: mdnsInfo.txtRecords || {},
+        rawEntries: mdnsInfo.rawEntries || [],
+        adminUrl: mdnsInfo.adminUrl || null
       } : null
     });
   }

@@ -17,9 +17,11 @@ import {
   Share2,
   CircleDot,
   ExternalLink,
-  FileCode
+  FileCode,
+  Radio
 } from 'lucide-react';
 import XmlViewerModal from './XmlViewerModal';
+import MdnsViewerModal from './MdnsViewerModal';
 
 function getDeviceIcon(type) {
   switch (type) {
@@ -83,6 +85,7 @@ export default function LanTopologyView({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [copiedId, setCopiedId] = useState(null);
   const [xmlModalDevice, setXmlModalDevice] = useState(null);
+  const [mdnsModalDevice, setMdnsModalDevice] = useState(null);
   const [nicknames, setNicknames] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('vni_lan_nicknames')) || {};
@@ -597,12 +600,16 @@ export default function LanTopologyView({
                 {selectedDevice.mdns?.services?.length > 0 && (
                   <div className="flex flex-wrap items-center gap-1 mt-1">
                     {selectedDevice.mdns.services.map((srv, sIdx) => (
-                      <span
+                      <button
                         key={sIdx}
-                        className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-indigo-950 border border-indigo-500/40 text-indigo-300"
+                        type="button"
+                        onClick={() => setMdnsModalDevice(selectedDevice)}
+                        className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-indigo-950/90 hover:bg-indigo-900 border border-indigo-500/40 hover:border-indigo-500/70 text-indigo-300 hover:text-indigo-200 transition cursor-pointer flex items-center gap-1"
+                        title="Klicka för att se mDNS & Bonjour-information"
                       >
-                        {srv}
-                      </span>
+                        <Radio size={9} />
+                        <span>{srv}</span>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -610,10 +617,21 @@ export default function LanTopologyView({
             </div>
 
             <div className="flex items-center gap-1.5">
+              {selectedDevice.mdns && (
+                <button
+                  type="button"
+                  onClick={() => setMdnsModalDevice(selectedDevice)}
+                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-indigo-950 border border-transparent hover:border-indigo-500/40 text-gray-300 hover:text-indigo-300 transition text-[11px] font-mono flex items-center gap-1 cursor-pointer"
+                  title="Visa mDNS / Bonjour information"
+                >
+                  <Radio size={11} className="text-indigo-400" />
+                  <span className="text-[10px]">mDNS</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setXmlModalDevice(selectedDevice)}
-                className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition text-[11px] font-mono flex items-center gap-1"
+                className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition text-[11px] font-mono flex items-center gap-1 cursor-pointer"
                 title="Visa UPnP / SSDP XML"
               >
                 <FileCode size={11} className={selectedDevice.ssdp ? 'text-sky-400' : 'text-gray-400'} />
@@ -746,6 +764,13 @@ export default function LanTopologyView({
         onClose={() => setXmlModalDevice(null)}
         device={xmlModalDevice}
         apiBase={apiBase}
+      />
+
+      {/* mDNS / Bonjour Viewer Modal */}
+      <MdnsViewerModal
+        isOpen={!!mdnsModalDevice}
+        onClose={() => setMdnsModalDevice(null)}
+        device={mdnsModalDevice}
       />
     </div>
   );

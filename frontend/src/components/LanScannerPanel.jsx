@@ -21,6 +21,7 @@ import {
   FileCode
 } from 'lucide-react';
 import XmlViewerModal from './XmlViewerModal';
+import MdnsViewerModal from './MdnsViewerModal';
 
 function getDeviceIcon(type) {
   switch (type) {
@@ -89,6 +90,7 @@ export default function LanScannerPanel({
   const [editingKey, setEditingKey] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [xmlModalDevice, setXmlModalDevice] = useState(null);
+  const [mdnsModalDevice, setMdnsModalDevice] = useState(null);
 
   // Sync nicknames across components
   React.useEffect(() => {
@@ -606,12 +608,19 @@ export default function LanScannerPanel({
                       {dev.mdns?.services?.length > 0 && (
                         <div className="flex flex-wrap items-center gap-1 mt-1">
                           {dev.mdns.services.map((srv, sIdx) => (
-                            <span
+                            <button
                               key={sIdx}
-                              className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-indigo-950/80 border border-indigo-500/30 text-indigo-300"
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMdnsModalDevice(dev);
+                              }}
+                              className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/30 hover:border-indigo-500/60 text-indigo-300 hover:text-indigo-200 transition cursor-pointer flex items-center gap-1"
+                              title="Klicka för att se mDNS & Bonjour-information"
                             >
-                              {srv}
-                            </span>
+                              <Radio size={9} />
+                              <span>{srv}</span>
+                            </button>
                           ))}
                         </div>
                       )}
@@ -639,13 +648,27 @@ export default function LanScannerPanel({
                     {dev.deviceType} • {dev.type}
                   </span>
                   <div className="flex items-center gap-1.5">
+                    {dev.mdns && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMdnsModalDevice(dev);
+                        }}
+                        className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-indigo-950 border border-transparent hover:border-indigo-500/40 text-gray-300 hover:text-indigo-300 transition flex items-center gap-1 cursor-pointer"
+                        title="Visa mDNS / Bonjour-information (TXT-records, port, tjänster)"
+                      >
+                        <Radio size={11} className="text-indigo-400" />
+                        <span className="text-[10px]">mDNS</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setXmlModalDevice(dev);
                       }}
-                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition flex items-center gap-1"
+                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition flex items-center gap-1 cursor-pointer"
                       title="Visa UPnP / SSDP XML-beskrivning"
                     >
                       <FileCode size={11} className={dev.ssdp ? 'text-sky-400' : 'text-gray-400'} />
@@ -716,6 +739,13 @@ export default function LanScannerPanel({
         onClose={() => setXmlModalDevice(null)}
         device={xmlModalDevice}
         apiBase={apiBase}
+      />
+
+      {/* mDNS / Bonjour Viewer Modal */}
+      <MdnsViewerModal
+        isOpen={!!mdnsModalDevice}
+        onClose={() => setMdnsModalDevice(null)}
+        device={mdnsModalDevice}
       />
     </div>
   );
