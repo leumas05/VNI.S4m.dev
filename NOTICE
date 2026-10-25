@@ -38,8 +38,12 @@ developed or provided by third parties:
    - Website: https://www.esri.com/
    - Used for the 2D Leaflet dark base map layer.
 
-6. IP Geolocation, ASN, RIR & Routing Data
-   - Geolocation data provided by IP2Location.io (https://www.ip2location.io/)
+6. Multi-Provider IP Geolocation, Threat Intelligence, ASN, RIR & Routing Data
+   - Multi-source IP geolocation and network intelligence aggregated via IPLocation.io (https://iplocation.io/), incorporating:
+     * IP2Location / IP2Location.io (https://www.ip2location.io/)
+     * IPInfo (https://ipinfo.io/)
+     * DB-IP (https://db-ip.com/)
+     * Criminal IP Cyber Threat Intelligence by AI SPERA (https://www.criminalip.io/)
    - Registry and WHOIS data provided by RIPE NCC RIPEstat (https://stat.ripe.net/)
    - Authoritative regional internet registry lookups referenced via ARIN, APNIC, LACNIC, and AFRINIC
    - External routing and AS topology verification references via DNSChecker (https://dnschecker.org/) and NetworksDB (https://networksdb.io/)
@@ -49,44 +53,48 @@ developed or provided by third parties:
    - Website: https://lucide.dev/
    - License: ISC License
 
-8. Electron
-   - Copyright (c) OpenJS Foundation and Electron contributors
-   - Website: https://www.electronjs.org/
-   - License: MIT License
+8. Electron & Desktop Packaging
+   - Electron: Copyright (c) OpenJS Foundation and Electron contributors (MIT License, https://www.electronjs.org/)
+   - Electron-Builder: Copyright (c) 2015-present Loopline Systems / Vladimir Krivosheev (MIT License)
+   - Electron-Log & Electron-Updater: Copyright (c) Megafon, Alexey Prokhorov (MIT License)
 
-9. React & Core Tooling
+9. React & Frontend Tooling
    - React & React DOM: Copyright (c) Meta Platforms, Inc. (MIT License)
    - Vite: Copyright (c) 2019-2026 Evan You & Vite Contributors (MIT License)
    - Tailwind CSS: Copyright (c) Tailwind Labs, Inc. (MIT License)
 
-10. DNS Resolvers & Network Diagnostics
-    - DNS resolution powered by Node.js DNS subsystem (c-ares)
-    - Preconfigured public resolvers referenced:
+10. DNS Resolvers, Socket Telemetry & Cryptographic Diagnostics
+    - DNS resolution and Reverse PTR lookups powered by Node.js DNS subsystem (c-ares) and OS DNS Resolver Cache
+    - Preconfigured public resolvers referenced in the DiG diagnostic suite:
       * Cloudflare DNS (1.1.1.1)
       * Google Public DNS (8.8.8.8)
       * Quad9 DNS (9.9.9.9)
       * Cisco OpenDNS (208.67.222.222)
-    - SSL/TLS cryptographic diagnostics powered by Node.js TLS / OpenSSL
+    - SSL/TLS X.509 certificate chain and SAN inspection powered by Node.js TLS / OpenSSL
 
 11. IEEE OUI & Hardware Vendor Database
     - MAC address vendor prefix allocations compiled from IEEE Standards Association
       (https://standards.ieee.org/) and Wireshark Manuf Database (https://www.wireshark.org/).
-    - Used for offline Organizationally Unique Identifier (OUI) vendor resolution in LAN Scanner.
+    - Used for offline Organizationally Unique Identifier (OUI) hardware vendor resolution in LAN Scanner.
 
-12. Local Network Discovery & Diagnostic Protocols
+12. Local Network Discovery, Management & Diagnostic Protocols
     - Native zero-dependency Node.js UDP/TCP implementations compliant with open networking specifications:
+      * Address Resolution Protocol (ARP): RFC 826
       * Multicast DNS (mDNS / Zeroconf): RFC 6762
       * DNS-Based Service Discovery (DNS-SD / Apple Bonjour): RFC 6763
       * Simple Service Discovery Protocol (SSDP / UPnP): UPnP Forum / ISO/IEC 29341
+      * Web Services Dynamic Discovery (WS-Discovery / WSD): OASIS WS-Discovery Specification
       * NetBIOS Name Service (NBNS): RFC 1001 & RFC 1002
       * Link-Local Multicast Name Resolution (LLMNR): RFC 4795
+      * Dynamic Host Configuration Protocol (DHCP Broadcast Listener): RFC 2131 & RFC 2132
       * Simple Network Management Protocol (SNMPv1 / SNMPv2c): RFC 1157 & RFC 1901
       * Management Information Bases (MIBs): RFC 1213 (MIB-II), RFC 3805 (Printer MIB), RFC 2790 (Host Resources)
       * Internet Control Message Protocol (ICMP): RFC 792 (Ping & Echo Request/Reply)
+      * Wake-on-LAN (WoL Magic Packet): AMD / Hewlett-Packard Magic Packet Technology Specification
 
 13. Backend Server & Runtime Libraries
     - Express: Copyright (c) StrongLoop, Inc., OpenJS Foundation (MIT License, https://expressjs.com/)
     - Axios: Copyright (c) 2014-present Matt Zabriskie & Axios Contributors (MIT License, https://axios-http.com/)
     - CORS: Copyright (c) 2013 Troy Goode (MIT License)
     - Jimp: Copyright (c) 2018 Oliver Moran (MIT License)
-    - Electron-Log & Electron-Updater: Copyright (c) Megafon, Alexey Prokhorov (MIT License)
+    - QRCode-Terminal: Copyright (c) 2012gt / G. T. (Apache-2.0 License)
