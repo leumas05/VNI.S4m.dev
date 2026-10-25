@@ -2,6 +2,7 @@ const { execFile } = require('child_process');
 const os = require('os');
 const dns = require('dns');
 const { isPrivateIp } = require('./utils');
+const { fetchMultiProviderCandidates, computeConsensusGeo } = require('./enrichment');
 
 // In-memory cache for IP geolocations to avoid redundant lookups and rate limits
 const geoCache = new Map();
@@ -264,31 +265,16 @@ async function fetchIpGeo(ip) {
     if (geoCache.has(ip)) return geoCache.get(ip);
 
     try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 2000);
-        const res = await fetch(`https://api.ip2location.io/?ip=${encodeURIComponent(ip)}&format=json`, {
-            signal: controller.signal
-        });
-        clearTimeout(timeout);
-        if (res.ok) {
-            const data = await res.json();
-            if (data && (data.latitude || data.country_name)) {
-                const geo = {
-                    lat: parseFloat(data.latitude) || null,
-                    lon: parseFloat(data.longitude) || null,
-                    country: data.country_name || 'Unknown',
-                    countryCode: data.country_code || '',
-                    region: data.region_name || '',
-                    city: data.city_name || '',
-                    isp: data.as || data.isp || '',
-                    asn: data.asn ? `AS${data.asn}` : ''
-                };
-                geoCache.set(ip, geo);
-                return geo;
+        const candidates = await fetchMultiProviderCandidates(ip);
+        if (candidates && candidates.length > 0) {
+            const consensus = computeConsensusGeo(candidates, null);
+            if (consensus && (consensus.lat != null || consensus.country)) {
+                geoCache.set(ip, consensus);
+                return consensus;
             }
         }
     } catch {
-        // network or timeout
+        // fallback below
     }
 
     return null;

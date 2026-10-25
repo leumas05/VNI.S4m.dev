@@ -202,9 +202,29 @@ export default function HopCard({ hop, isSelected, onClick, pastHop, compareMode
          {/* Bottom Action Footer with Ping Button */}
          {hop.ip && (
            <div className="pt-1.5 border-t border-gray-800/80 flex items-center justify-between text-xs font-mono">
-             <span className="text-[10px] text-gray-500 truncate max-w-[170px]" title={hop.geo?.city ? `${hop.geo.city}, ${hop.geo.country || ''}` : ''}>
-               {hop.geo?.city ? `${hop.geo.city}${hop.geo.countryCode ? `, ${hop.geo.countryCode}` : ''}` : (hop.isPrivate ? 'Internal Gateway' : 'Router')}
-             </span>
+             <div className="flex items-center gap-1.5 truncate max-w-[205px]">
+               <span className="text-[10px] text-gray-500 truncate" title={hop.geo?.city ? `${hop.geo.city}, ${hop.geo.country || ''}` : ''}>
+                 {hop.geo?.city ? `${hop.geo.city}${hop.geo.countryCode ? `, ${hop.geo.countryCode}` : ''}` : (hop.isPrivate ? 'Internal Gateway' : 'Router')}
+               </span>
+               {hop.geo?.totalProviders > 1 && (
+                 <span
+                   className={`px-1 py-0.2 rounded text-[9px] font-mono border shrink-0 ${
+                     hop.geo.routeRefined
+                       ? 'bg-amber-950/70 border-amber-500/40 text-amber-300'
+                       : hop.geo.agreeingProviders >= 3
+                         ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300'
+                         : 'bg-sky-950/70 border-sky-500/40 text-sky-300'
+                   }`}
+                   title={
+                     hop.geo.routeRefined
+                       ? hop.geo.refinementNote
+                       : `Consensus from ${hop.geo.agreeingProviders}/${hop.geo.totalProviders} GeoIP providers (IP2Location, DB-IP, IPInfo, Criminal IP)`
+                   }
+                 >
+                   {hop.geo.routeRefined ? '⚡Triangulated' : `${hop.geo.agreeingProviders}/${hop.geo.totalProviders} Geo`}
+                 </span>
+               )}
+             </div>
              <div className="flex items-center gap-1.5">
                <button
                  onClick={(e) => {
@@ -267,8 +287,66 @@ export default function HopCard({ hop, isSelected, onClick, pastHop, compareMode
                     {hop.hop === 'Me' && hop.geo.asn && (
                         <CopyableRow label="ASN" value={formatAsnLink(hop.geo.asn)} copyText={hop.geo.asn} />
                     )}
+                    {hop.geo.confidence && (
+                        <CopyableRow
+                            label="Geo Confidence"
+                            value={`${hop.geo.confidence} (${hop.geo.agreeingProviders || 1}/${hop.geo.totalProviders || 1} sources agree)${hop.geo.routeRefined ? ' • Neighbor-Triangulated' : ''}`}
+                        />
+                    )}
+                    {hop.geo.threatIntel && (
+                        <CopyableRow
+                            label="Criminal IP Risk"
+                            value={`Inbound: ${hop.geo.threatIntel.inbound} • Outbound: ${hop.geo.threatIntel.outbound}`}
+                        />
+                    )}
                  </div>
               ) : null}
+
+              {hop.geo?.providers && hop.geo.providers.length > 0 && (
+                 <div className="mb-4 bg-gray-950/90 p-3 rounded border border-gray-800 text-xs">
+                    <div className="flex items-center justify-between mb-2">
+                       <span className="font-semibold text-sky-400 uppercase tracking-wider text-[10px] font-mono">
+                          Multi-Provider Geo Consensus (iplocation.io + Route Context)
+                       </span>
+                       {hop.geo.refinementNote && (
+                          <span className="text-[10px] text-emerald-400 font-mono">
+                             {hop.geo.refinementNote}
+                          </span>
+                       )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 font-mono text-[11px]">
+                       {hop.geo.providers.map((p) => (
+                          <div
+                             key={p.id}
+                             className={`p-2 rounded border flex flex-col gap-0.5 ${
+                                p.selected
+                                   ? 'bg-emerald-950/25 border-emerald-500/40 text-gray-200'
+                                   : 'bg-gray-900/50 border-gray-800/80 text-gray-500'
+                             }`}
+                          >
+                             <div className="flex items-center justify-between">
+                                <span className={`font-bold ${p.selected ? 'text-emerald-300' : 'text-gray-400'}`}>
+                                   {p.provider}
+                                </span>
+                                <span className={`text-[9px] px-1.5 py-0.2 rounded ${
+                                   p.selected
+                                      ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-500/30'
+                                      : 'bg-gray-800 text-gray-500'
+                                }`}>
+                                   {p.selected ? '✓ Consensus' : 'Outlier'} (Score: {p.score})
+                                </span>
+                             </div>
+                             <div className="truncate text-[10px]">
+                                {p.city !== 'N/A' ? `${p.city}, ` : ''}{p.region !== 'N/A' ? `${p.region}, ` : ''}{p.countryCode || p.country}
+                             </div>
+                             <div className="text-[9px] text-gray-500">
+                                {Number(p.lat).toFixed(4)}, {Number(p.lon).toFixed(4)}
+                             </div>
+                          </div>
+                       ))}
+                    </div>
+                 </div>
+              )}
 
               {hop.registry ? (
                  <div className="bg-gray-950 p-3 rounded border border-gray-800 text-gray-300 text-xs font-mono">

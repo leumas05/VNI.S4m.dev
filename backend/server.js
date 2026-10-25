@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { spawn } = require('child_process');
 const { runTraceroute } = require('./traceroute');
+const { fetchMultiProviderCandidates, computeConsensusGeo } = require('./enrichment');
 const { performDig } = require('./dns');
 const { checkSsl } = require('./ssl');
 const { getLiveConnections } = require('./netstat');
@@ -292,6 +293,24 @@ app.get('/api/my-location', async (req, res) => {
     try {
         const fetchRes = await fetch(url);
         const data = await fetchRes.json();
+        if (data && data.ip) {
+            const candidates = await fetchMultiProviderCandidates(data.ip).catch(() => []);
+            if (candidates && candidates.length > 0) {
+                const consensus = computeConsensusGeo(candidates, null);
+                if (consensus) {
+                    data.latitude = consensus.lat ?? data.latitude;
+                    data.longitude = consensus.lon ?? data.longitude;
+                    data.city_name = consensus.city || data.city_name;
+                    data.region_name = consensus.region || data.region_name;
+                    data.country_name = consensus.country || data.country_name;
+                    data.country_code = consensus.countryCode || data.country_code;
+                    data.zip_code = consensus.zip || data.zip_code;
+                    data.as = consensus.isp || data.as;
+                    if (consensus.asn) data.asn = consensus.asn.replace(/^AS/i, '');
+                    data.consensus = consensus;
+                }
+            }
+        }
         res.json(data);
     } catch (e) {
         res.status(500).json({ error: e.message });
@@ -342,7 +361,13 @@ app.get('/api/trace/json', (req, res) => {
     const hops = [];
     
     const traceProcess = runTraceroute(target, (hopData) => {
-        hops.push(hopData);
+        const idx = hops.findIndex(h => h.hop === hopData.hop);
+        if (idx !== -1) {
+            hops[idx] = hopData;
+        } else {
+            hops.push(hopData);
+            hops.sort((a, b) => a.hop - b.hop);
+        }
     }, () => {
         console.log(`JSON trace to ${target} finished.`);
         if (!res.headersSent) {

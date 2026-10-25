@@ -418,10 +418,17 @@ function App() {
       const parsed = JSON.parse(event.data);
       if (parsed.type === 'hop') {
          setHops(prev => {
-           if (prev.some(h => h.hop === parsed.data.hop)) return prev;
+           const existingIdx = prev.findIndex(h => h.hop === parsed.data.hop);
+           if (existingIdx !== -1) {
+             const updated = [...prev];
+             updated[existingIdx] = parsed.data;
+             currentHops = updated.sort((a, b) => a.hop - b.hop);
+             return currentHops;
+           }
            currentHops = [...prev, parsed.data].sort((a, b) => a.hop - b.hop);
            return currentHops;
          });
+         setSelectedHop(prevSel => (prevSel && prevSel.hop === parsed.data.hop ? parsed.data : prevSel));
       } else if (parsed.type === 'done' || parsed.type === 'error') {
          evtSource.close();
          setTracing(false);
