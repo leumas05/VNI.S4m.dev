@@ -148,6 +148,11 @@ function App() {
       if (res.ok) {
         const data = await res.json();
         setLanData(data);
+        setSelectedLanDevice(prev => {
+          if (!prev) return null;
+          const all = [data.gateway, data.thisDevice, ...(data.devices || [])].filter(Boolean);
+          return all.find(d => d.id === prev.id || d.ip === prev.ip) || prev;
+        });
       }
     } catch (e) {
       console.warn('Failed to fetch LAN devices (ARP):', e);

@@ -397,45 +397,33 @@ export default function LanScannerPanel({
             </div>
 
             {/* Quick action bar */}
-            <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
-              <span className="text-gray-500 text-[10px]">Gateway • Subnet Hub</span>
-              <div className="flex items-center gap-1.5">
+            <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <span className="text-gray-500 text-[10px] whitespace-nowrap shrink-0">Gateway • Subnet Hub</span>
+              <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    copyToClipboard(gateway.ip, `ip-${gateway.id}`);
+                    setInspectModalDevice(gateway);
                   }}
-                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
-                  title="Copy IP Address"
+                  className="px-1.5 py-0.5 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/30 hover:border-cyan-400/50 text-cyan-300 hover:text-cyan-100 transition flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                  title="Run deep device inspection & fingerprinting"
                 >
-                  {copiedId === `ip-${gateway.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                  <span className="text-[10px]">IP</span>
+                  <Cpu size={11} className="text-cyan-400" />
+                  <span className="text-[10px] font-semibold">Inspect</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    copyToClipboard(gateway.mac, `mac-${gateway.id}`);
-                  }}
-                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
-                  title="Copy MAC Address"
-                >
-                  {copiedId === `mac-${gateway.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                  <span className="text-[10px]">MAC</span>
-                </button>
-                {onPing && (
+                {gateway.mdns && (
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onPing({ ip: gateway.ip, hostname: 'Default Gateway (Router)', isPrivate: true });
+                      setMdnsModalDevice(gateway);
                     }}
-                    className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-emerald-400 hover:text-emerald-300 transition flex items-center gap-1"
-                    title="Live Ping"
+                    className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-indigo-950 border border-transparent hover:border-indigo-500/40 text-gray-300 hover:text-indigo-300 transition flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                    title="View mDNS / Bonjour information"
                   >
-                    <Activity size={11} />
-                    <span className="text-[10px]">Ping</span>
+                    <Radio size={11} className="text-indigo-400" />
+                    <span className="text-[10px]">mDNS</span>
                   </button>
                 )}
                 {gateway.ssdp && (
@@ -445,7 +433,7 @@ export default function LanScannerPanel({
                       e.stopPropagation();
                       setXmlModalDevice(gateway);
                     }}
-                    className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition flex items-center gap-1 cursor-pointer"
+                    className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                     title="View UPnP / SSDP XML description"
                   >
                     <FileCode size={11} className="text-sky-400" />
@@ -458,13 +446,51 @@ export default function LanScannerPanel({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="px-2 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-emerald-100 transition flex items-center gap-1 cursor-pointer"
+                    className="px-2 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-emerald-100 transition flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                     title={`Open Router Web Portal (${gateway.webPortal || `http://${gateway.ip}`})`}
                   >
                     <Globe size={11} className="text-emerald-400" />
                     <span className="text-[10px] font-semibold">Web Portal</span>
                     <ExternalLink size={9} className="opacity-70" />
                   </a>
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyToClipboard(gateway.ip, `ip-${gateway.id}`);
+                  }}
+                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1 whitespace-nowrap shrink-0"
+                  title="Copy IP Address"
+                >
+                  {copiedId === `ip-${gateway.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                  <span className="text-[10px]">IP</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyToClipboard(gateway.mac, `mac-${gateway.id}`);
+                  }}
+                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1 whitespace-nowrap shrink-0"
+                  title="Copy MAC Address"
+                >
+                  {copiedId === `mac-${gateway.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                  <span className="text-[10px]">MAC</span>
+                </button>
+                {onPing && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPing({ ip: gateway.ip, hostname: 'Default Gateway (Router)', isPrivate: true });
+                    }}
+                    className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-emerald-400 hover:text-emerald-300 transition flex items-center gap-1 whitespace-nowrap shrink-0"
+                    title="Live Ping"
+                  >
+                    <Activity size={11} />
+                    <span className="text-[10px]">Ping</span>
+                  </button>
                 )}
               </div>
             </div>
@@ -510,16 +536,28 @@ export default function LanScannerPanel({
               </div>
             </div>
 
-            <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
-              <span className="text-gray-500 text-[10px]">Local Host Adapter</span>
-              <div className="flex items-center gap-1.5">
+            <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <span className="text-gray-500 text-[10px] whitespace-nowrap shrink-0">Local Host Adapter</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setInspectModalDevice(thisDevice);
+                  }}
+                  className="px-1.5 py-0.5 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/30 hover:border-cyan-400/50 text-cyan-300 hover:text-cyan-100 transition flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                  title="Run deep device inspection & fingerprinting"
+                >
+                  <Cpu size={11} className="text-cyan-400" />
+                  <span className="text-[10px] font-semibold">Inspect</span>
+                </button>
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     copyToClipboard(thisDevice.ip, `ip-${thisDevice.id}`);
                   }}
-                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
+                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1 whitespace-nowrap shrink-0"
                   title="Copy IP Address"
                 >
                   {copiedId === `ip-${thisDevice.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
@@ -531,7 +569,7 @@ export default function LanScannerPanel({
                     e.stopPropagation();
                     copyToClipboard(thisDevice.mac, `mac-${thisDevice.id}`);
                   }}
-                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
+                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1 whitespace-nowrap shrink-0"
                   title="Copy MAC Address"
                 >
                   {copiedId === `mac-${thisDevice.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
@@ -714,18 +752,18 @@ export default function LanScannerPanel({
                 </div>
 
                 {/* Bottom Action strip */}
-                <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex items-center justify-between text-[11px]">
-                  <span className="text-gray-500 text-[10px]">
+                <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                  <span className="text-gray-500 text-[10px] whitespace-nowrap shrink-0">
                     {formatDeviceType(dev.deviceType)} • {dev.type}
                   </span>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setInspectModalDevice(dev);
                       }}
-                      className="px-1.5 py-0.5 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/30 hover:border-cyan-400/50 text-cyan-300 hover:text-cyan-100 transition flex items-center gap-1 cursor-pointer"
+                      className="px-1.5 py-0.5 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/30 hover:border-cyan-400/50 text-cyan-300 hover:text-cyan-100 transition flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                       title="Run deep device inspection & fingerprinting (12/12 features: OS, SNMP, Uptime, Ports, etc.)"
                     >
                       <Cpu size={11} className="text-cyan-400" />
@@ -738,7 +776,7 @@ export default function LanScannerPanel({
                           e.stopPropagation();
                           setMdnsModalDevice(dev);
                         }}
-                        className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-indigo-950 border border-transparent hover:border-indigo-500/40 text-gray-300 hover:text-indigo-300 transition flex items-center gap-1 cursor-pointer"
+                        className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-indigo-950 border border-transparent hover:border-indigo-500/40 text-gray-300 hover:text-indigo-300 transition flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                         title="View mDNS / Bonjour information (TXT records, port, services)"
                       >
                         <Radio size={11} className="text-indigo-400" />
@@ -752,7 +790,7 @@ export default function LanScannerPanel({
                           e.stopPropagation();
                           setXmlModalDevice(dev);
                         }}
-                        className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition flex items-center gap-1 cursor-pointer"
+                        className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                         title="View UPnP / SSDP XML description"
                       >
                         <FileCode size={11} className="text-sky-400" />
@@ -765,7 +803,7 @@ export default function LanScannerPanel({
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
-                        className="px-1.5 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-emerald-100 transition flex items-center gap-1 cursor-pointer"
+                        className="px-1.5 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-emerald-100 transition flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                         title={`Open device web portal (${dev.webPortal})`}
                       >
                         <Globe size={11} className="text-emerald-400" />
@@ -780,7 +818,7 @@ export default function LanScannerPanel({
                         e.stopPropagation();
                         copyToClipboard(dev.ip, `ip-${dev.id}`);
                       }}
-                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
+                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1 whitespace-nowrap shrink-0"
                       title="Copy IP Address"
                     >
                       {copiedId === `ip-${dev.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
@@ -792,7 +830,7 @@ export default function LanScannerPanel({
                         e.stopPropagation();
                         copyToClipboard(dev.mac, `mac-${dev.id}`);
                       }}
-                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1"
+                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition flex items-center gap-1 whitespace-nowrap shrink-0"
                       title="Copy MAC Address"
                     >
                       {copiedId === `mac-${dev.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
@@ -805,7 +843,7 @@ export default function LanScannerPanel({
                           e.stopPropagation();
                           onPing({ ip: dev.ip, hostname: devTitle, isPrivate: true });
                         }}
-                        className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-emerald-400 hover:text-emerald-300 transition flex items-center gap-1"
+                        className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-emerald-400 hover:text-emerald-300 transition flex items-center gap-1 whitespace-nowrap shrink-0"
                         title="Live Ping test"
                       >
                         <Activity size={11} />
@@ -819,7 +857,7 @@ export default function LanScannerPanel({
                         setEditingKey(dev.mac || dev.ip);
                         setEditValue(customName || dev.hostname || '');
                       }}
-                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-amber-300 transition flex items-center gap-1"
+                      className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-amber-300 transition flex items-center gap-1 whitespace-nowrap shrink-0"
                       title="Set custom nickname"
                     >
                       <Edit2 size={11} />

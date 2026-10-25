@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   RefreshCw,
@@ -32,15 +33,27 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
 
+  const getCustomNickname = () => {
+    if (!device) return '';
+    try {
+      const nicks = JSON.parse(localStorage.getItem('vni_lan_nicknames')) || {};
+      return nicks[device.mac] || nicks[device.ip] || '';
+    } catch (e) {
+      return '';
+    }
+  };
+
   const fetchInspection = async () => {
     if (!device?.ip) return;
     setLoading(true);
     setError(null);
     try {
+      const customNick = getCustomNickname();
       const q = new URLSearchParams({
         ip: device.ip,
         mac: device.mac || '',
-        vendor: device.vendor || ''
+        vendor: device.vendor || '',
+        hostname: customNick || device.friendlyName || device.hostname || ''
       });
       const res = await fetch(`${apiBase}/api/device-inspect?${q.toString()}`);
       const data = await res.json();
@@ -68,6 +81,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
 
   if (!isOpen || !device) return null;
 
+  const customNickname = getCustomNickname();
   const data = inspectData || {};
   const os = data.osFingerprint || device.osFingerprint || {};
   const ping = data.ping || { alive: device.isAlive, latency: device.latency, ttl: device.ttl };
@@ -78,6 +92,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
     workgroup: device.workgroup,
     hostname: device.hostname
   };
+  const resolvedVendor = (data.vendor && data.vendor !== 'Generic Device') ? data.vendor : (device.vendor || 'Generic Device');
   const uptime = data.uptime || null;
   const banners = data.banners || {};
   const devSpec = data.deviceSpecific || {};
@@ -90,9 +105,9 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
     setTimeout(() => setCopied(false), 2000);
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5"
+      className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-5"
       style={{ backgroundColor: 'rgba(3, 7, 18, 0.82)', backdropFilter: 'blur(10px)' }}
       onClick={onClose}
     >
@@ -106,14 +121,14 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80 bg-slate-900/60">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
               <Cpu className="w-5 h-5 animate-pulse" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-slate-100 tracking-wide">
-                  {names.mdns || names.netbios || device.friendlyName || device.hostname || device.ip}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-bold text-slate-100 tracking-wide truncate">
+                  {customNickname || names.mdns || names.netbios || device.friendlyName || device.hostname || device.ip}
                 </h2>
                 <span className="px-2 py-0.5 text-[10px] font-mono rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                   {device.ip}
@@ -125,8 +140,8 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-400">
-                {device.vendor} • MAC: <span className="font-mono text-slate-300">{device.mac}</span>
+              <p className="text-xs text-slate-400 truncate mt-0.5">
+                {resolvedVendor} • MAC: <span className="font-mono text-slate-300">{device.mac}</span>
               </p>
             </div>
           </div>
@@ -437,7 +452,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/60">
                     <span className="text-slate-400">Hardware Vendor:</span>
-                    <span className="text-slate-200 font-semibold">{device.vendor}</span>
+                    <span className="text-slate-200 font-semibold">{resolvedVendor}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/60">
                     <span className="text-slate-400">Serial Number (SNMP):</span>
@@ -706,6 +721,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -224,9 +224,10 @@ app.get('/api/device-inspect', async (req, res) => {
     }
     const mac = req.query.mac || null;
     const vendor = req.query.vendor || null;
+    const hostname = req.query.hostname || null;
 
     try {
-        const inspection = await inspectDevice(ip, mac, vendor);
+        const inspection = await inspectDevice(ip, mac, vendor, hostname);
         res.json({ ok: true, inspection });
     } catch (err) {
         res.status(500).json({ ok: false, error: err.message || 'Failed to inspect device' });

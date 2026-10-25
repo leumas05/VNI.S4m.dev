@@ -109,6 +109,8 @@ const OUI_DATABASE = {
   // Microsoft (Xbox / Surface)
   '00155d': 'Microsoft (Hyper-V)', '0017fa': 'Microsoft', '281878': 'Microsoft (Surface)',
   '501ac5': 'Microsoft (Xbox)', '7c1e52': 'Microsoft (Xbox)', 'dc9b9c': 'Microsoft (Xbox)',
+  '84b1e2': 'Microsoft (Surface / PC)', '6045bd': 'Microsoft (Surface)', 'c83f26': 'Microsoft',
+  '985fd3': 'Microsoft (Surface)', 'dc5360': 'Microsoft / AzureWave',
 
   // Asus
   '0015f2': 'ASUS', '001b2f': 'ASUS', '001e8c': 'ASUS', '049226': 'ASUS', '08606e': 'ASUS',
@@ -179,27 +181,72 @@ function lookupVendor(mac) {
   return { vendor: 'Generic Device', isRandomized: false };
 }
 
-function guessDeviceType({ vendor, isGateway, isThisDevice, hostname, mdnsServices = [] }) {
+function guessDeviceType({
+  vendor,
+  isGateway,
+  isThisDevice,
+  hostname,
+  mdnsServices = [],
+  openPorts = [],
+  netbios = null,
+  osFamily = '',
+  isRandomized = false
+}) {
   if (isGateway) return 'router';
   if (isThisDevice) return 'desktop';
 
   const v = (vendor || '').toLowerCase();
   const h = (hostname || '').toLowerCase();
   const servs = (mdnsServices || []).map(s => String(s).toLowerCase()).join(' ');
+  const openPortNumbers = (openPorts || []).map(p => typeof p === 'object' ? p.port : p);
 
-  if (servs.includes('print') || servs.includes('ipp') || v.includes('printer') || h.includes('skrivare') || h.includes('laserjet') || h.includes('printer')) return 'printer';
-  if (servs.includes('google cast') || servs.includes('android tv') || v.includes('tv') || v.includes('vestel') || v.includes('earda') || h.includes('tv') || h.includes('chromecast')) return 'tv';
-  if (servs.includes('spotify') || servs.includes('airplay audio') || v.includes('sonos') || v.includes('audio')) return 'iot';
+  if (openPortNumbers.includes(631) || openPortNumbers.includes(9100) || servs.includes('print') || servs.includes('ipp') || v.includes('printer') || h.includes('skrivare') || h.includes('laserjet') || h.includes('printer')) return 'printer';
   if (v.includes('charger') || v.includes('zaptec') || h.includes('laddare') || h.includes('zaptec')) return 'ev_charger';
   if (v.includes('solar') || v.includes('battery') || h.includes('solpanel') || h.includes('batteri')) return 'solar';
   if (v.includes('oven') || v.includes('appliance') || h.includes('oven') || h.includes('ugn')) return 'iot';
   if (v.includes('mesh') || v.includes('deco') || h.includes('deco')) return 'mesh_node';
+
+  // PC / Laptop / Windows identification (NetBIOS workstation, SMB/RPC ports, Windows OS, or PC vendors)
+  if (
+    (netbios && netbios.name) ||
+    openPortNumbers.includes(135) ||
+    openPortNumbers.includes(445) ||
+    openPortNumbers.includes(3389) ||
+    osFamily === 'Windows' ||
+    v.includes('surface') ||
+    v.includes('intel') ||
+    v.includes('realtek') ||
+    v.includes('msi') ||
+    v.includes('dell') ||
+    v.includes('lenovo') ||
+    h.includes('laptop') ||
+    h.includes('surface') ||
+    h.includes('desktop') ||
+    h.includes('dator') ||
+    h.includes('skola') ||
+    h.includes('-pc')
+  ) {
+    return 'computer';
+  }
+
+  // Explicit smartphone / mobile markers
+  if (
+    openPortNumbers.includes(62078) ||
+    v.includes('iphone') ||
+    v.includes('galaxy') ||
+    /(?:iphone|ipad|galaxy|s2[0-5]|23\+|pixel|oneplus|redmi|phone|mobil)/i.test(h)
+  ) {
+    return 'mobile';
+  }
+
+  if (openPortNumbers.includes(8008) || openPortNumbers.includes(8009) || servs.includes('google cast') || servs.includes('android tv') || v.includes('tv') || v.includes('vestel') || v.includes('earda') || h.includes('tv') || h.includes('chromecast')) return 'tv';
   if (v.includes('playstation') || v.includes('sony') || v.includes('xbox') || v.includes('nintendo') || h.includes('playstation') || h.includes('xbox')) return 'console';
+  if (servs.includes('spotify') || servs.includes('airplay audio') || v.includes('sonos') || v.includes('audio')) return 'iot';
   if (v.includes('espressif') || v.includes('philips') || v.includes('iot') || v.includes('hue') || v.includes('nest') || v.includes('amazon') || h.includes('iot')) return 'iot';
   if (v.includes('tp-link') || v.includes('netgear') || v.includes('asus') || v.includes('cisco') || v.includes('ubiquiti') || v.includes('linksys')) return 'network';
   if (v.includes('nas') || v.includes('synology') || v.includes('qnap') || h.includes('nas') || h.includes('server')) return 'server';
-  if (v.includes('apple') || v.includes('samsung') || v.includes('galaxy') || v.includes('private mac') || h.includes('iphone') || h.includes('s23') || h.includes('a55') || h.includes('mobil')) return 'mobile';
-  if (v.includes('intel') || v.includes('realtek') || v.includes('msi') || v.includes('dell') || v.includes('hp') || v.includes('lenovo') || h.includes('dator') || h.includes('pc')) return 'computer';
+  if (v.includes('apple') || v.includes('samsung') || v.includes('xiaomi') || v.includes('private mac') || isRandomized) return 'mobile';
+  if (v.includes('microsoft') || v.includes('hp')) return 'computer';
 
   return 'device';
 }
@@ -356,7 +403,41 @@ let bgListenersStarted = false;
 
 // Parse standard and raw mDNS / Bonjour records into the target map
 function parseMdnsMessage(msg, ip, targetMap) {
-  if (!ip) return;
+  if (!ip || !msg || msg.length < 12) return;
+
+  // DNS Header Flags: Bit 15 (msg[2] & 0x80) is QR (0 = Query, 1 = Response).
+  // Strictly ignore mDNS Query packets so client devices searching for Cast / Spotify / AirPlay
+  // are never misidentified as hosting those services themselves.
+  const isResponse = (msg[2] & 0x80) !== 0;
+  const qdCount = msg.readUInt16BE(4);
+  const anCount = msg.readUInt16BE(6);
+  const nsCount = msg.readUInt16BE(8);
+  const arCount = msg.readUInt16BE(10);
+  if (!isResponse || (anCount === 0 && nsCount === 0 && arCount === 0)) {
+    return;
+  }
+
+  // Skip the 12-byte DNS header and any echoed Question records (qdCount)
+  let answerStart = 12;
+  for (let q = 0; q < qdCount && answerStart < msg.length; q++) {
+    while (answerStart < msg.length) {
+      const len = msg[answerStart];
+      if (len === 0) {
+        answerStart += 1;
+        break;
+      }
+      if ((len & 0xc0) === 0xc0) {
+        answerStart += 2;
+        break;
+      }
+      answerStart += 1 + len;
+    }
+    answerStart += 4; // Skip QTYPE (2) + QCLASS (2)
+  }
+
+  if (answerStart >= msg.length) return;
+  const body = msg.slice(answerStart);
+
   if (!targetMap[ip]) {
     targetMap[ip] = {
       services: new Set(),
@@ -372,20 +453,20 @@ function parseMdnsMessage(msg, ip, targetMap) {
   }
 
   const entry = targetMap[ip];
-  const str = msg.toString('latin1');
+  const str = body.toString('latin1');
 
   // 1. Parse standard DNS TXT records (TYPE 16 = 0x0010)
-  for (let i = 0; i < msg.length - 10; i++) {
-    if (msg[i] === 0x00 && msg[i + 1] === 0x10 && (msg[i + 2] === 0x00 || msg[i + 2] === 0x80) && msg[i + 3] === 0x01) {
-      const rdlength = msg.readUInt16BE(i + 8);
+  for (let i = 0; i < body.length - 10; i++) {
+    if (body[i] === 0x00 && body[i + 1] === 0x10 && (body[i + 2] === 0x00 || body[i + 2] === 0x80) && body[i + 3] === 0x01) {
+      const rdlength = body.readUInt16BE(i + 8);
       let rdataPos = i + 10;
-      const rdataEnd = Math.min(msg.length, rdataPos + rdlength);
+      const rdataEnd = Math.min(body.length, rdataPos + rdlength);
 
       while (rdataPos < rdataEnd) {
-        const strLen = msg[rdataPos];
+        const strLen = body[rdataPos];
         if (strLen === 0) break;
         if (rdataPos + 1 + strLen <= rdataEnd) {
-          const item = msg.slice(rdataPos + 1, rdataPos + 1 + strLen).toString('utf8');
+          const item = body.slice(rdataPos + 1, rdataPos + 1 + strLen).toString('utf8');
           const eq = item.indexOf('=');
           if (eq > 0) {
             const k = item.substring(0, eq).trim();
@@ -418,9 +499,9 @@ function parseMdnsMessage(msg, ip, targetMap) {
   }
 
   // 2. Parse SRV records for port (TYPE 33 = 0x0021)
-  for (let i = 0; i < msg.length - 16; i++) {
-    if (msg[i] === 0x00 && msg[i + 1] === 0x21 && (msg[i + 2] === 0x00 || msg[i + 2] === 0x80) && msg[i + 3] === 0x01) {
-      const srvPort = msg.readUInt16BE(i + 14);
+  for (let i = 0; i < body.length - 16; i++) {
+    if (body[i] === 0x00 && body[i + 1] === 0x21 && (body[i + 2] === 0x00 || body[i + 2] === 0x80) && body[i + 3] === 0x01) {
+      const srvPort = body.readUInt16BE(i + 14);
       if (srvPort > 0 && srvPort < 65535 && !entry.port) {
         entry.port = srvPort;
       }
@@ -775,7 +856,7 @@ async function fetchDeviceXml(ip, cachedLocation = null, cachedXml = null) {
     }
   }
 
-  // Probe common UPnP / SSDP ports
+  // Probe common UPnP / SSDP ports concurrently so non-UPnP devices never stall inspection
   const probeUrls = [
     `http://${ip}:8008/ssdp/device-desc.xml`,
     `http://${ip}:1900/description.xml`,
@@ -786,21 +867,25 @@ async function fetchDeviceXml(ip, cachedLocation = null, cachedXml = null) {
     `http://${ip}:80/description.xml`
   ];
 
-  for (const url of probeUrls) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 700);
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timer);
-      if (res.ok) {
-        const text = await res.text();
-        if (text && (text.includes('<?xml') || text.includes('<root') || text.includes('<device'))) {
-          return { location: url, xml: text };
+  const results = await Promise.all(
+    probeUrls.map(async (url) => {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 650);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timer);
+        if (res.ok) {
+          const text = await res.text();
+          if (text && (text.includes('<?xml') || text.includes('<root') || text.includes('<device'))) {
+            return { location: url, xml: text };
+          }
         }
-      }
-    } catch (e) {}
-  }
-  return null;
+      } catch (e) {}
+      return null;
+    })
+  );
+
+  return results.find(r => r !== null) || null;
 }
 
 // Pure Node.js mDNS / Bonjour Service & Hostname Discovery (zero external deps)
@@ -898,19 +983,22 @@ function queryNetbios(ip, timeoutMs = 500) {
         let offset = 57;
 
         for (let i = 0; i < numNames && offset + 18 <= msg.length; i++) {
-          const rawName = msg.toString('ascii', offset, offset + 15).trim();
+          const rawName = msg.toString('ascii', offset, offset + 15).trim().replace(/[\x00-\x1f]/g, '');
           const nameType = msg.readUInt8(offset + 15);
-          names.push({ name: rawName, type: nameType });
-          if ((nameType === 0x00 || nameType === 0x20) && !computerName) {
+          const flags = msg.readUInt16BE(offset + 16);
+          const isGroup = (flags & 0x8000) !== 0; // Bit 15 = 1 means Group / Workgroup name, 0 = Unique computer name
+          names.push({ name: rawName, type: nameType, isGroup });
+          if (!isGroup && (nameType === 0x00 || nameType === 0x20) && !rawName.startsWith('IS~') && !computerName) {
             computerName = rawName;
-          } else if (nameType === 0x00 && computerName && !workgroup) {
+          } else if (isGroup && (nameType === 0x00 || nameType === 0x1e) && !workgroup) {
             workgroup = rawName;
           }
           offset += 18;
         }
 
+        const fallbackUnique = names.find(n => !n.isGroup && n.name);
         resolve({
-          name: computerName || (names[0] ? names[0].name : null),
+          name: computerName || (fallbackUnique ? fallbackUnique.name : (names[0] ? names[0].name : null)),
           workgroup: workgroup || null,
           names
         });
@@ -1214,7 +1302,16 @@ async function inspectHttpBannersAndStatus(ip, openPortResults, vendor = '') {
 }
 
 // 5. Operating System Fingerprinting (TTL + Ports + Zeroconf + NetBIOS)
-function guessOsFingerprint({ ttl, vendor = '', mdns = null, ssdp = null, openPorts = [], netbios = null }) {
+function guessOsFingerprint({
+  ttl,
+  vendor = '',
+  mdns = null,
+  ssdp = null,
+  openPorts = [],
+  netbios = null,
+  hostname = '',
+  isRandomized = false
+}) {
   let osName = 'Unknown / Embedded OS';
   let osFamily = 'Unknown';
   let confidence = 'Low';
@@ -1222,12 +1319,13 @@ function guessOsFingerprint({ ttl, vendor = '', mdns = null, ssdp = null, openPo
 
   const openPortNumbers = openPorts.map(p => typeof p === 'object' ? p.port : p);
   const vendorLower = (vendor || '').toLowerCase();
+  const hostLower = (hostname || '').toLowerCase();
   const mdnsTypes = mdns?.serviceTypes || [];
 
   // Check TTL
   if (ttl !== null && ttl !== undefined) {
     if (ttl >= 100 && ttl <= 128) {
-      osName = 'Microsoft Windows';
+      osName = 'Microsoft Windows (10 / 11)';
       osFamily = 'Windows';
       confidence = 'Medium';
       basis.push(`ICMP TTL=${ttl} (standard default for Windows NT kernel)`);
@@ -1249,40 +1347,46 @@ function guessOsFingerprint({ ttl, vendor = '', mdns = null, ssdp = null, openPo
   const hasRpc = openPortNumbers.includes(135);
   const hasSsh = openPortNumbers.includes(22);
   const hasIpp = openPortNumbers.includes(631) || openPortNumbers.includes(9100);
-  const hasCast = openPortNumbers.includes(8008) || openPortNumbers.includes(8009) || mdnsTypes.some(t => t.includes('googlecast'));
+  const hasIosSync = openPortNumbers.includes(62078);
+  const hasCastPort = openPortNumbers.includes(8008) || openPortNumbers.includes(8009);
+  const hasCastMdns = mdnsTypes.some(t => t.includes('googlecast') || t.includes('androidtvremote'));
   const hasAirplay = mdnsTypes.some(t => t.includes('airplay') || t.includes('raop') || t.includes('companion-link'));
+  const isWindowsNetbios = Boolean(netbios && netbios.name && (ttl === null || ttl === undefined || ttl > 64));
+  const isMobileHint =
+    vendorLower.includes('galaxy') ||
+    vendorLower.includes('samsung') && !vendorLower.includes('oven') && !vendorLower.includes('appliance') && !vendorLower.includes('tv') ||
+    /(?:galaxy|s2[0-5]|23\+|pixel|oneplus|redmi|xiaomi|android|phone|mobil)/i.test(hostLower);
 
-  if (hasCast) {
-    osName = 'Google CastOS / Android TV';
-    osFamily = 'Android';
-    confidence = 'High';
-    basis.push('Google Cast service (port 8008/8009 / mDNS _googlecast) active');
-  } else if (hasAirplay || vendorLower.includes('apple')) {
-    osName = 'Apple Darwin (iOS / iPadOS / macOS / tvOS)';
-    osFamily = 'Apple Darwin';
-    confidence = 'High';
-    basis.push('Apple mDNS Zeroconf / AirPlay services or Apple MAC address verified');
-  } else if (hasIpp || vendorLower.includes('printer')) {
+  if (hasIpp || vendorLower.includes('printer')) {
     osName = 'Printer Embedded RTOS / CUPS';
     osFamily = 'Embedded RTOS';
     confidence = 'High';
     basis.push('Printer services (IPP port 631 / RAW port 9100) or printer hardware verified');
-  } else if (hasSmb && hasRpc) {
+  } else if ((hasSmb && hasRpc) || hasRdp) {
     osName = 'Microsoft Windows (10 / 11 / Server)';
     osFamily = 'Windows';
     confidence = 'High';
-    basis.push('Open Windows ports 135 (RPC) and 445 (SMB) verified');
+    basis.push('Open Windows ports 135 (RPC) / 445 (SMB) verified');
     if (hasRdp) basis.push('Remote Desktop (RDP port 3389) open');
-  } else if (netbios && netbios.name && (osFamily === 'Windows' || ttl === 128)) {
-    osName = 'Microsoft Windows (NT Kernel)';
+  } else if (isWindowsNetbios || vendorLower.includes('surface')) {
+    osName = 'Microsoft Windows (10 / 11)';
     osFamily = 'Windows';
     confidence = 'High';
-    basis.push(`Windows NetBIOS name identified: ${netbios.name}`);
-  } else if (hasSsh && (ttl === null || ttl <= 64)) {
-    osName = 'Linux Server / Raspberry Pi / OpenWrt';
-    osFamily = 'Linux';
+    if (netbios && netbios.name) {
+      basis.push(`Windows NetBIOS workstation identified: ${netbios.name}${netbios.workgroup ? ` (${netbios.workgroup})` : ''}`);
+    } else {
+      basis.push('Microsoft Surface / Windows hardware fingerprint');
+    }
+  } else if (hasIosSync || hasAirplay || vendorLower.includes('apple') || /(?:iphone|ipad|macbook|imac)/i.test(hostLower)) {
+    osName = 'Apple Darwin (iOS / iPadOS / macOS)';
+    osFamily = 'Apple Darwin';
     confidence = 'High';
-    basis.push('SSH (port 22) open with Linux TTL');
+    basis.push('Apple Zeroconf / AirPlay services or Apple hardware verified');
+  } else if (hasCastPort || (hasCastMdns && !isMobileHint)) {
+    osName = 'Google CastOS / Android TV';
+    osFamily = 'Android TV';
+    confidence = 'High';
+    basis.push('Google Cast service (port 8008/8009 / mDNS _googlecast) active');
   } else if (vendorLower.includes('zaptec')) {
     osName = 'Zaptec Charger OS (FreeRTOS / ESP-IDF)';
     osFamily = 'Embedded RTOS';
@@ -1298,6 +1402,26 @@ function guessOsFingerprint({ ttl, vendor = '', mdns = null, ssdp = null, openPo
     osFamily = 'Smart TV';
     confidence = 'High';
     basis.push('Smart TV SoC / DVB Display stack');
+  } else if (vendorLower.includes('deco') || (vendorLower.includes('tp-link') && openPortNumbers.includes(443))) {
+    osName = 'TP-Link Deco / Embedded Linux (OpenWrt)';
+    osFamily = 'Embedded Linux';
+    confidence = 'High';
+    basis.push('TP-Link Router / Mesh network appliance stack');
+  } else if (isMobileHint) {
+    osName = 'Google Android (Mobile OS)';
+    osFamily = 'Android';
+    confidence = 'High';
+    basis.push('Android / Samsung mobile device fingerprint (Linux kernel TTL=64)');
+  } else if ((isRandomized || vendorLower.includes('private mac')) && (ttl === null || ttl <= 64) && openPortNumbers.length === 0) {
+    osName = 'Mobile OS (Android / iOS)';
+    osFamily = 'Mobile (Linux / Darwin)';
+    confidence = 'Medium';
+    basis.push('Randomized Private Wi-Fi MAC with mobile TCP/IP stack (0 open server ports)');
+  } else if (hasSsh && (ttl === null || ttl <= 64)) {
+    osName = 'Linux Server / Raspberry Pi / OpenWrt';
+    osFamily = 'Linux';
+    confidence = 'High';
+    basis.push('SSH (port 22) open with Linux TTL');
   }
 
   if (netbios && netbios.name && !basis.some(b => b.includes('NetBIOS'))) {
@@ -1314,19 +1438,23 @@ function guessOsFingerprint({ ttl, vendor = '', mdns = null, ssdp = null, openPo
 }
 
 // 6. Complete Single-Device Inspection
-async function inspectDevice(ip, mac = null, vendor = null) {
+async function inspectDevice(ip, mac = null, vendor = null, hostname = null) {
   const startTime = Date.now();
+  const resolvedVendor = (!vendor || vendor === 'Generic Device' || vendor === 'Unknown') && mac
+    ? lookupVendor(mac).vendor
+    : (vendor || 'Generic Device');
+  const isRandomized = mac ? lookupVendor(mac).isRandomized : (resolvedVendor || '').toLowerCase().includes('randomized');
 
   const [pingRes, portResults, netbiosRes, snmpRes, mdnsMapResult, xmlRes] = await Promise.all([
     measurePing(ip, 700),
     probeTcpPorts(ip),
     queryNetbios(ip, 600),
     querySnmp(ip, 700),
-    discoverMdns(null, 700),
+    discoverMdns(null, 650),
     fetchDeviceXml(ip)
   ]);
 
-  const mdnsInfo = mdnsMapResult ? (mdnsMapResult[ip] || null) : (persistentMdnsCache[ip] ? {
+  const mdnsInfo = (mdnsMapResult && mdnsMapResult[ip]) ? mdnsMapResult[ip] : (persistentMdnsCache[ip] ? {
     name: persistentMdnsCache[ip].name,
     model: persistentMdnsCache[ip].model,
     hostname: persistentMdnsCache[ip].hostname,
@@ -1352,16 +1480,18 @@ async function inspectDevice(ip, mac = null, vendor = null) {
     ssdpInfo = persistentSsdpCache[ip];
   }
 
-
-  const bannerInfo = await inspectHttpBannersAndStatus(ip, portResults, vendor || '');
+  const bannerInfo = await inspectHttpBannersAndStatus(ip, portResults, resolvedVendor || '');
+  const effectiveHostname = netbiosRes?.name || mdnsInfo?.name || ssdpInfo?.name || hostname || '';
 
   const osFingerprint = guessOsFingerprint({
     ttl: pingRes.ttl,
-    vendor,
+    vendor: resolvedVendor,
     mdns: mdnsInfo,
     ssdp: ssdpInfo,
     openPorts: portResults.filter(p => p.open),
-    netbios: netbiosRes
+    netbios: netbiosRes,
+    hostname: effectiveHostname,
+    isRandomized
   });
 
   let uptime = null;
@@ -1445,14 +1575,17 @@ async function inspectDevice(ip, mac = null, vendor = null) {
   const firmware = snmpRes?.firmware || bannerInfo.firmwareVersion || null;
   const modelName = snmpRes?.model || bannerInfo.title || mdnsInfo?.model || ssdpInfo?.model || null;
 
+  const openAllPorts = portResults.filter(p => p.open);
+  const isResponding = Boolean(pingRes.alive || (netbiosRes && netbiosRes.name) || openAllPorts.length > 0);
+
   return {
     ip,
     mac,
-    vendor,
+    vendor: resolvedVendor,
     modelName,
     webPortal,
     ping: {
-      alive: pingRes.alive,
+      alive: isResponding,
       latency: pingRes.latency,
       ttl: pingRes.ttl
     },
@@ -1460,14 +1593,14 @@ async function inspectDevice(ip, mac = null, vendor = null) {
       mdns: mdnsInfo?.name || null,
       netbios: netbiosRes?.name || null,
       workgroup: netbiosRes?.workgroup || null,
-      hostname: mdnsInfo?.hostname || null,
+      hostname: mdnsInfo?.hostname || hostname || null,
       webTitle: bannerInfo.title || null
     },
     osFingerprint,
     ports: {
       all: portResults,
-      openCount: portResults.filter(p => p.open).length,
-      open: portResults.filter(p => p.open)
+      openCount: openAllPorts.length,
+      open: openAllPorts
     },
     banners: {
       httpServer: bannerInfo.serverBanner || null,
@@ -1509,22 +1642,25 @@ async function scanLan(options = { sweep: true }) {
     if (localIp !== '127.0.0.1') break;
   }
 
+  startPermanentBackgroundListeners(localIp !== '127.0.0.1' ? localIp : null);
+
   // 2. Detect default gateway
   const gwInfo = await getDefaultGateway();
   const gatewayIp = gwInfo?.gatewayIp || (localIp !== '127.0.0.1' ? `${localIp.split('.').slice(0, 3).join('.')}.1` : '192.168.1.1');
 
-  // 3. Sweep subnet, discover SSDP and mDNS in parallel
-  let ssdpMap = {};
-  let mdnsMap = {};
+  // 3. Sweep subnet, discover SSDP and mDNS in parallel (or use persistent caches on quick scan)
+  let ssdpMap = { ...persistentSsdpCache };
+  let mdnsMap = getPersistentMdnsSnapshot();
+
   if (options.sweep !== false && localIp !== '127.0.0.1') {
     const subnetPrefix = localIp.split('.').slice(0, 3).join('.');
     const [_, ssdpResult, mdnsResult] = await Promise.all([
       sweepSubnet(subnetPrefix, 1, 254),
-      discoverSsdpNames(1500, localIp),
-      discoverMdns(localIp, 1500)
+      discoverSsdpNames(1300, localIp),
+      discoverMdns(localIp, 1300)
     ]);
-    ssdpMap = ssdpResult || {};
-    mdnsMap = mdnsResult || {};
+    ssdpMap = ssdpResult || ssdpMap;
+    mdnsMap = mdnsResult || mdnsMap;
 
     // For devices detected with Google Cast / TV / DIAL services that didn't reply to SSDP multicast M-SEARCH, probe port 8008 directly
     const candidateXmlIps = Object.keys(mdnsMap).filter(ip => {
@@ -1550,6 +1686,10 @@ async function scanLan(options = { sweep: true }) {
         } catch (e) {}
       }));
     }
+  } else {
+    // Trigger non-blocking refresh burst on background sockets during quick scan
+    if (bgMdnsSocket) sendMdnsQueryBurst(bgMdnsSocket);
+    if (bgSsdpSocket) sendSsdpQueryBurst(bgSsdpSocket);
   }
 
   // 4. Read ARP table
@@ -1590,8 +1730,16 @@ async function scanLan(options = { sweep: true }) {
     deviceType: 'desktop',
     isGateway: false,
     isThisDevice: true,
+    isAlive: true,
     latency: 0,
     type: 'local',
+    osFingerprint: {
+      osName: os.platform() === 'win32' ? 'Microsoft Windows (10 / 11)' : (os.platform() === 'darwin' ? 'Apple macOS' : 'Linux Desktop'),
+      osFamily: os.platform() === 'win32' ? 'Windows' : (os.platform() === 'darwin' ? 'Apple Darwin' : 'Linux'),
+      confidence: 'High',
+      ttl: os.platform() === 'win32' ? 128 : 64,
+      basis: 'Local Host OS Kernel'
+    },
     ssdp: ssdpMap[localIp] || null,
     mdns: mdnsMap[localIp] || null
   };
@@ -1617,7 +1765,8 @@ async function scanLan(options = { sweep: true }) {
       isGateway: false,
       isThisDevice: false,
       hostname: friendlyName,
-      mdnsServices
+      mdnsServices,
+      isRandomized
     });
 
     // Derive display hostname:
@@ -1631,6 +1780,7 @@ async function scanLan(options = { sweep: true }) {
       else if (vendor.includes('Deco Mesh Node')) displayHostname = 'TP-Link Deco Mesh Node';
       else if (vendor.includes('Samsung (Smart Oven')) displayHostname = 'Samsung Smart Oven';
       else if (vendor.includes('Printer')) displayHostname = 'Network Printer';
+      else if (vendor.includes('Surface')) displayHostname = 'Microsoft Surface PC';
     }
 
     clientDevices.push({
@@ -1679,29 +1829,33 @@ async function scanLan(options = { sweep: true }) {
 
   // 6. Ping Gateway and client devices concurrently for quick latency checks, web portal discovery & OS / NetBIOS enrichment
   const pingTargets = [gatewayDevice, ...clientDevices];
+  const FAST_DIAG_PORTS = [80, 443, 8080, 8443, 135, 445, 631, 9100, 8008, 62078];
   await Promise.all(
     pingTargets.map(async (dev) => {
       try {
-        const [pingRes, nbRes, webPorts] = await Promise.all([
-          measurePing(dev.ip, 600),
-          (!dev.friendlyName && !dev.isGateway && !dev.isThisDevice) ? queryNetbios(dev.ip, 400) : Promise.resolve(null),
-          (!dev.isThisDevice) ? probeTcpPorts(dev.ip, [80, 443, 8080, 8443], 350) : Promise.resolve([])
+        const [pingRes, nbRes, probedPorts] = await Promise.all([
+          measurePing(dev.ip, 550),
+          (!dev.isGateway && !dev.isThisDevice) ? queryNetbios(dev.ip, 400) : Promise.resolve(null),
+          (!dev.isThisDevice) ? probeTcpPorts(dev.ip, FAST_DIAG_PORTS, 350) : Promise.resolve([])
         ]);
 
+        const openPortObjs = (probedPorts || []).filter(p => p.open);
+        const openPortNums = openPortObjs.map(p => p.port);
+
         dev.latency = pingRes.latency;
-        dev.isAlive = pingRes.alive;
+        dev.isAlive = Boolean(pingRes.alive || (nbRes && nbRes.name) || openPortNums.length > 0);
         dev.ttl = pingRes.ttl;
 
         if (nbRes && nbRes.name) {
           dev.netbiosName = nbRes.name;
           dev.workgroup = nbRes.workgroup;
-          if (!dev.friendlyName || dev.hostname === dev.ip) {
+          if (!dev.friendlyName || dev.hostname === dev.ip || dev.hostname === 'Microsoft Surface PC') {
             dev.hostname = nbRes.name;
           }
         }
 
         // Web portal detection
-        const openWeb = (webPorts || []).filter(p => p.open).map(p => p.port);
+        const openWeb = openPortNums.filter(p => [80, 443, 8080, 8443].includes(p));
         let portalUrl = null;
         if (dev.mdns?.adminUrl) {
           portalUrl = dev.mdns.adminUrl;
@@ -1724,17 +1878,35 @@ async function scanLan(options = { sweep: true }) {
           vendor: dev.vendor,
           mdns: dev.mdns,
           ssdp: dev.ssdp,
-          openPorts: (webPorts || []).filter(p => p.open),
-          netbios: nbRes
+          openPorts: openPortObjs,
+          netbios: nbRes,
+          hostname: dev.hostname,
+          isRandomized: dev.isRandomized
         });
+
+        // Re-evaluate deviceType with enriched NetBIOS, open ports, and OS family
+        if (!dev.isGateway && !dev.isThisDevice) {
+          dev.deviceType = guessDeviceType({
+            vendor: dev.vendor,
+            isGateway: false,
+            isThisDevice: false,
+            hostname: dev.hostname,
+            mdnsServices: dev.mdns?.services || [],
+            openPorts: openPortObjs,
+            netbios: nbRes,
+            osFamily: dev.osFingerprint?.osFamily || '',
+            isRandomized: dev.isRandomized
+          });
+        }
 
         // Quick network capabilities tags
         const caps = [];
         const mdnsTypes = dev.mdns?.serviceTypes || [];
         if (mdnsTypes.some(t => t.includes('airplay') || t.includes('raop'))) caps.push('AirPlay');
-        if (mdnsTypes.some(t => t.includes('googlecast'))) caps.push('Cast');
+        if (mdnsTypes.some(t => t.includes('googlecast')) || openPortNums.includes(8008)) caps.push('Cast');
         if (mdnsTypes.some(t => t.includes('spotify-connect'))) caps.push('Spotify');
-        if (mdnsTypes.some(t => t.includes('ipp') || t.includes('printer'))) caps.push('Print');
+        if (mdnsTypes.some(t => t.includes('ipp') || t.includes('printer')) || openPortNums.includes(631) || openPortNums.includes(9100)) caps.push('Print');
+        if (openPortNums.includes(445)) caps.push('SMB');
         if (dev.ssdp) caps.push('UPnP');
         if (dev.webPortal) caps.push('Web');
         dev.networkCapabilities = caps;

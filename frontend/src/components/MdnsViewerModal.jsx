@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Radio,
@@ -120,9 +121,9 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
     URL.revokeObjectURL(url);
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+      className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-6"
       style={{ backgroundColor: 'rgba(5, 7, 15, 0.85)', backdropFilter: 'blur(8px)' }}
       onClick={onClose}
     >
@@ -506,6 +507,7 @@ export default function MdnsViewerModal({ isOpen, onClose, device }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

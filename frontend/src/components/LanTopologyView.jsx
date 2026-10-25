@@ -239,18 +239,15 @@ export default function LanTopologyView({
 
       const total = allClients.length;
       if (total > 0) {
-        // Balanced columns so cards NEVER overlap
-        // Target balanced rows with 4 to 5 cards per row
-        const targetRowCount = Math.max(1, Math.ceil(total / 5));
-        const cols = Math.ceil(total / targetRowCount);
+        const CARD_WIDTH = 216;
+        const MIN_GAP_X = 22;
+        const maxColsByWidth = Math.max(2, Math.min(5, Math.floor((width - 48) / (CARD_WIDTH + MIN_GAP_X))));
+        const cols = Math.min(total, maxColsByWidth);
         const rows = Math.ceil(total / cols);
 
-        const CARD_WIDTH = 188;
-        const MIN_GAP_X = 28;
-        // Guaranteed minimum spacing (216px) ensures cards NEVER touch or overlap
-        const colSpacing = Math.max(CARD_WIDTH + MIN_GAP_X, Math.min(240, (width - 120) / (cols || 1)));
-        const startY = 320;
-        const rowSpacing = 135;
+        const colSpacing = Math.max(CARD_WIDTH + MIN_GAP_X, Math.min(256, (width - 64) / (cols || 1)));
+        const startY = 315;
+        const rowSpacing = 132;
 
         allClients.forEach((dev, idx) => {
           const row = Math.floor(idx / cols);
@@ -268,8 +265,8 @@ export default function LanTopologyView({
 
           // Link: Router -> Client
           links.push({
-            from: { x: centerX, y: routerY + 35 },
-            to: { x: nodeX, y: nodeY - 35 },
+            from: { x: centerX, y: routerY + 46 },
+            to: { x: nodeX, y: nodeY - 46 },
             color: getDeviceColor(dev.deviceType, dev.isThisDevice, dev.isGateway),
             isThisDevice: dev.isThisDevice,
             isAlive: dev.isAlive
@@ -363,14 +360,7 @@ export default function LanTopologyView({
       }}
     >
       {/* SVG Canvas for Topology Graph */}
-      <svg
-        className="w-full h-full pointer-events-auto"
-        style={{
-          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-          transformOrigin: 'center center',
-          transition: isDragging ? 'none' : 'transform 0.1s ease-out'
-        }}
-      >
+      <svg className="w-full h-full pointer-events-auto overflow-visible">
         <defs>
           <filter id="neon-glow" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="3" result="blur" />
@@ -381,204 +371,287 @@ export default function LanTopologyView({
           </filter>
         </defs>
 
-        {/* Ambient radial rings if in radial mode */}
-        {layoutMode === 'radial' && (
-          <g opacity={0.15}>
-            <circle cx={dimensions.width / 2} cy={dimensions.height / 2} r={120} fill="none" stroke="#10b981" strokeWidth="1" strokeDasharray="4 6" />
-            <circle cx={dimensions.width / 2} cy={dimensions.height / 2} r={220} fill="none" stroke="#38bdf8" strokeWidth="1" strokeDasharray="6 8" />
-            <circle cx={dimensions.width / 2} cy={dimensions.height / 2} r={320} fill="none" stroke="#6366f1" strokeWidth="1" strokeDasharray="8 10" />
-          </g>
-        )}
-
-        {/* Connection Links */}
-        {layoutNodes.links.map((link, idx) => {
-          const isSelected = selectedDevice && (
-            (link.from.devId === selectedDevice.id) ||
-            (link.to.devId === selectedDevice.id)
-          );
-
-          const dx = link.to.x - link.from.x;
-          const dy = link.to.y - link.from.y;
-          const midY = (link.from.y + link.to.y) / 2;
-          const pathD = layoutMode === 'tree'
-            ? `M ${link.from.x} ${link.from.y} C ${link.from.x} ${midY}, ${link.to.x} ${midY}, ${link.to.x} ${link.to.y}`
-            : `M ${link.from.x} ${link.from.y} Q ${link.from.x + dx * 0.5} ${link.from.y + dy * 0.5}, ${link.to.x} ${link.to.y}`;
-
-          const linkColor = isSelected ? '#f59e0b' : (link.color || '#3b82f6');
-          const strokeWidth = link.isMainTrunk ? 3 : (link.isThisDevice ? 2.5 : 1.8);
-
-          return (
-            <g key={`link-${idx}`}>
-              {/* Outer soft glow line */}
-              <path
-                d={pathD}
-                fill="none"
-                stroke={linkColor}
-                strokeWidth={strokeWidth + 3}
-                strokeOpacity={isSelected ? 0.45 : (link.isAlive ? 0.18 : 0.08)}
-              />
-              {/* Crisp core line */}
-              <path
-                d={pathD}
-                fill="none"
-                stroke={linkColor}
-                strokeWidth={strokeWidth}
-                strokeOpacity={isSelected ? 0.95 : (link.isAlive ? 0.75 : 0.35)}
-                strokeDasharray={link.isAlive ? 'none' : '4, 4'}
-              />
+        <g
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: `${dimensions.width / 2}px ${dimensions.height / 2}px`,
+            transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+          }}
+        >
+          {/* Ambient radial rings if in radial mode */}
+          {layoutMode === 'radial' && (
+            <g opacity={0.15}>
+              <circle cx={dimensions.width / 2} cy={dimensions.height / 2} r={120} fill="none" stroke="#10b981" strokeWidth="1" strokeDasharray="4 6" />
+              <circle cx={dimensions.width / 2} cy={dimensions.height / 2} r={220} fill="none" stroke="#38bdf8" strokeWidth="1" strokeDasharray="6 8" />
+              <circle cx={dimensions.width / 2} cy={dimensions.height / 2} r={320} fill="none" stroke="#6366f1" strokeWidth="1" strokeDasharray="8 10" />
             </g>
-          );
-        })}
+          )}
 
-        {/* Node Cards */}
-        {layoutNodes.nodes.map((node) => {
-          const isCloud = node.type === 'cloud';
-          const isSelected = selectedDevice?.id === node.id;
-          const IconComponent = isCloud ? Cloud : getDeviceIcon(node.deviceType);
-          const devColor = isCloud ? '#6366f1' : getDeviceColor(node.deviceType, node.isThisDevice, node.isGateway);
+          {/* Connection Links */}
+          {layoutNodes.links.map((link, idx) => {
+            const isSelected = selectedDevice && (
+              (link.from.devId === selectedDevice.id) ||
+              (link.to.devId === selectedDevice.id)
+            );
 
-          const cardWidth = isCloud ? 140 : (node.isGateway ? 204 : 188);
-          const cardHeight = isCloud ? 50 : 70;
-          const nodeNick = !isCloud ? (nicknames[node.mac] || nicknames[node.ip]) : null;
-          const displaySubtitle = isCloud
-            ? node.subtitle
-            : (nodeNick || node.vendor || (node.isGateway ? 'Router' : 'Device')).slice(0, 19);
+            const dx = link.to.x - link.from.x;
+            const dy = link.to.y - link.from.y;
+            const midY = (link.from.y + link.to.y) / 2;
+            const pathD = layoutMode === 'tree'
+              ? `M ${link.from.x} ${link.from.y} C ${link.from.x} ${midY}, ${link.to.x} ${midY}, ${link.to.x} ${link.to.y}`
+              : `M ${link.from.x} ${link.from.y} Q ${link.from.x + dx * 0.5} ${link.from.y + dy * 0.5}, ${link.to.x} ${link.to.y}`;
 
-          return (
-            <g
-              key={node.id || `node-${node.ip}`}
-              transform={`translate(${node.x}, ${node.y})`}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!isCloud) {
-                  setSelectedDevice && setSelectedDevice(isSelected ? null : node);
-                }
-              }}
-              className="cursor-pointer group"
-            >
-              {/* Card Container Box */}
-              <rect
-                x={-cardWidth / 2}
-                y={-cardHeight / 2}
-                width={cardWidth}
-                height={cardHeight}
-                rx={10}
-                fill="#0b1120"
-                fillOpacity={0.94}
-                stroke={isSelected ? '#f59e0b' : devColor}
-                strokeWidth={isSelected ? 2 : (node.isThisDevice || node.isGateway ? 1.5 : 1)}
-                strokeOpacity={isSelected ? 1 : (node.isAlive !== false ? 0.85 : 0.45)}
-                filter={isSelected ? 'url(#neon-glow)' : undefined}
-                className="transition-all duration-200 group-hover:stroke-white/80"
-              />
+            const linkColor = isSelected ? '#f59e0b' : (link.color || '#3b82f6');
+            const strokeWidth = link.isMainTrunk ? 3 : (link.isThisDevice ? 2.5 : 1.8);
 
-              {/* Icon Disc */}
-              <g transform={`translate(${-cardWidth / 2 + 18}, 0)`}>
-                <circle
-                  cx={0}
-                  cy={0}
-                  r={13}
-                  fill={`${devColor}22`}
-                  stroke={devColor}
-                  strokeWidth={1}
+            return (
+              <g key={`link-${idx}`}>
+                {/* Outer soft glow line */}
+                <path
+                  d={pathD}
+                  fill="none"
+                  stroke={linkColor}
+                  strokeWidth={strokeWidth + 3}
+                  strokeOpacity={isSelected ? 0.45 : (link.isAlive ? 0.18 : 0.08)}
                 />
-                <g transform="translate(-6.5, -6.5)">
-                  <IconComponent size={13} color={devColor} />
-                </g>
+                {/* Crisp core line */}
+                <path
+                  d={pathD}
+                  fill="none"
+                  stroke={linkColor}
+                  strokeWidth={strokeWidth}
+                  strokeOpacity={isSelected ? 0.95 : (link.isAlive ? 0.75 : 0.35)}
+                  strokeDasharray={link.isAlive ? 'none' : '4, 4'}
+                />
               </g>
+            );
+          })}
 
-              {/* Text Information */}
-              <g transform={`translate(${-cardWidth / 2 + 38}, -11)`}>
-                <text
-                  x={0}
-                  y={0}
-                  fill="#ffffff"
-                  fontSize={11}
-                  fontWeight="700"
-                  fontFamily="ui-monospace, monospace"
-                >
-                  {isCloud ? node.title : node.ip}
-                  {node.isThisDevice && (
-                    <tspan
-                      fill="#38bdf8"
-                      fontSize={8.5}
-                      fontWeight="800"
-                      fontFamily="system-ui, sans-serif"
-                      dx={7}
-                    >
-                      ⭐ YOU
-                    </tspan>
-                  )}
-                </text>
-              </g>
+          {/* Node Cards */}
+          {layoutNodes.nodes.map((node) => {
+            const isCloud = node.type === 'cloud';
+            const isSelected = selectedDevice?.id === node.id;
+            const IconComponent = isCloud ? Cloud : getDeviceIcon(node.deviceType);
+            const devColor = isCloud ? '#6366f1' : getDeviceColor(node.deviceType, node.isThisDevice, node.isGateway);
 
-              <text
-                x={-cardWidth / 2 + 38}
-                y={6}
-                fill={nodeNick ? '#fbbf24' : devColor}
-                fontSize={9.5}
-                fontWeight="600"
-                fontFamily="system-ui, sans-serif"
+            const cardWidth = isCloud ? 150 : 216;
+            const cardHeight = isCloud ? 52 : 92;
+
+            const nodeNick = !isCloud ? (nicknames[node.mac] || nicknames[node.ip]) : null;
+            const cleanHostname = (!isCloud && node.hostname && node.hostname !== node.ip && !node.hostname.includes('Default Gateway') && !node.hostname.includes('This Computer'))
+              ? node.hostname
+              : null;
+
+            const primaryTitle = isCloud
+              ? node.subtitle
+              : (nodeNick || node.friendlyName || node.netbiosName || cleanHostname || node.vendor || (node.isGateway ? 'Router' : 'Device'));
+
+            const secondaryVendor = !isCloud
+              ? (node.modelName ? `Model: ${node.modelName}` : (node.vendor && node.vendor !== primaryTitle ? node.vendor.replace(' (Randomized)', '') : null))
+              : null;
+
+            const osText = (!isCloud && node.osFingerprint?.osName)
+              ? formatOsName(node.osFingerprint.osName)
+              : null;
+
+            const trunc = (str, len = 25) => (!str ? '' : (str.length > len ? `${str.slice(0, len - 1)}…` : str));
+
+            return (
+              <g
+                key={node.id || `node-${node.ip}`}
+                transform={`translate(${node.x}, ${node.y})`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!isCloud) {
+                    setSelectedDevice && setSelectedDevice(isSelected ? null : node);
+                  }
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  if (!isCloud) {
+                    setSelectedDevice && setSelectedDevice(node);
+                    setInspectModalDevice(node);
+                  }
+                }}
+                className="cursor-pointer group"
               >
-                {displaySubtitle}
-              </text>
-
-              {/* Full Clear MAC & Latency */}
-              {!isCloud && node.mac && (
-                <text
-                  x={-cardWidth / 2 + 38}
-                  y={21}
-                  fill="#94a3b8"
-                  fontSize={8.5}
-                  fontWeight="600"
-                  fontFamily="ui-monospace, monospace"
-                >
-                  {node.mac}
-                </text>
-              )}
-
-              {/* Top-Right Badge: ROUTER */}
-              {!isCloud && node.isGateway && (
-                <g transform={`translate(${cardWidth / 2 - 8}, ${-cardHeight / 2 + 15})`}>
-                  <rect x={-52} y={-8} width={52} height={16} rx={4} fill="#064e3b" stroke="#10b981" strokeWidth={0.8} />
-                  <text x={-26} y={3.5} textAnchor="middle" fill="#34d399" fontSize={8} fontWeight="700" fontFamily="system-ui">
-                    ROUTER
-                  </text>
-                </g>
-              )}
-
-              {/* Latency badge on bottom right */}
-              {!isCloud && node.latency !== null && (
-                <text
-                  x={cardWidth / 2 - 8}
-                  y={21}
-                  textAnchor="end"
-                  fill="#34d399"
-                  fontSize={8.5}
-                  fontWeight="700"
-                  fontFamily="ui-monospace, monospace"
-                >
-                  {node.latency}ms
-                </text>
-              )}
-
-              {/* Pulsing indicator if alive */}
-              {!isCloud && node.isAlive && (
-                <circle
-                  cx={cardWidth / 2 - 8}
-                  cy={-cardHeight / 2 + 10}
-                  r={3.5}
-                  fill="#10b981"
+                {/* Card Container Box */}
+                <rect
+                  x={-cardWidth / 2}
+                  y={-cardHeight / 2}
+                  width={cardWidth}
+                  height={cardHeight}
+                  rx={10}
+                  fill="#0b1120"
+                  fillOpacity={0.95}
+                  stroke={isSelected ? '#f59e0b' : devColor}
+                  strokeWidth={isSelected ? 2 : (node.isThisDevice || node.isGateway ? 1.5 : 1)}
+                  strokeOpacity={isSelected ? 1 : (node.isAlive !== false ? 0.85 : 0.45)}
+                  filter={isSelected ? 'url(#neon-glow)' : undefined}
+                  className="transition-all duration-200 group-hover:stroke-white/80"
                 />
-              )}
-            </g>
-          );
-        })}
+
+                {/* Icon Disc */}
+                <g transform={`translate(${-cardWidth / 2 + 18}, ${isCloud ? 0 : -10})`}>
+                  <circle
+                    cx={0}
+                    cy={0}
+                    r={13}
+                    fill={`${devColor}22`}
+                    stroke={devColor}
+                    strokeWidth={1}
+                  />
+                  <g transform="translate(-6.5, -6.5)">
+                    <IconComponent size={13} color={devColor} />
+                  </g>
+                </g>
+
+                {isCloud ? (
+                  <>
+                    <text
+                      x={-cardWidth / 2 + 38}
+                      y={-5}
+                      fill="#ffffff"
+                      fontSize={11}
+                      fontWeight="700"
+                      fontFamily="ui-monospace, monospace"
+                    >
+                      {node.title}
+                    </text>
+                    <text
+                      x={-cardWidth / 2 + 38}
+                      y={10}
+                      fill={devColor}
+                      fontSize={9.5}
+                      fontWeight="600"
+                      fontFamily="system-ui, sans-serif"
+                    >
+                      {node.subtitle}
+                    </text>
+                  </>
+                ) : (
+                  <>
+                    {/* Row 1: IP + YOU / ROUTER badge */}
+                    <text
+                      x={-cardWidth / 2 + 38}
+                      y={-25}
+                      fill="#ffffff"
+                      fontSize={11}
+                      fontWeight="700"
+                      fontFamily="ui-monospace, monospace"
+                    >
+                      {node.ip}
+                      {node.isThisDevice && (
+                        <tspan
+                          fill="#38bdf8"
+                          fontSize={8.5}
+                          fontWeight="800"
+                          fontFamily="system-ui, sans-serif"
+                          dx={6}
+                        >
+                          ⭐ YOU
+                        </tspan>
+                      )}
+                    </text>
+
+                    {/* Row 2: Primary Name (Nickname / FriendlyName / Hostname / Vendor) */}
+                    <text
+                      x={-cardWidth / 2 + 38}
+                      y={-10}
+                      fill={nodeNick ? '#fbbf24' : '#f1f5f9'}
+                      fontSize={9.5}
+                      fontWeight="700"
+                      fontFamily="system-ui, sans-serif"
+                    >
+                      {trunc(primaryTitle, 25)}
+                    </text>
+
+                    {/* Row 3: Hardware Vendor / Model OR OS */}
+                    <text
+                      x={-cardWidth / 2 + 38}
+                      y={4}
+                      fill={secondaryVendor ? '#94a3b8' : '#22d3ee'}
+                      fontSize={8.5}
+                      fontWeight="600"
+                      fontFamily="system-ui, sans-serif"
+                    >
+                      {trunc(secondaryVendor || (osText ? `⚙ ${osText}` : `Type: ${node.deviceType || 'device'}`), 27)}
+                    </text>
+
+                    {/* Row 4: OS Fingerprint (when Row 3 had Vendor/Model) or mDNS services */}
+                    <text
+                      x={-cardWidth / 2 + 38}
+                      y={18}
+                      fill="#22d3ee"
+                      fontSize={8.5}
+                      fontWeight="600"
+                      fontFamily="system-ui, sans-serif"
+                    >
+                      {trunc(
+                        secondaryVendor && osText
+                          ? `⚙ ${osText}`
+                          : (node.mdns?.services?.length ? `📡 ${node.mdns.services.join(', ')}` : (node.webPortal ? '🌐 Web Portal Available' : '')),
+                        27
+                      )}
+                    </text>
+
+                    {/* Row 5 (Bottom): Full MAC Address on left + Latency on right */}
+                    {node.mac && (
+                      <text
+                        x={-cardWidth / 2 + 12}
+                        y={35}
+                        fill="#94a3b8"
+                        fontSize={8.5}
+                        fontWeight="600"
+                        fontFamily="ui-monospace, monospace"
+                      >
+                        {node.mac}
+                      </text>
+                    )}
+
+                    {/* Top-Right Badge: ROUTER */}
+                    {node.isGateway && (
+                      <g transform={`translate(${cardWidth / 2 - 8}, ${-cardHeight / 2 + 15})`}>
+                        <rect x={-48} y={-8} width={48} height={15} rx={4} fill="#064e3b" stroke="#10b981" strokeWidth={0.8} />
+                        <text x={-24} y={3} textAnchor="middle" fill="#34d399" fontSize={7.5} fontWeight="700" fontFamily="system-ui">
+                          ROUTER
+                        </text>
+                      </g>
+                    )}
+
+                    {/* Latency or silent badge on bottom right */}
+                    <text
+                      x={cardWidth / 2 - 10}
+                      y={35}
+                      textAnchor="end"
+                      fill={node.latency !== null ? '#34d399' : '#64748b'}
+                      fontSize={8.5}
+                      fontWeight="700"
+                      fontFamily="ui-monospace, monospace"
+                    >
+                      {node.latency !== null ? `${node.latency}ms` : 'silent'}
+                    </text>
+
+                    {/* Alive status dot on top right (for non-gateway) */}
+                    {!node.isGateway && (
+                      <circle
+                        cx={cardWidth / 2 - 10}
+                        cy={-cardHeight / 2 + 12}
+                        r={3.5}
+                        fill={node.isAlive ? '#10b981' : '#475569'}
+                      />
+                    )}
+                  </>
+                )}
+              </g>
+            );
+          })}
+        </g>
       </svg>
 
       {/* Top HUD Status Banner */}
-      <div className="absolute top-6 left-6 z-20 flex flex-col gap-1.5 pointer-events-none select-none">
-        <div className="flex items-center gap-2 bg-gray-900/90 border border-emerald-500/40 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto">
+      <div className="absolute top-6 left-6 z-20 flex flex-col gap-2 pointer-events-none select-none">
+        <div className="flex items-center gap-2 bg-gray-900/90 border border-emerald-500/40 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto w-fit">
           <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
             <span className="font-bold">LAN TOPOLOGY</span>
@@ -599,61 +672,77 @@ export default function LanTopologyView({
 
         {/* Selected Device Floating Card */}
         {selectedDevice && (
-          <div className="flex items-center justify-between gap-3 bg-gray-950/95 border border-amber-500/70 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto max-w-lg animate-in slide-in-from-top-1">
-            <div className="flex items-center gap-2 truncate">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-              <div className="truncate">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-amber-400">{selectedDevice.ip}</span>
-                  <span className="text-gray-300 font-semibold text-[11px] truncate max-w-[150px]">
-                    {nicknames[selectedDevice.mac] || nicknames[selectedDevice.ip] || selectedDevice.hostname || selectedDevice.vendor || 'Device'}
-                  </span>
-                  {selectedDevice.isThisDevice && (
-                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-950 border border-sky-500/40 text-sky-300">
-                      THIS PC (YOU)
+          <div className="flex flex-col gap-2 bg-gray-950/95 border border-amber-500/70 rounded-xl px-3.5 py-2.5 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto min-w-[320px] max-w-xl animate-in slide-in-from-top-1">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse mt-1 shrink-0"></span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-bold text-amber-400 shrink-0">{selectedDevice.ip}</span>
+                    <span className="text-gray-200 font-semibold text-[11px] truncate max-w-[200px]">
+                      {nicknames[selectedDevice.mac] || nicknames[selectedDevice.ip] || selectedDevice.friendlyName || selectedDevice.hostname || selectedDevice.vendor || 'Device'}
                     </span>
+                    {selectedDevice.isGateway && (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-950 border border-emerald-500/40 text-emerald-300 shrink-0">
+                        ROUTER
+                      </span>
+                    )}
+                    {selectedDevice.isThisDevice && (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-950 border border-sky-500/40 text-sky-300 shrink-0">
+                        THIS PC (YOU)
+                      </span>
+                    )}
+                    {selectedDevice.latency !== null && (
+                      <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-950/80 border border-emerald-500/30 text-emerald-400 font-mono font-bold shrink-0">
+                        {selectedDevice.latency === 1 ? '<1 ms' : `${selectedDevice.latency} ms`}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <div className="flex items-center gap-1 font-mono text-[10px] bg-gray-900 border border-gray-700/80 px-1.5 py-0.2 rounded text-gray-200 shrink-0">
+                      <span className="text-[9px] text-gray-500 font-bold">MAC:</span>
+                      <span className="font-bold tracking-wider text-amber-300">{selectedDevice.mac}</span>
+                    </div>
+                    {selectedDevice.osFingerprint?.osName && (
+                      <span className="text-[10px] text-cyan-400 font-medium truncate">
+                        • {formatOsName(selectedDevice.osFingerprint.osName)}
+                      </span>
+                    )}
+                  </div>
+                  {selectedDevice.mdns?.services?.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                      {selectedDevice.mdns.services.map((srv, sIdx) => (
+                        <button
+                          key={sIdx}
+                          type="button"
+                          onClick={() => setMdnsModalDevice(selectedDevice)}
+                          className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-indigo-950/90 hover:bg-indigo-900 border border-indigo-500/40 hover:border-indigo-500/70 text-indigo-300 hover:text-indigo-200 transition cursor-pointer flex items-center gap-1 whitespace-nowrap"
+                          title="Click to view mDNS & Bonjour details"
+                        >
+                          <Radio size={9} />
+                          <span>{srv}</span>
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <div className="flex items-center gap-1 font-mono text-[10px] bg-gray-900 border border-gray-700/80 px-1.5 py-0.2 rounded text-gray-200">
-                    <span className="text-[9px] text-gray-500 font-bold">MAC:</span>
-                    <span className="font-bold tracking-wider text-amber-300">{selectedDevice.mac}</span>
-                  </div>
-                  {selectedDevice.osFingerprint?.osName && (
-                    <span className="text-[10px] text-cyan-400 font-medium ml-1">
-                      • {formatOsName(selectedDevice.osFingerprint.osName)}
-                    </span>
-                  )}
-                  {selectedDevice.latency !== null && (
-                    <span className="text-[10px] text-emerald-400 font-mono font-bold">
-                      {selectedDevice.latency === 1 ? '<1 ms' : `${selectedDevice.latency} ms`}
-                    </span>
-                  )}
-                </div>
-                {selectedDevice.mdns?.services?.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1 mt-1">
-                    {selectedDevice.mdns.services.map((srv, sIdx) => (
-                      <button
-                        key={sIdx}
-                        type="button"
-                        onClick={() => setMdnsModalDevice(selectedDevice)}
-                        className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-indigo-950/90 hover:bg-indigo-900 border border-indigo-500/40 hover:border-indigo-500/70 text-indigo-300 hover:text-indigo-200 transition cursor-pointer flex items-center gap-1"
-                        title="Click to view mDNS & Bonjour details"
-                      >
-                        <Radio size={9} />
-                        <span>{srv}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedDevice && setSelectedDevice(null)}
+                className="text-gray-400 hover:text-white p-1 rounded hover:bg-gray-800/80 transition cursor-pointer text-xs shrink-0"
+                title="Deselect"
+              >
+                ✕
+              </button>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="pt-2 border-t border-gray-800/80 flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => setInspectModalDevice(selectedDevice)}
-                className="px-2 py-0.5 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/30 hover:border-cyan-400/60 text-cyan-300 hover:text-cyan-100 transition text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                className="px-2 py-0.5 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/30 hover:border-cyan-400/60 text-cyan-300 hover:text-cyan-100 transition text-[11px] font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                 title="Run deep device inspection & fingerprinting (12/12 features: OS, SNMP, Uptime, Ports, etc.)"
               >
                 <Cpu size={12} className="text-cyan-400" />
@@ -664,7 +753,7 @@ export default function LanTopologyView({
                 <button
                   type="button"
                   onClick={() => setMdnsModalDevice(selectedDevice)}
-                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-indigo-950 border border-transparent hover:border-indigo-500/40 text-gray-300 hover:text-indigo-300 transition text-[11px] font-mono flex items-center gap-1 cursor-pointer"
+                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-indigo-950 border border-transparent hover:border-indigo-500/40 text-gray-300 hover:text-indigo-300 transition text-[11px] font-mono flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                   title="View mDNS / Bonjour information (TXT records, port, services)"
                 >
                   <Radio size={11} className="text-indigo-400" />
@@ -675,7 +764,7 @@ export default function LanTopologyView({
                 <button
                   type="button"
                   onClick={() => setXmlModalDevice(selectedDevice)}
-                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition text-[11px] font-mono flex items-center gap-1 cursor-pointer"
+                  className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-sky-950 border border-transparent hover:border-sky-500/40 text-gray-300 hover:text-sky-300 transition text-[11px] font-mono flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                   title="View UPnP / SSDP XML description"
                 >
                   <FileCode size={11} className="text-sky-400" />
@@ -687,7 +776,7 @@ export default function LanTopologyView({
                   href={selectedDevice.webPortal || `http://${selectedDevice.ip}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-2 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-emerald-100 transition text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                  className="px-2 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 hover:border-emerald-400 text-emerald-300 hover:text-emerald-100 transition text-[11px] font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                   title={`Open device web portal (${selectedDevice.webPortal || `http://${selectedDevice.ip}`})`}
                 >
                   <Globe size={11} className="text-emerald-400" />
@@ -698,7 +787,7 @@ export default function LanTopologyView({
               <button
                 type="button"
                 onClick={() => copyToClipboard(selectedDevice.ip, `pop-${selectedDevice.id}`)}
-                className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition text-[11px] font-mono flex items-center gap-1"
+                className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition text-[11px] font-mono flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                 title="Copy IP"
               >
                 {copiedId === `pop-${selectedDevice.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
@@ -707,7 +796,7 @@ export default function LanTopologyView({
               <button
                 type="button"
                 onClick={() => copyToClipboard(selectedDevice.mac, `pop-mac-${selectedDevice.id}`)}
-                className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition text-[11px] font-mono flex items-center gap-1"
+                className="px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition text-[11px] font-mono flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                 title="Copy MAC Address"
               >
                 {copiedId === `pop-mac-${selectedDevice.id}` ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
@@ -718,35 +807,16 @@ export default function LanTopologyView({
                   type="button"
                   onClick={() => onPing({
                     ip: selectedDevice.ip,
-                    hostname: nicknames[selectedDevice.mac] || nicknames[selectedDevice.ip] || selectedDevice.hostname || selectedDevice.vendor,
+                    hostname: nicknames[selectedDevice.mac] || nicknames[selectedDevice.ip] || selectedDevice.friendlyName || selectedDevice.hostname || selectedDevice.vendor,
                     isPrivate: true
                   })}
-                  className="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-emerald-400 hover:text-emerald-300 transition text-[11px] font-bold flex items-center gap-1"
+                  className="px-2 py-0.5 rounded bg-gray-800 hover:bg-gray-700 text-emerald-400 hover:text-emerald-300 transition text-[11px] font-bold flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                   title="Live Ping test"
                 >
                   <Activity size={12} />
                   <span>Ping</span>
                 </button>
               )}
-              {selectedDevice.isGateway && (
-                <button
-                  type="button"
-                  onClick={() => window.open(`http://${selectedDevice.ip}`, '_blank', 'noopener,noreferrer')}
-                  className="px-2 py-0.5 rounded bg-emerald-950 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 hover:text-emerald-200 transition text-[11px] font-semibold flex items-center gap-1"
-                  title="Open Router Web Admin"
-                >
-                  <ExternalLink size={12} />
-                  <span>Admin</span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setSelectedDevice && setSelectedDevice(null)}
-                className="text-gray-500 hover:text-white p-1 ml-0.5 cursor-pointer text-sm"
-                title="Deselect"
-              >
-                ✕
-              </button>
             </div>
           </div>
         )}

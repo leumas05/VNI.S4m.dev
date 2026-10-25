@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Copy, Check, ExternalLink, Download, FileCode, RefreshCw, AlertCircle } from 'lucide-react';
 
 const getApiBaseUrl = () => {
@@ -88,9 +89,9 @@ export default function XmlViewerModal({ isOpen, onClose, device, apiBase }) {
 
   const lines = xmlContent ? xmlContent.split('\n') : [];
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150"
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
@@ -252,6 +253,7 @@ export default function XmlViewerModal({ isOpen, onClose, device, apiBase }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
