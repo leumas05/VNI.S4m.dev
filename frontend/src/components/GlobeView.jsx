@@ -168,8 +168,11 @@ export default function GlobeView({
         seenCoords[key] = (seenCoords[key] || 0) + 1;
         const count = seenCoords[key];
         const total = coordCounts[key];
-        const angle = ((count - 1) / total) * (2 * Math.PI) + 0.35;
-        const spreadRadius = 0.20 + (total > 4 ? 0.05 : 0);
+        const ring = Math.floor((count - 1) / 8);
+        const posInRing = (count - 1) % 8;
+        const itemsInRing = ring === 0 ? Math.min(total, 8) : Math.min(total - ring * 8, 8);
+        const angle = (posInRing / itemsInRing) * (2 * Math.PI) + 0.35 + ring * 0.4;
+        const spreadRadius = 0.22 + ring * 0.18;
         const cosLat = Math.max(0.25, Math.cos(lat * Math.PI / 180));
         copy.geo.lat = Math.max(-89.9, Math.min(89.9, lat + Math.sin(angle) * spreadRadius));
         const rawLon = lon + (Math.cos(angle) * spreadRadius) / cosLat;

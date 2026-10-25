@@ -101,17 +101,49 @@ export default function MapView({
   const isRadar = activeMode === 'radar';
 
   const validHops = (hops || []).filter(h => h && h.geo && !isNaN(Number(h.geo.lat)) && !isNaN(Number(h.geo.lon)));
-  const radarConnections = (radarData?.connections || []).filter(c => c && c.geo && !isNaN(Number(c.geo.lat)) && !isNaN(Number(c.geo.lon)));
+  const rawRadarConnections = (radarData?.connections || []).filter(c => c && c.geo && !isNaN(Number(c.geo.lat)) && !isNaN(Number(c.geo.lon)));
 
   let myDisplayLat = myLocation?.lat;
   let myDisplayLon = myLocation?.lon;
 
   if (myDisplayLat && myDisplayLon) {
-      while (validHops.some(h => h.geo.lat === myDisplayLat && h.geo.lon === myDisplayLon)) {
+      while (
+        validHops.some(h => h.geo.lat === myDisplayLat && h.geo.lon === myDisplayLon) ||
+        rawRadarConnections.some(c => Number(c.geo.lat) === myDisplayLat && Number(c.geo.lon) === myDisplayLon)
+      ) {
           myDisplayLat -= 0.002;
           myDisplayLon -= 0.002;
       }
   }
+
+  // De-cluster co-located Radar connections just like Traceroute hops so overlapping endpoints sit neatly beside each other
+  const radarOriginalCoordCounts = {};
+  rawRadarConnections.forEach(c => {
+      const key = `${Number(c.geo.lat).toFixed(3)},${Number(c.geo.lon).toFixed(3)}`;
+      radarOriginalCoordCounts[key] = (radarOriginalCoordCounts[key] || 0) + 1;
+  });
+
+  const radarCoordMap = {};
+  const radarConnections = rawRadarConnections.map(c => {
+      const lat = Number(c.geo.lat);
+      const lon = Number(c.geo.lon);
+      const copy = { ...c, geo: { ...c.geo, lat, lon } };
+      const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+
+      copy.isClustered = radarOriginalCoordCounts[key] > 1;
+
+      if (radarCoordMap[key] === undefined) {
+          radarCoordMap[key] = 0;
+      } else {
+          radarCoordMap[key]++;
+          const count = radarCoordMap[key];
+          const angle = count * 2.4;
+          const radius = 0.005 + (count * 0.002);
+          copy.geo.lat += Math.sin(angle) * radius;
+          copy.geo.lon += Math.cos(angle) * radius;
+      }
+      return copy;
+  });
 
   const unwrappedHops = [];
   let currentLonOffset = 0;
@@ -166,10 +198,15 @@ export default function MapView({
 
   if (isRadar) {
     if (myDisplayLat && myDisplayLon) {
+      const radarSegCounts = {};
       radarConnections.forEach((conn) => {
         const isSelected = selectedRadarConn && selectedRadarConn.remoteIp === conn.remoteIp && selectedRadarConn.remotePort === conn.remotePort;
+        const clusterKey = `${Number(conn.geo.lat).toFixed(1)},${Number(conn.geo.lon).toFixed(1)}`;
+        radarSegCounts[clusterKey] = (radarSegCounts[clusterKey] || 0) + 1;
+        const curveOffset = 0.10 + (Math.min(radarSegCounts[clusterKey], 8) - 1) * 0.03;
+
         segments.push({
-          points: getCurvedPoints([myDisplayLat, myDisplayLon], [conn.geo.lat, conn.geo.lon], 0.12),
+          points: getCurvedPoints([myDisplayLat, myDisplayLon], [conn.geo.lat, conn.geo.lon], curveOffset),
           isSelected,
           color: isSelected ? '#f59e0b' : '#10b981',
           weight: isSelected ? 3 : 2,
@@ -309,8 +346,9 @@ export default function MapView({
               >
                 <Tooltip direction="top" offset={[0, -10]} opacity={1}>
                   <div className="text-gray-900 font-sans text-sm">
-                    <strong>{conn.process || 'Process'} (:{conn.remotePort || ''})</strong><br/>
-                    <span className="text-gray-600 text-xs font-mono">{conn.remoteIp}</span><br/>
+                    <strong>{conn.process || 'Process'} ({conn.serviceLabel || `:${conn.remotePort || ''}`})</strong><br/>
+                    {conn.domain && <><span className="text-emerald-700 font-semibold text-xs font-mono">{conn.domain}</span><br/></>}
+                    <span className="text-gray-600 text-xs font-mono">{conn.remoteIp}:{conn.remotePort}</span><br/>
                     <span className="text-gray-500 text-xs">
                       {conn.geo?.city ? `${conn.geo.city}, ` : ''}{conn.geo?.country} {conn.geo?.isp ? `• ${conn.geo.isp}` : ''}
                     </span>
