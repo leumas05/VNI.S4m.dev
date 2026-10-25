@@ -282,10 +282,10 @@ export default function GlobeView({
         const haloColor = isSelected ? 'rgba(245, 158, 11, 0.45)' : `${baseColor}44`;
 
         const tooltip = getTooltip({
-          title: `${conn.process || 'Process'} (Port ${conn.remotePort || ''})`,
-          subtitle: `${conn.geo?.city ? `${conn.geo.city}, ` : ''}${conn.geo?.country || 'Unknown Location'}`,
+          title: `${conn.process || 'Process'} (${conn.serviceLabel || `Port ${conn.remotePort || ''}`})`,
+          subtitle: `${conn.domain ? `${conn.domain} • ` : ''}${conn.geo?.city ? `${conn.geo.city}, ` : ''}${conn.geo?.country || 'Unknown Location'}`,
           info: `IP: ${conn.remoteIp} ${conn.geo?.isp ? `• ${conn.geo.isp}` : ''}`,
-          extra: `Status: ${conn.state} ${conn.pid ? `(PID: ${conn.pid})` : ''}`,
+          extra: `${conn.security?.badge || conn.state} ${conn.durationFormatted ? `• ⏱ ${conn.durationFormatted}` : ''}`,
           color
         });
 

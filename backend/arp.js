@@ -2357,17 +2357,18 @@ async function scanLan(options = { sweep: true }) {
 
   // Map active local sockets to LAN IPs
   const activeSocketsByIp = {};
-  if (liveNetstat && Array.isArray(liveNetstat.connections)) {
-    for (const conn of liveNetstat.connections) {
-      const remIp = conn.remoteAddress;
+  const lanSockList = (liveNetstat && (liveNetstat.lanConnections || liveNetstat.connections)) || [];
+  if (Array.isArray(lanSockList)) {
+    for (const conn of lanSockList) {
+      const remIp = conn.remoteAddress || conn.remoteIp;
       if (remIp && remIp !== localIp && remIp !== '127.0.0.1') {
         if (!activeSocketsByIp[remIp]) activeSocketsByIp[remIp] = [];
         activeSocketsByIp[remIp].push({
-          protocol: conn.protocol || 'TCP',
+          protocol: conn.protocol || conn.proto || 'TCP',
           localPort: conn.localPort,
           remotePort: conn.remotePort,
           state: conn.state || 'ESTABLISHED',
-          process: conn.processName || null
+          process: conn.processName || conn.process || null
         });
       }
     }

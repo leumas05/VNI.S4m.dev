@@ -240,6 +240,12 @@ export default function Sidebar({
           onSelectConn={setSelectedRadarConn}
           onPing={onPing}
           onDig={onDig}
+          onTrace={(targetHost) => {
+            if (!targetHost) return;
+            setInput(targetHost);
+            if (setActiveMode) setActiveMode('traceroute');
+            startTrace(targetHost);
+          }}
           hideSelfConnections={hideSelfConnections}
           onToggleHideSelf={onToggleHideSelf}
         />
