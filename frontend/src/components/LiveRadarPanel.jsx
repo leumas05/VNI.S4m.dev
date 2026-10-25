@@ -2,9 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Radio, RefreshCw, Search, ShieldCheck, ShieldAlert, Lock, Eye,
   Terminal, Activity, Play, Pause, X, HelpCircle, Layers, List,
-  Copy, Check, Download, ChevronDown, ChevronRight, Navigation, Clock,
-  Globe, MessageSquare, Gamepad2, Code2, Cloud, Cpu, Monitor, Server,
-  Crosshair, ChevronsUpDown, ArrowUpDown, HardDrive
+  Copy, Check, Download, ChevronDown, ChevronRight, Navigation, Clock
 } from 'lucide-react';
 import RadarGuideModal from './RadarGuideModal';
 
@@ -34,91 +32,16 @@ function getProcessColor(processName) {
   return 'text-indigo-400 border-indigo-500/30 bg-indigo-950/40';
 }
 
-function getAppVisualMeta(processName, appCategory) {
-  const p = (processName || '').toLowerCase();
-  const cat = (appCategory || '').toLowerCase();
-
-  if (p.includes('chrome') || p.includes('msedge') || p.includes('firefox') || p.includes('brave') || p.includes('opera') || cat.includes('browser')) {
-    return {
-      icon: <Globe size={14} className="text-emerald-400" />,
-      bg: 'bg-emerald-950/70 border-emerald-500/40',
-      barColor: 'bg-emerald-500',
-      accentText: 'text-emerald-300'
-    };
-  }
-  if (p.includes('discord') || p.includes('slack') || p.includes('teams') || p.includes('zoom') || p.includes('telegram') || cat.includes('communication')) {
-    return {
-      icon: <MessageSquare size={14} className="text-indigo-400" />,
-      bg: 'bg-indigo-950/70 border-indigo-500/40',
-      barColor: 'bg-indigo-500',
-      accentText: 'text-indigo-300'
-    };
-  }
-  if (p.includes('steam') || p.includes('riot') || p.includes('epic') || p.includes('battle.net') || cat.includes('gaming')) {
-    return {
-      icon: <Gamepad2 size={14} className="text-purple-400" />,
-      bg: 'bg-purple-950/70 border-purple-500/40',
-      barColor: 'bg-purple-500',
-      accentText: 'text-purple-300'
-    };
-  }
-  if (p.includes('spotify') || p.includes('vlc') || p.includes('obs') || cat.includes('media')) {
-    return {
-      icon: <Radio size={14} className="text-pink-400" />,
-      bg: 'bg-pink-950/70 border-pink-500/40',
-      barColor: 'bg-pink-500',
-      accentText: 'text-pink-300'
-    };
-  }
-  if (p.includes('code') || p.includes('cursor') || p.includes('node') || p.includes('git') || p.includes('python') || p.includes('docker') || cat.includes('development')) {
-    return {
-      icon: <Code2 size={14} className="text-sky-400" />,
-      bg: 'bg-sky-950/70 border-sky-500/40',
-      barColor: 'bg-sky-500',
-      accentText: 'text-sky-300'
-    };
-  }
-  if (p.includes('onedrive') || p.includes('dropbox') || p.includes('googledrive') || cat.includes('cloud')) {
-    return {
-      icon: <Cloud size={14} className="text-amber-400" />,
-      bg: 'bg-amber-950/70 border-amber-500/40',
-      barColor: 'bg-amber-500',
-      accentText: 'text-amber-300'
-    };
-  }
-  if (p.includes('svchost') || p.includes('system') || p.includes('lsass') || p.includes('searchapp') || cat.includes('system')) {
-    return {
-      icon: <Cpu size={14} className="text-slate-400" />,
-      bg: 'bg-slate-900 border-slate-700',
-      barColor: 'bg-slate-500',
-      accentText: 'text-slate-300'
-    };
-  }
-  return {
-    icon: <Monitor size={14} className="text-teal-400" />,
-    bg: 'bg-teal-950/70 border-teal-500/40',
-    barColor: 'bg-teal-500',
-    accentText: 'text-teal-300'
-  };
-}
-
-function formatMemory(kb) {
-  if (!kb || kb <= 0) return null;
-  const mb = kb / 1024;
-  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
-  return `${Math.round(mb)} MB`;
-}
-
 function getSecurityBadge(security) {
   if (!security) return null;
-  if (security.level === 'telemetry' || security.status === 'telemetry') {
+  if (security.level === 'telemetry') {
     return {
       icon: <Eye size={9} />,
       label: security.badge || 'Telemetry',
       className: 'bg-amber-950/80 border-amber-500/40 text-amber-300'
     };
   }
-  if (security.level === 'warning' || security.status === 'warning') {
+  if (security.level === 'warning') {
     return {
       icon: <ShieldAlert size={9} />,
       label: security.badge || 'Cleartext',
@@ -147,8 +70,6 @@ export default function LiveRadarPanel({
   setAutoRefresh,
   selectedConn,
   onSelectConn,
-  focusedProcess,
-  onSelectProcess,
   onPing,
   onDig,
   onTrace,
@@ -158,8 +79,7 @@ export default function LiveRadarPanel({
   const [search, setSearch] = useState('');
   const [activeProcess, setActiveProcess] = useState('ALL');
   const [securityFilter, setSecurityFilter] = useState('ALL'); // 'ALL' | 'ENCRYPTED' | 'TELEMETRY' | 'UDP' | 'NEW'
-  const [viewMode, setViewMode] = useState('grouped'); // 'grouped' | 'list'
-  const [appSortBy, setAppSortBy] = useState('sockets'); // 'sockets' | 'countries' | 'memory' | 'telemetry' | 'recent'
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'grouped'
   const [expandedGroups, setExpandedGroups] = useState({});
   const [copiedId, setCopiedId] = useState(null);
   const [showGuideModal, setShowGuideModal] = useState(false);
@@ -170,7 +90,7 @@ export default function LiveRadarPanel({
     if (!radarData?.processCounts) return [];
     return Object.entries(radarData.processCounts)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 8);
+      .slice(0, 7);
   }, [radarData]);
 
   // Security & Protocol counts across current connections
@@ -181,7 +101,7 @@ export default function LiveRadarPanel({
     let newCount = 0;
     connections.forEach(c => {
       if (c.security?.encrypted) encrypted++;
-      if (c.security?.isTelemetry || c.security?.level === 'telemetry' || c.security?.status === 'telemetry') telemetry++;
+      if (c.security?.isTelemetry || c.security?.level === 'telemetry') telemetry++;
       if ((c.proto || '').toUpperCase() === 'UDP') udpCount++;
       if (c.isNew) newCount++;
     });
@@ -194,14 +114,13 @@ export default function LiveRadarPanel({
         return false;
       }
       if (securityFilter === 'ENCRYPTED' && !conn.security?.encrypted) return false;
-      if (securityFilter === 'TELEMETRY' && !conn.security?.isTelemetry && conn.security?.level !== 'telemetry' && conn.security?.status !== 'telemetry') return false;
+      if (securityFilter === 'TELEMETRY' && !conn.security?.isTelemetry && conn.security?.level !== 'telemetry') return false;
       if (securityFilter === 'UDP' && (conn.proto || '').toUpperCase() !== 'UDP') return false;
       if (securityFilter === 'NEW' && !conn.isNew) return false;
 
       if (search.trim()) {
         const q = search.trim().toLowerCase();
         const matchesProcess = (conn.process || '').toLowerCase().includes(q);
-        const matchesTitle = (conn.windowTitle || '').toLowerCase().includes(q);
         const matchesIp = (conn.remoteIp || '').toLowerCase().includes(q);
         const matchesDomain = (conn.domain || '').toLowerCase().includes(q);
         const matchesService = (conn.serviceLabel || '').toLowerCase().includes(q);
@@ -211,7 +130,7 @@ export default function LiveRadarPanel({
         const matchesCity = (conn.geo?.city || '').toLowerCase().includes(q);
         const matchesIsp = (conn.geo?.isp || '').toLowerCase().includes(q);
         return (
-          matchesProcess || matchesTitle || matchesIp || matchesDomain || matchesService ||
+          matchesProcess || matchesIp || matchesDomain || matchesService ||
           matchesCategory || matchesPort || matchesCountry || matchesCity || matchesIsp
         );
       }
@@ -221,93 +140,33 @@ export default function LiveRadarPanel({
 
   const groupedByProcess = useMemo(() => {
     const map = {};
-    const totalFiltered = Math.max(1, filteredConnections.length);
-
     filteredConnections.forEach(conn => {
       const key = conn.process || 'Unknown Process';
       if (!map[key]) {
         map[key] = {
           process: key,
           appCategory: conn.appCategory || 'Application',
-          windowTitle: conn.windowTitle || null,
-          pids: new Set(),
-          pidMemoryMap: new Map(),
           connections: [],
           countries: new Set(),
           uniqueIps: new Set(),
-          domains: new Set(),
-          services: new Set(),
-          isps: new Set(),
           telemetryCount: 0,
-          encryptedCount: 0,
-          udpCount: 0,
-          newCount: 0,
-          minDurationSec: Infinity
+          encryptedCount: 0
         };
       }
-      const g = map[key];
-      g.connections.push(conn);
-      if (conn.windowTitle && !g.windowTitle) g.windowTitle = conn.windowTitle;
-      if (conn.pid) {
-        g.pids.add(conn.pid);
-        if (conn.memoryKb && !g.pidMemoryMap.has(conn.pid)) {
-          g.pidMemoryMap.set(conn.pid, conn.memoryKb);
-        }
-      }
-      if (conn.geo?.countryCode) g.countries.add(conn.geo.countryCode);
-      if (conn.remoteIp) g.uniqueIps.add(conn.remoteIp);
-      if (conn.domain) g.domains.add(conn.domain);
-      if (conn.serviceLabel) g.services.add(conn.serviceLabel);
-      if (conn.geo?.isp) g.isps.add(conn.geo.isp);
-      if (conn.security?.isTelemetry || conn.security?.status === 'telemetry') g.telemetryCount++;
-      if (conn.security?.encrypted) g.encryptedCount++;
-      if ((conn.proto || '').toUpperCase() === 'UDP') g.udpCount++;
-      if (conn.isNew) g.newCount++;
-      if (typeof conn.durationSeconds === 'number' && conn.durationSeconds < g.minDurationSec) {
-        g.minDurationSec = conn.durationSeconds;
-      }
+      map[key].connections.push(conn);
+      if (conn.geo?.countryCode) map[key].countries.add(conn.geo.countryCode);
+      if (conn.remoteIp) map[key].uniqueIps.add(conn.remoteIp);
+      if (conn.security?.isTelemetry) map[key].telemetryCount++;
+      if (conn.security?.encrypted) map[key].encryptedCount++;
     });
-
-    const list = Object.values(map).map(g => {
-      let totalMemoryKb = 0;
-      g.pidMemoryMap.forEach(kb => { totalMemoryKb += kb; });
-      const sharePercent = Math.round((g.connections.length / totalFiltered) * 100);
-      return {
-        ...g,
-        totalMemoryKb,
-        memoryFormatted: formatMemory(totalMemoryKb),
-        sharePercent,
-        countryList: Array.from(g.countries),
-        domainList: Array.from(g.domains).slice(0, 4),
-        serviceList: Array.from(g.services).slice(0, 3),
-        ispList: Array.from(g.isps).slice(0, 2)
-      };
-    });
-
-    list.sort((a, b) => {
-      if (appSortBy === 'countries') return b.countries.size - a.countries.size || b.connections.length - a.connections.length;
-      if (appSortBy === 'memory') return b.totalMemoryKb - a.totalMemoryKb || b.connections.length - a.connections.length;
-      if (appSortBy === 'telemetry') return b.telemetryCount - a.telemetryCount || b.connections.length - a.connections.length;
-      if (appSortBy === 'recent') return a.minDurationSec - b.minDurationSec;
-      return b.connections.length - a.connections.length;
-    });
-
-    return list;
-  }, [filteredConnections, appSortBy]);
+    return Object.values(map).sort((a, b) => b.connections.length - a.connections.length);
+  }, [filteredConnections]);
 
   const toggleGroup = (procName) => {
     setExpandedGroups(prev => ({
       ...prev,
-      [procName]: !prev[procName]
+      [procName]: prev[procName] === undefined ? false : !prev[procName]
     }));
-  };
-
-  const setAllGroupsExpanded = (expand) => {
-    const next = {};
-    groupedByProcess.forEach(g => {
-      next[g.process] = expand;
-    });
-    setExpandedGroups(next);
   };
 
   const handleCopy = (e, text, id) => {
@@ -333,7 +192,7 @@ export default function LiveRadarPanel({
     URL.revokeObjectURL(url);
   };
 
-  const renderConnectionCard = (conn, idx, compact = false) => {
+  const renderConnectionCard = (conn, idx) => {
     const isSelected = selectedConn && selectedConn.remoteIp === conn.remoteIp && selectedConn.remotePort === conn.remotePort;
     const procClass = getProcessColor(conn.process);
     const flag = getCountryFlag(conn.geo?.countryCode);
@@ -353,11 +212,9 @@ export default function LiveRadarPanel({
         {/* Top Row: Process + Category + Protocol/Service */}
         <div className="flex items-center justify-between gap-2 mb-1.5">
           <div className="flex items-center gap-1.5 truncate">
-            {!compact && (
-              <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border truncate ${procClass}`}>
-                {conn.process}
-              </span>
-            )}
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border truncate ${procClass}`}>
+              {conn.process}
+            </span>
             {conn.isNew && (
               <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 animate-pulse">
                 NEW
@@ -369,7 +226,7 @@ export default function LiveRadarPanel({
               </span>
             )}
             {conn.pid && (
-              <span className="text-[10px] text-gray-500 font-mono">
+              <span className="text-[10px] text-gray-500 font-mono hidden sm:inline">
                 PID:{conn.pid}
               </span>
             )}
@@ -395,6 +252,7 @@ export default function LiveRadarPanel({
         {/* Middle Row: Domain / Hostname + Destination Geo & IP */}
         <div className="flex items-start justify-between gap-2 mb-2 font-mono">
           <div className="truncate flex-1">
+            {/* Domain Name if resolved */}
             {conn.domain ? (
               <div className="flex items-center gap-1.5 truncate mb-0.5">
                 <span className="text-emerald-300 font-bold text-xs truncate" title={conn.domain}>
@@ -415,6 +273,7 @@ export default function LiveRadarPanel({
               </div>
             ) : null}
 
+            {/* Geo Location */}
             <div className="text-gray-200 font-semibold text-[11px] flex items-center gap-1.5 truncate">
               <span>{flag}</span>
               <span className="truncate">
@@ -422,12 +281,14 @@ export default function LiveRadarPanel({
               </span>
             </div>
 
+            {/* IP + ISP */}
             <div className="text-[10px] text-gray-400 truncate mt-0.5 flex items-center gap-1.5">
               <span className="text-gray-300">{conn.remoteIp}</span>
               {conn.geo?.isp && <span className="truncate text-gray-500">• {conn.geo.isp}</span>}
             </div>
           </div>
 
+          {/* Right column: Security Badge & Session Duration */}
           <div className="flex flex-col items-end gap-1 shrink-0">
             {secBadge && (
               <span
@@ -449,8 +310,8 @@ export default function LiveRadarPanel({
 
         {/* Bottom Action Bar: Trace, Ping, DiG, SSL, Copy */}
         <div className="flex items-center justify-between pt-1.5 border-t border-gray-900/80 text-[10px]">
-          <span className="text-[9px] text-gray-500 font-mono uppercase truncate max-w-[110px]" title={conn.windowTitle || conn.appCategory || conn.state}>
-            {conn.windowTitle || conn.appCategory || conn.state}
+          <span className="text-[9px] text-gray-500 font-mono uppercase truncate max-w-[90px]" title={conn.appCategory || conn.state}>
+            {conn.appCategory || conn.state}
           </span>
 
           <div className="flex items-center gap-1 flex-wrap justify-end">
@@ -598,9 +459,9 @@ export default function LiveRadarPanel({
             </div>
           </div>
           <div className="p-1.5 rounded bg-gray-900/60 border border-gray-800/80">
-            <div className="text-[9px] text-gray-400 uppercase tracking-wider">Active Apps</div>
-            <div className="text-xs sm:text-sm font-bold font-mono text-purple-400">
-              {Object.keys(radarData?.processCounts || {}).length}
+            <div className="text-[9px] text-gray-400 uppercase tracking-wider">Unique IPs</div>
+            <div className="text-xs sm:text-sm font-bold font-mono text-sky-400">
+              {radarData?.uniqueIpsCount || 0}
             </div>
           </div>
           <div className="p-1.5 rounded bg-gray-900/60 border border-gray-800/80">
@@ -617,7 +478,7 @@ export default function LiveRadarPanel({
           </div>
         </div>
 
-        {/* Controls Bar: Hide VNI + View Mode Toggle (By App vs Flat List) */}
+        {/* Controls Bar: Hide VNI + View Mode Toggle (Flat vs Grouped) */}
         <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-900 text-[11px] gap-2">
           <div className="flex items-center gap-1.5 text-gray-400 truncate">
             <ShieldCheck size={12} className={hideSelfConnections ? 'text-emerald-400 shrink-0' : 'text-gray-500 shrink-0'} />
@@ -644,42 +505,42 @@ export default function LiveRadarPanel({
           <div className="flex items-center bg-gray-900 p-0.5 rounded-lg border border-gray-800 shrink-0">
             <button
               type="button"
+              onClick={() => setViewMode('list')}
+              className={`px-2 py-0.5 rounded-md text-[10px] font-medium flex items-center gap-1 transition cursor-pointer ${
+                viewMode === 'list'
+                  ? 'bg-emerald-600 text-white font-semibold'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+              title="Flat Connection List"
+            >
+              <List size={10} />
+              <span>List</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setViewMode('grouped')}
               className={`px-2 py-0.5 rounded-md text-[10px] font-medium flex items-center gap-1 transition cursor-pointer ${
                 viewMode === 'grouped'
                   ? 'bg-emerald-600 text-white font-semibold'
                   : 'text-gray-400 hover:text-gray-200'
               }`}
-              title="Dynamic Application Intelligence Cards"
+              title="Group Connections by Application"
             >
               <Layers size={10} />
-              <span>By App ({groupedByProcess.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('list')}
-              className={`px-2 py-0.5 rounded-md text-[10px] font-medium flex items-center gap-1 transition cursor-pointer ${
-                viewMode === 'list'
-                  ? 'bg-emerald-600 text-white font-semibold'
-                  : 'bg-gray-400 hover:text-gray-200'
-              }`}
-              title="Flat Socket List"
-            >
-              <List size={10} />
-              <span>Sockets ({filteredConnections.length})</span>
+              <span>By App</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Search & Filters */}
-      <div className="flex flex-col gap-1.5 mb-2">
+      <div className="flex flex-col gap-1.5 mb-2.5">
         <div className="relative">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search app, window title, domain, IP, country..."
+            placeholder="Search domain, process, IP, country, service..."
             className="w-full bg-gray-950 border border-gray-800 rounded-lg pl-8 pr-7 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-emerald-500 font-mono transition"
           />
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
@@ -718,72 +579,12 @@ export default function LiveRadarPanel({
           ))}
         </div>
 
-        {/* Dynamic Toolbar when in "By App" mode: Sort + Expand/Collapse + Map Spotlight clear */}
-        {viewMode === 'grouped' && groupedByProcess.length > 0 && (
-          <div className="flex items-center justify-between gap-1.5 pt-1 text-[10px] font-mono">
-            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-              <span className="text-gray-500 flex items-center gap-0.5 shrink-0">
-                <ArrowUpDown size={10} /> Sort:
-              </span>
-              {[
-                { id: 'sockets', label: 'Sockets' },
-                { id: 'countries', label: 'Countries' },
-                { id: 'memory', label: 'RAM' },
-                { id: 'telemetry', label: 'Telemetry' },
-                { id: 'recent', label: 'Newest' }
-              ].map(s => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setAppSortBy(s.id)}
-                  className={`px-1.5 py-0.5 rounded border transition cursor-pointer shrink-0 ${
-                    appSortBy === s.id
-                      ? 'bg-purple-950/80 border-purple-500/50 text-purple-300 font-bold'
-                      : 'bg-gray-900/60 border-gray-800 text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-1 shrink-0">
-              {focusedProcess && (
-                <button
-                  type="button"
-                  onClick={() => onSelectProcess && onSelectProcess(null)}
-                  className="px-1.5 py-0.5 rounded bg-purple-950 border border-purple-500/50 text-purple-300 hover:bg-purple-900 transition cursor-pointer flex items-center gap-1"
-                  title="Clear Map Spotlight"
-                >
-                  <Crosshair size={9} />
-                  <span>Unfocus</span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  const anyExpanded = Object.values(expandedGroups).some(Boolean);
-                  setAllGroupsExpanded(!anyExpanded);
-                }}
-                className="px-1.5 py-0.5 rounded bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-400 hover:text-gray-200 transition cursor-pointer flex items-center gap-0.5"
-                title="Expand or Collapse all app cards"
-              >
-                <ChevronsUpDown size={10} />
-                <span>{Object.values(expandedGroups).some(Boolean) ? 'Collapse' : 'Expand'}</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Process Filter Pills when in Flat Socket List mode */}
-        {viewMode === 'list' && topProcesses.length > 0 && (
+        {/* Process Filter Pills */}
+        {topProcesses.length > 0 && (
           <div className="flex items-center gap-1 overflow-x-auto pb-0.5 no-scrollbar text-[10px] font-mono">
             <button
               type="button"
-              onClick={() => {
-                setActiveProcess('ALL');
-                if (onSelectProcess) onSelectProcess(null);
-              }}
+              onClick={() => setActiveProcess('ALL')}
               className={`px-2 py-0.5 rounded-full shrink-0 border transition cursor-pointer ${
                 activeProcess === 'ALL'
                   ? 'bg-sky-950 border-sky-500/50 text-sky-300 font-semibold'
@@ -796,11 +597,7 @@ export default function LiveRadarPanel({
               <button
                 key={procName}
                 type="button"
-                onClick={() => {
-                  const next = procName === activeProcess ? 'ALL' : procName;
-                  setActiveProcess(next);
-                  if (onSelectProcess) onSelectProcess(next === 'ALL' ? null : next);
-                }}
+                onClick={() => setActiveProcess(procName === activeProcess ? 'ALL' : procName)}
                 className={`px-2 py-0.5 rounded-full shrink-0 border transition cursor-pointer truncate max-w-[130px] ${
                   activeProcess === procName
                     ? 'bg-sky-950 border-sky-500/50 text-sky-300 font-semibold'
@@ -815,188 +612,62 @@ export default function LiveRadarPanel({
         )}
       </div>
 
-      {/* Connections Content: Dynamic App Cards vs Flat Socket List */}
+      {/* Connections Content: Flat List vs Grouped by Application */}
       <div className="flex-1 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
         {filteredConnections.length > 0 ? (
           viewMode === 'grouped' ? (
             groupedByProcess.map(group => {
-              const isExpanded = !!expandedGroups[group.process];
-              const isFocusedOnMap = focusedProcess === group.process;
-              const visual = getAppVisualMeta(group.process, group.appCategory);
+              const isExpanded = expandedGroups[group.process] !== false; // default expanded
               const procClass = getProcessColor(group.process);
-              const primaryTarget = group.domainList[0] || group.connections[0]?.remoteIp;
-
               return (
                 <div
                   key={group.process}
-                  className={`rounded-xl border transition-all overflow-hidden ${
-                    isFocusedOnMap
-                      ? 'border-purple-500 bg-gray-900/95 shadow-lg shadow-purple-950/40 ring-1 ring-purple-500/40'
-                      : 'border-gray-800/90 bg-gray-950/75 hover:border-gray-700'
-                  }`}
+                  className="rounded-xl border border-gray-800/90 bg-gray-950/60 overflow-hidden"
                 >
-                  {/* Dynamic App Card Header */}
-                  <div
+                  <button
+                    type="button"
                     onClick={() => toggleGroup(group.process)}
-                    className="p-3 cursor-pointer select-none transition hover:bg-gray-900/50"
+                    className="w-full p-2.5 bg-gray-900/70 hover:bg-gray-900 flex items-center justify-between gap-2 text-left transition cursor-pointer"
                   >
-                    {/* Top Line: Icon + Process Name + Category + Live Badges */}
-                    <div className="flex items-start justify-between gap-2 mb-1.5">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className={`p-2 rounded-xl border shrink-0 ${visual.bg}`}>
-                          {visual.icon}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={`px-2 py-0.5 rounded text-xs font-mono font-bold border truncate ${procClass}`}>
-                              {group.process}
-                            </span>
-                            <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-gray-900 border border-gray-800 text-gray-400">
-                              {group.appCategory}
-                            </span>
-                            {group.newCount > 0 && (
-                              <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 animate-pulse">
-                                +{group.newCount} NEW
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Dynamic OS Window Title or PIDs & Memory */}
-                          <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-400 font-mono truncate">
-                            {group.windowTitle ? (
-                              <span className="text-gray-300 truncate max-w-[210px]" title={`Active Window: ${group.windowTitle}`}>
-                                🪟 {group.windowTitle}
-                              </span>
-                            ) : (
-                              <span>
-                                {group.pids.size} {group.pids.size === 1 ? 'process' : 'processes'}
-                              </span>
-                            )}
-                            {group.memoryFormatted && (
-                              <span className="text-sky-400/90 flex items-center gap-0.5 shrink-0" title="Total Process RAM Usage">
-                                • <HardDrive size={9} /> {group.memoryFormatted}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Right Metrics: Socket Count + Share % + Expand Chevron */}
-                      <div className="flex items-center gap-1.5 shrink-0 font-mono">
-                        <div className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <span className="px-2 py-0.5 rounded-lg bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 font-bold text-xs">
-                              {group.connections.length}
-                            </span>
-                          </div>
-                          <div className="text-[9px] text-gray-500 mt-0.5">
-                            {group.sharePercent}% of traffic
-                          </div>
-                        </div>
-                        <div className="p-1 rounded-lg bg-gray-900 border border-gray-800 text-gray-400">
-                          {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                        </div>
-                      </div>
+                    <div className="flex items-center gap-2 truncate">
+                      {isExpanded ? (
+                        <ChevronDown size={13} className="text-gray-400 shrink-0" />
+                      ) : (
+                        <ChevronRight size={13} className="text-gray-400 shrink-0" />
+                      )}
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border truncate ${procClass}`}>
+                        {group.process}
+                      </span>
+                      <span className="text-[10px] text-gray-400 truncate hidden sm:inline">
+                        {group.appCategory}
+                      </span>
                     </div>
 
-                    {/* Visual Share & Encryption Progress Bar */}
-                    <div className="w-full h-1.5 bg-gray-900 rounded-full overflow-hidden my-2 flex">
-                      <div
-                        className={`${visual.barColor} h-full transition-all duration-500`}
-                        style={{ width: `${Math.max(5, group.sharePercent)}%` }}
-                        title={`${group.sharePercent}% of active connections`}
-                      />
-                    </div>
-
-                    {/* Middle Intelligence Strip: Country Flags, Protocols, Telemetry & Top Domains */}
-                    <div className="flex items-center justify-between gap-2 flex-wrap text-[10px] font-mono pt-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {/* Country Flags */}
-                        {group.countryList.length > 0 && (
-                          <span className="px-1.5 py-0.5 rounded bg-gray-900 border border-gray-800 text-gray-200 flex items-center gap-1" title={`Connected to ${group.countryList.join(', ')}`}>
-                            <span>{group.countryList.slice(0, 4).map(c => getCountryFlag(c)).join(' ')}</span>
-                            <span className="text-gray-400">{group.countryList.length}</span>
-                          </span>
-                        )}
-
-                        {/* Services (HTTPS, QUIC, etc.) */}
-                        {group.serviceList.map(srv => (
-                          <span key={srv} className="px-1.5 py-0.5 rounded bg-gray-900/80 border border-gray-800 text-gray-300">
-                            {srv}
-                          </span>
-                        ))}
-
-                        {/* Telemetry Warning Badge */}
-                        {group.telemetryCount > 0 && (
-                          <span className="px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-500/40 text-amber-300 flex items-center gap-1" title={`${group.telemetryCount} telemetry/analytics endpoints`}>
-                            <Eye size={9} />
-                            <span>{group.telemetryCount} Telemetry</span>
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Quick App-Level Actions: Spotlight on Map & Trace Primary */}
-                      <div className="flex items-center gap-1 ml-auto" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() => onSelectProcess && onSelectProcess(isFocusedOnMap ? null : group.process)}
-                          className={`px-2 py-0.5 rounded border text-[10px] font-mono transition cursor-pointer flex items-center gap-1 ${
-                            isFocusedOnMap
-                              ? 'bg-purple-600 border-purple-400 text-white font-bold shadow-sm'
-                              : 'bg-gray-900 hover:bg-gray-800 border-gray-800 text-gray-300 hover:text-purple-300'
-                          }`}
-                          title={isFocusedOnMap ? 'Show all applications on Map/Globe' : `Isolate only ${group.process} connections on 2D Map & 3D Globe`}
-                        >
-                          <Crosshair size={9} />
-                          <span>{isFocusedOnMap ? 'Focused' : 'Map Focus'}</span>
-                        </button>
-
-                        {primaryTarget && onTrace && (
-                          <button
-                            type="button"
-                            onClick={() => onTrace(primaryTarget)}
-                            className="px-2 py-0.5 rounded bg-amber-950/50 hover:bg-amber-900/70 border border-amber-500/30 text-amber-300 transition cursor-pointer flex items-center gap-1"
-                            title={`Trace primary endpoint (${primaryTarget})`}
-                          >
-                            <Navigation size={9} />
-                            <span>Trace</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Preview of Top Domains / Organizations when collapsed */}
-                    {!isExpanded && (group.domainList.length > 0 || group.ispList.length > 0) && (
-                      <div className="mt-2 pt-1.5 border-t border-gray-900/80 flex items-center gap-1.5 overflow-x-auto no-scrollbar text-[10px] font-mono text-gray-400">
-                        <Server size={9} className="text-emerald-400 shrink-0" />
-                        <span className="truncate">
-                          {group.domainList.length > 0
-                            ? group.domainList.join(' • ')
-                            : group.ispList.join(' • ')}
+                    <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
+                      {group.telemetryCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded bg-amber-950/80 border border-amber-500/40 text-amber-300" title="Telemetry endpoints">
+                          👁 {group.telemetryCount}
                         </span>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                      <span className="px-1.5 py-0.2 rounded bg-gray-950 border border-gray-800 text-gray-300">
+                        {group.countries.size} {group.countries.size === 1 ? 'country' : 'countries'}
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-bold">
+                        {group.connections.length}
+                      </span>
+                    </div>
+                  </button>
 
-                  {/* Expanded Socket List for this App */}
                   {isExpanded && (
-                    <div className="p-2.5 pt-2 space-y-2 border-t border-gray-800/80 bg-black/40">
-                      <div className="flex items-center justify-between text-[10px] font-mono text-gray-400 px-1">
-                        <span>
-                          Showing {group.connections.length} active {group.connections.length === 1 ? 'socket' : 'sockets'} ({group.uniqueIps.size} unique IPs)
-                        </span>
-                        {group.pids.size > 0 && (
-                          <span>PIDs: {Array.from(group.pids).slice(0, 4).join(', ')}{group.pids.size > 4 ? '…' : ''}</span>
-                        )}
-                      </div>
-                      {group.connections.map((conn, idx) => renderConnectionCard(conn, idx, true))}
+                    <div className="p-2 space-y-2 border-t border-gray-800/60">
+                      {group.connections.map((conn, idx) => renderConnectionCard(conn, idx))}
                     </div>
                   )}
                 </div>
               );
             })
           ) : (
-            filteredConnections.map((conn, idx) => renderConnectionCard(conn, idx, false))
+            filteredConnections.map((conn, idx) => renderConnectionCard(conn, idx))
           )
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center p-4 bg-gray-950/60 rounded-xl border border-gray-800">

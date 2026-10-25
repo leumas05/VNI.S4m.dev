@@ -13,67 +13,29 @@ let lastDnsCacheRead = 0;
 // In-memory session tracker for connection duration & "NEW" badge
 const activeSessionMap = new Map();
 
-// In-memory cache for PID -> process info mapping (refresh every 8 seconds)
-// Maps PID -> { name: 'chrome.exe', title: 'YouTube - Google Chrome', company: 'Google LLC', description: 'Google Chrome', memoryKb: 145200 }
+// In-memory cache for PID -> process info mapping (refresh every 10 seconds)
 let processMapCache = new Map();
 let lastProcessMapTime = 0;
-
-function parseMemoryKb(memStr) {
-    if (!memStr) return 0;
-    const digits = String(memStr).replace(/[^\d]/g, '');
-    return parseInt(digits, 10) || 0;
-}
 
 function getProcessMap() {
     return new Promise((resolve) => {
         const now = Date.now();
-        if (processMapCache.size > 0 && (now - lastProcessMapTime) < 8000) {
+        if (processMapCache.size > 0 && (now - lastProcessMapTime) < 10000) {
             return resolve(processMapCache);
         }
 
         const isWin = os.platform() === 'win32';
         if (isWin) {
-            execFile('tasklist', ['/v', '/fo', 'csv', '/nh'], { windowsHide: true, timeout: 3500, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
+            execFile('tasklist', ['/fo', 'csv', '/nh'], { windowsHide: true, timeout: 3000 }, (err, stdout) => {
                 if (err || !stdout) return resolve(processMapCache);
                 const map = new Map();
                 stdout.split(/\r?\n/).forEach(line => {
                     if (!line.trim()) return;
-                    // CSV columns: "Image Name","PID","Session Name","Session#","Mem Usage","Status","User Name","CPU Time","Window Title"
-                    const cols = [];
-                    let current = '';
-                    let inQuotes = false;
-                    for (let i = 0; i < line.length; i++) {
-                        const ch = line[i];
-                        if (ch === '"') {
-                            inQuotes = !inQuotes;
-                        } else if (ch === ',' && !inQuotes) {
-                            cols.push(current);
-                            current = '';
-                        } else {
-                            current += ch;
-                        }
-                    }
-                    cols.push(current);
-
-                    if (cols.length >= 2) {
-                        const name = cols[0].trim();
-                        const pid = parseInt(cols[1].trim(), 10);
-                        const memKb = cols[4] ? parseMemoryKb(cols[4]) : 0;
-                        const cpuTime = cols[7] ? cols[7].trim() : null;
-                        const rawTitle = cols[8] ? cols[8].trim() : '';
-                        const windowTitle = (rawTitle && rawTitle !== 'N/A' && rawTitle !== 'OleMainThreadWndName' && rawTitle !== 'Default IME')
-                            ? rawTitle
-                            : null;
-
-                        if (!isNaN(pid)) {
-                            map.set(pid, {
-                                name,
-                                pid,
-                                memoryKb: memKb,
-                                cpuTime,
-                                windowTitle
-                            });
-                        }
+                    const match = line.match(/^"([^"]+)","(\d+)"/);
+                    if (match) {
+                        const name = match[1];
+                        const pid = parseInt(match[2], 10);
+                        if (!isNaN(pid)) map.set(pid, name);
                     }
                 });
                 processMapCache = map;
@@ -81,18 +43,15 @@ function getProcessMap() {
                 resolve(map);
             });
         } else {
-            execFile('ps', ['-A', '-o', 'pid,rss,comm'], { timeout: 3000 }, (err, stdout) => {
+            execFile('ps', ['-A', '-o', 'pid,comm'], { timeout: 3000 }, (err, stdout) => {
                 if (err || !stdout) return resolve(processMapCache);
                 const map = new Map();
                 stdout.split(/\r?\n/).forEach(line => {
                     const parts = line.trim().split(/\s+/);
-                    if (parts.length >= 3) {
+                    if (parts.length >= 2) {
                         const pid = parseInt(parts[0], 10);
-                        const memKb = parseInt(parts[1], 10) || 0;
-                        const name = parts.slice(2).join(' ');
-                        if (!isNaN(pid)) {
-                            map.set(pid, { name, pid, memoryKb: memKb, windowTitle: null });
-                        }
+                        const name = parts.slice(1).join(' ');
+                        if (!isNaN(pid)) map.set(pid, name);
                     }
                 });
                 processMapCache = map;
@@ -361,27 +320,15 @@ function getServiceLabel(proto, port) {
     return `${proto} :${p}`;
 }
 
-function getAppCategory(processName, remotePorts = [], domains = [], windowTitle = '') {
+function getAppCategory(processName) {
     const p = (processName || '').toLowerCase();
-    const title = (windowTitle || '').toLowerCase();
-    const allDomains = (domains || []).join(' ').toLowerCase();
-
-    if (/(?:chrome|msedge|firefox|brave|opera|vivaldi|safari|arc|waterfox|tor)/i.test(p)) return 'Web Browser';
-    if (/(?:discord|slack|teams|zoom|telegram|whatsapp|signal|skype|element|mumble|ts3client)/i.test(p)) return 'Communication & Voice';
-    if (/(?:spotify|tidal|itunes|musicbee|foobar|vlc|mpv|obs|plex|jellyfin)/i.test(p)) return 'Media & Streaming';
-    if (/(?:steam|epicgames|battle\.net|riot|valorant|cs2|dota|minecraft|javaw|roblox|ea|ubisoft|gog|helldivers|eldenring)/i.test(p)) return 'Gaming';
-    if (/(?:code|cursor|windsurf|node|git|python|docker|java|devenv|webstorm|idea|pycharm|go|cargo|rust|postman|insomnia|wsl)/i.test(p)) return 'Development & CLI';
-    if (/(?:onedrive|dropbox|googledrive|icloud|synology|nextcloud|megasync|rclone)/i.test(p)) return 'Cloud & Sync';
-    if (/(?:svchost|system|lsass|services|wininit|searchapp|widgets|spoolsv|MsMpEng|smartscreen|wuauclt|tiworker)/i.test(p)) return 'System & OS';
-
-    // Dynamic Behavioral Inference when executable name isn't in known list:
-    if (remotePorts.some(port => port >= 27000 && port <= 27100)) return 'Gaming';
-    if (remotePorts.some(port => port === 22 || port === 3306 || port === 5432 || port === 6379)) return 'Development & CLI';
-    if (/(?:github|gitlab|npmjs|pypi|docker|amazonaws|azure|googleapis)/i.test(allDomains)) return 'Development & CLI';
-    if (/(?:steam|riot|epicgames|playstation|xbox|nintendo|twitch)/i.test(allDomains)) return 'Gaming';
-    if (/(?:spotify|netflix|googlevideo|youtube|ttvnw|scdn)/i.test(allDomains)) return 'Media & Streaming';
-    if (title) return 'Desktop App';
-    return 'Background Service';
+    if (/(?:chrome|msedge|firefox|brave|opera|vivaldi|safari)/i.test(p)) return 'Browser';
+    if (/(?:discord|slack|teams|zoom|telegram|whatsapp|signal|skype)/i.test(p)) return 'Communication';
+    if (/(?:spotify|steam|epicgames|battle\.net|riot|vlc|obs)/i.test(p)) return 'Media & Gaming';
+    if (/(?:code|cursor|node|git|python|docker|java|devenv|webstorm|idea)/i.test(p)) return 'Development';
+    if (/(?:onedrive|dropbox|googledrive|icloud|synology|nextcloud)/i.test(p)) return 'Cloud Sync';
+    if (/(?:svchost|system|lsass|services|wininit|searchapp|widgets)/i.test(p)) return 'System / OS';
+    return 'Application';
 }
 
 function evaluateConnectionSecurity({ proto, remotePort, domain, isp, processName }) {
@@ -398,10 +345,7 @@ function evaluateConnectionSecurity({ proto, remotePort, domain, isp, processNam
     if (isTelemetry) {
         return {
             status: 'telemetry',
-            level: 'telemetry',
-            isTelemetry: true,
             encrypted: p === 443 || p === 8443,
-            badge: 'Telemetry',
             label: 'Telemetry / Analytics',
             reason: `Background telemetry or diagnostics endpoint (${domain || org || 'Tracker'})`
         };
@@ -411,10 +355,7 @@ function evaluateConnectionSecurity({ proto, remotePort, domain, isp, processNam
     if (p === 80 || p === 21 || p === 23) {
         return {
             status: 'warning',
-            level: 'warning',
-            isTelemetry: false,
             encrypted: false,
-            badge: 'Cleartext',
             label: 'Unencrypted (Cleartext)',
             reason: `Traffic on port ${p} is not encrypted with TLS`
         };
@@ -422,14 +363,10 @@ function evaluateConnectionSecurity({ proto, remotePort, domain, isp, processNam
 
     // 3. Standard Encrypted HTTPS / QUIC / Mail / DoT / SSH
     if ([443, 8443, 853, 993, 465, 587, 22, 5228].includes(p)) {
-        const badgeLabel = proto === 'UDP' && p === 443 ? 'QUIC Encrypted' : 'TLS Encrypted';
         return {
             status: 'secure',
-            level: 'secure',
-            isTelemetry: false,
             encrypted: true,
-            badge: badgeLabel,
-            label: badgeLabel,
+            label: proto === 'UDP' && p === 443 ? 'QUIC Encrypted' : 'TLS Encrypted',
             reason: `Encrypted transport over ${getServiceLabel(proto, p)}`
         };
     }
@@ -437,10 +374,7 @@ function evaluateConnectionSecurity({ proto, remotePort, domain, isp, processNam
     // 4. Non-standard / High Ephemeral Ports
     return {
         status: 'advisory',
-        level: 'advisory',
-        isTelemetry: false,
         encrypted: false,
-        badge: `Port :${p}`,
         label: `Custom Port :${p}`,
         reason: `Direct socket on non-standard port ${proto} :${p}`
     };
@@ -478,10 +412,7 @@ async function getLiveConnections() {
         const isEstablished = c.state === 'ESTABLISHED' || c.state === 'ACTIVE (UDP)';
         if (!isEstablished) return;
 
-        const procMeta = c.pid ? procMap.get(c.pid) : null;
-        const processName = c.processName || (typeof procMeta === 'object' ? procMeta?.name : procMeta) || 'Unknown';
-        const windowTitle = typeof procMeta === 'object' ? procMeta?.windowTitle : null;
-        const memoryKb = typeof procMeta === 'object' ? procMeta?.memoryKb : 0;
+        const processName = c.processName || (c.pid ? procMap.get(c.pid) : null) || 'Unknown';
 
         if (isPrivateIp(ip)) {
             lanConnections.push({
@@ -511,8 +442,7 @@ async function getLiveConnections() {
         validInternetConns.push({
             ...c,
             process: processName,
-            windowTitle,
-            memoryKb,
+            appCategory: getAppCategory(processName),
             serviceLabel: getServiceLabel(c.proto, c.remotePort),
             isSelf,
             firstSeen,
@@ -556,18 +486,10 @@ async function getLiveConnections() {
         if (security.status === 'telemetry') telemetryCount++;
         if (security.status === 'warning') warningCount++;
 
-        const appCategory = getAppCategory(
-            c.process,
-            [c.remotePort],
-            domain ? [domain] : [],
-            c.windowTitle
-        );
-
         return {
             ...c,
-            appCategory,
             domain,
-            domainSource: domainSource === 'dns-cache' ? 'DNS Cache' : (domainSource === 'ptr' ? 'PTR' : null),
+            domainSource,
             geo,
             security
         };
