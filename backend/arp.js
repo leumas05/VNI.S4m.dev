@@ -32,7 +32,7 @@ const OUI_DATABASE = {
   '5c879c': 'Apple', '600308': 'Apple', '68a86d': 'Apple', '6c4008': 'Apple',
   '701124': 'Apple', '748114': 'Apple', '784f43': 'Apple', '7cd1c3': 'Apple', '804971': 'Apple',
   '843835': 'Apple', '88665a': 'Apple', '8c8590': 'Apple', '907240': 'Apple', '949426': 'Apple',
-  '9801a7': 'Apple', 'a45e60': 'Apple', '4ccd86': 'Apple (iPhone / iPad)', '4ccdb6': 'Apple (iPhone / iPad)',
+  '9801a7': 'Apple', 'a45e60': 'Apple', '4ccd86': 'Apple', '4ccdb6': 'Apple',
   'acbc32': 'Apple', 'b065bd': 'Apple', 'b418d1': 'Apple', 'b8e856': 'Apple', 'bc52b7': 'Apple',
   'c09a42': 'Apple', 'c4b301': 'Apple', 'c869cd': 'Apple', 'cc29f5': 'Apple', 'd023db': 'Apple',
   'd4619d': 'Apple', 'd8004d': 'Apple', 'dc2b61': 'Apple', 'e0b55f': 'Apple', 'e4e4ab': 'Apple',
@@ -44,36 +44,34 @@ const OUI_DATABASE = {
   '94ebcd': 'Google', 'a47733': 'Google', 'b827eb': 'Google', 'd86c63': 'Google', 'e03f49': 'Google',
   'f40343': 'Google', 'f88f12': 'Google',
 
-  // Smart TVs & Display Modules (Vestel, Earda Technologies, TCL, etc.)
-  'a808cf': 'Vestel (Smart TV)', '001a2b': 'Vestel (Smart TV)', '2827bf': 'Vestel (Smart TV)', 'bc1485': 'Vestel (Smart TV)',
-  '64bb1e': 'Earda Technologies (Smart TV)', '9cb1dc': 'Earda Technologies (Smart TV)',
+  // Smart TVs & Wireless Display Modules (Vestel, Earda Technologies, TCL, etc.)
+  'a808cf': 'Vestel', '001a2b': 'Vestel', '2827bf': 'Vestel', 'bc1485': 'Vestel',
+  '64bb1e': 'Earda Technologies', '9cb1dc': 'Earda Technologies',
 
   // Samsung
   '0007ab': 'Samsung', '001247': 'Samsung', '001599': 'Samsung', '0016db': 'Samsung', '001a80': 'Samsung',
   '002119': 'Samsung', '0023d7': 'Samsung', '0808c2': 'Samsung', '1449e0': 'Samsung', '14f42a': 'Samsung',
   '18227e': 'Samsung', '1867b0': 'Samsung', '244bfe': 'Samsung', '2c088c': 'Samsung', '30074d': 'Samsung',
   '3423ba': 'Samsung', '380195': 'Samsung', '4844f7': 'Samsung', '4c3cb7': 'Samsung', '50c8e5': 'Samsung',
-  '50fdd5': 'Samsung (Smart Oven / Appliance)', '5492be': 'Samsung', '58c38b': 'Samsung', '5c0a5b': 'Samsung',
+  '50fdd5': 'Samsung', '5492be': 'Samsung', '58c38b': 'Samsung', '5c0a5b': 'Samsung',
   '68ebae': 'Samsung', '78471d': 'Samsung', '8425db': 'Samsung', '887598': 'Samsung', '8c7712': 'Samsung',
-  '9463d1': 'Samsung', 'a0821f': 'Samsung', 'a87b39': 'Samsung', 'a8ba69': 'Samsung (Galaxy Phone)',
+  '9463d1': 'Samsung', 'a0821f': 'Samsung', 'a87b39': 'Samsung', 'a8ba69': 'Samsung',
   'b07994': 'Samsung', 'b479a7': 'Samsung', 'bc20a4': 'Samsung', 'c0a810': 'Samsung', 'cc07ab': 'Samsung',
   'd022be': 'Samsung', 'd857ef': 'Samsung', 'e432cb': 'Samsung', 'f409d8': 'Samsung',
 
-  // Zaptec (EV Chargers & Energy Management)
-  '28562f': 'Zaptec (EV Charger)',
-  '841fe8': 'Zaptec (EV Charger)',
-  '30c922': 'Zaptec (Energy Balancer)',
+  // Texas Instruments & Embedded IoT Modules
+  '28562f': 'Texas Instruments (IoT)',
+  '841fe8': 'Espressif (IoT)',
+  '30c922': 'Espressif (IoT)',
+  'ece334': 'Espressif (IoT)',
 
-  // Solar & Energy Storage
-  'ece334': 'Solar Panels / Battery Inverter',
-
-  // TP-Link & Deco Mesh
+  // TP-Link
   '0019e0': 'TP-Link', '002127': 'TP-Link', '14cc20': 'TP-Link', '1c3bf3': 'TP-Link', '30b5c2': 'TP-Link',
   '30de4b': 'TP-Link', '50c7bf': 'TP-Link', '54c80f': 'TP-Link', '6032b1': 'TP-Link', '645601': 'TP-Link',
-  '6c4cbc': 'TP-Link (Deco Router)', '704f57': 'TP-Link', '784476': 'TP-Link', '8416f9': 'TP-Link',
+  '6c4cbc': 'TP-Link', '704f57': 'TP-Link', '784476': 'TP-Link', '8416f9': 'TP-Link',
   '984827': 'TP-Link', 'a42bb0': 'TP-Link', 'ac84c6': 'TP-Link', 'b04e26': 'TP-Link', 'c025e9': 'TP-Link',
   'c0a5dd': 'TP-Link', 'c46e1f': 'TP-Link', 'd807b6': 'TP-Link', 'e4c32a': 'TP-Link',
-  'e848b8': 'TP-Link (Deco Mesh Node)', 'f4ec38': 'TP-Link',
+  'e848b8': 'TP-Link', 'f4ec38': 'TP-Link',
 
   // Intel & Motherboards
   '0002b3': 'Intel', '000347': 'Intel', '000423': 'Intel', '0007e9': 'Intel', '000e0c': 'Intel',
@@ -230,13 +228,24 @@ function guessDeviceType({
   const servs = (mdnsServices || []).map(s => String(s).toLowerCase()).join(' ');
   const openPortNumbers = (openPorts || []).map(p => typeof p === 'object' ? p.port : p);
 
-  if (openPortNumbers.includes(631) || openPortNumbers.includes(9100) || servs.includes('print') || servs.includes('ipp') || v.includes('printer') || h.includes('skrivare') || h.includes('laserjet') || h.includes('printer')) return 'printer';
-  if (v.includes('charger') || v.includes('zaptec') || h.includes('laddare') || h.includes('zaptec')) return 'ev_charger';
-  if (v.includes('solar') || v.includes('battery') || h.includes('solpanel') || h.includes('batteri')) return 'solar';
-  if (v.includes('oven') || v.includes('appliance') || h.includes('oven') || h.includes('ugn')) return 'iot';
-  if (v.includes('mesh') || v.includes('deco') || h.includes('deco')) return 'mesh_node';
+  if (openPortNumbers.includes(631) || openPortNumbers.includes(9100) || servs.includes('print') || servs.includes('ipp') || v.includes('printer') || h.includes('printer') || h.includes('laserjet')) return 'printer';
+  if (h.includes('charger') || h.includes('evse') || h.includes('wallbox') || h.includes('easee') || h.includes('zaptec')) return 'ev_charger';
+  if (h.includes('solar') || h.includes('inverter') || h.includes('fronius') || h.includes('sungrow')) return 'solar';
 
-  // PC / Laptop / Windows identification (NetBIOS workstation, SMB/RPC ports, Windows OS, or PC vendors)
+  // Universal Mesh Node / Wi-Fi Access Point identification:
+  // Any non-gateway device from a networking hardware vendor (TP-Link, Netgear, ASUS, Ubiquiti, Cisco, Linksys, Eero, D-Link, Zyxel, MikroTik)
+  // that exposes router/AP management or DNS ports (53, 80, 443, 8080, 8443, 22) or advertises mesh/AP keywords
+  const isNetworkVendor = /(?:tp-link|netgear|asus|cisco|ubiquiti|linksys|eero|d-link|zyxel|mikrotik|mercusys|aruba)/i.test(v);
+  const hasRouterPorts = openPortNumbers.some(p => [53, 80, 443, 8080, 8443].includes(p));
+  if (
+    v.includes('mesh') ||
+    /(?:mesh|deco|orbi|unifi|velop|aimesh|access-point|-ap\b|extender|repeater)/i.test(h) ||
+    (isNetworkVendor && hasRouterPorts)
+  ) {
+    return 'mesh_node';
+  }
+
+  // PC / Laptop / Workstation identification (NetBIOS workstation, SMB/RPC/RDP ports, Windows OS, or PC NIC vendors)
   if (
     (netbios && netbios.name) ||
     openPortNumbers.includes(135) ||
@@ -249,32 +258,25 @@ function guessDeviceType({
     v.includes('msi') ||
     v.includes('dell') ||
     v.includes('lenovo') ||
-    h.includes('laptop') ||
-    h.includes('surface') ||
-    h.includes('desktop') ||
-    h.includes('dator') ||
-    h.includes('skola') ||
-    h.includes('-pc')
+    /(?:laptop|surface|desktop|macbook|imac|thinkpad|-pc\b|workstation)/i.test(h)
   ) {
     return 'computer';
   }
 
-  // Explicit smartphone / mobile markers
+  // Smartphone / Tablet identification
   if (
     openPortNumbers.includes(62078) ||
-    v.includes('iphone') ||
-    v.includes('galaxy') ||
-    /(?:iphone|ipad|galaxy|s2[0-5]|23\+|pixel|oneplus|redmi|phone|mobil)/i.test(h)
+    /(?:iphone|ipad|galaxy|s2[0-5]|pixel|oneplus|redmi|phone|android)/i.test(h)
   ) {
     return 'mobile';
   }
 
-  if (openPortNumbers.includes(8008) || openPortNumbers.includes(8009) || servs.includes('google cast') || servs.includes('android tv') || v.includes('tv') || v.includes('vestel') || v.includes('earda') || h.includes('tv') || h.includes('chromecast')) return 'tv';
-  if (v.includes('playstation') || v.includes('sony') || v.includes('xbox') || v.includes('nintendo') || h.includes('playstation') || h.includes('xbox')) return 'console';
+  if (openPortNumbers.includes(8008) || openPortNumbers.includes(8009) || servs.includes('google cast') || servs.includes('android tv') || v.includes('tv') || v.includes('vestel') || v.includes('roku') || h.includes('tv') || h.includes('chromecast') || h.includes('bravia')) return 'tv';
+  if (v.includes('playstation') || v.includes('xbox') || v.includes('nintendo') || h.includes('playstation') || h.includes('xbox') || h.includes('switch')) return 'console';
   if (servs.includes('spotify') || servs.includes('airplay audio') || v.includes('sonos') || v.includes('audio')) return 'iot';
-  if (v.includes('espressif') || v.includes('philips') || v.includes('iot') || v.includes('hue') || v.includes('nest') || v.includes('amazon') || h.includes('iot')) return 'iot';
-  if (v.includes('tp-link') || v.includes('netgear') || v.includes('asus') || v.includes('cisco') || v.includes('ubiquiti') || v.includes('linksys')) return 'network';
-  if (v.includes('nas') || v.includes('synology') || v.includes('qnap') || h.includes('nas') || h.includes('server')) return 'server';
+  if (v.includes('espressif') || v.includes('texas instruments') || v.includes('philips') || v.includes('iot') || v.includes('hue') || v.includes('shelly') || v.includes('tuya') || v.includes('amazon') || h.includes('iot')) return 'iot';
+  if (isNetworkVendor) return 'mesh_node';
+  if (v.includes('nas') || v.includes('synology') || v.includes('qnap') || openPortNumbers.includes(5000) || openPortNumbers.includes(5001) || h.includes('nas') || h.includes('server')) return 'server';
   if (v.includes('apple') || v.includes('samsung') || v.includes('xiaomi') || v.includes('private mac') || isRandomized) return 'mobile';
   if (v.includes('microsoft') || v.includes('hp')) return 'computer';
 
@@ -1606,26 +1608,21 @@ function guessOsFingerprint({
     osFamily = 'Android TV';
     confidence = 'High';
     basis.push('Google Cast service (port 8008/8009 / mDNS _googlecast) active');
-  } else if (vendorLower.includes('zaptec')) {
-    osName = 'Zaptec Charger OS (FreeRTOS / ESP-IDF)';
+  } else if (vendorLower.includes('espressif') || vendorLower.includes('texas instruments') || vendorLower.includes('shelly') || vendorLower.includes('tuya')) {
+    osName = 'Embedded IoT RTOS (FreeRTOS / ESP-IDF)';
     osFamily = 'Embedded RTOS';
     confidence = 'High';
-    basis.push('Zaptec EV Charger hardware fingerprint');
-  } else if (vendorLower.includes('samsung') && (vendorLower.includes('oven') || vendorLower.includes('appliance'))) {
-    osName = 'Samsung Smart Appliance (Tizen RT / FreeRTOS)';
-    osFamily = 'Embedded IoT';
-    confidence = 'High';
-    basis.push('Samsung Smart Home IoT appliance');
-  } else if (vendorLower.includes('vestel') || vendorLower.includes('tcl') || vendorLower.includes('earda')) {
-    osName = 'Smart TV OS (Android TV / Linux)';
+    basis.push('Embedded IoT microcontroller hardware fingerprint');
+  } else if (vendorLower.includes('vestel') || vendorLower.includes('tcl') || vendorLower.includes('lg electronics') || vendorLower.includes('roku')) {
+    osName = 'Smart TV OS (Linux / webOS / Android TV)';
     osFamily = 'Smart TV';
-    confidence = 'High';
-    basis.push('Smart TV SoC / DVB Display stack');
-  } else if (vendorLower.includes('deco') || (vendorLower.includes('tp-link') && openPortNumbers.includes(443))) {
-    osName = 'TP-Link Deco / Embedded Linux (OpenWrt)';
+    confidence = 'Medium';
+    basis.push('Smart TV display hardware stack');
+  } else if (/(?:tp-link|netgear|asus|ubiquiti|linksys|mikrotik|zyxel|d-link|cisco)/i.test(vendorLower) && openPortNumbers.some(p => [53, 80, 443, 8080, 8443].includes(p))) {
+    osName = 'Network Appliance Linux (OpenWrt / Embedded RouterOS)';
     osFamily = 'Embedded Linux';
     confidence = 'High';
-    basis.push('TP-Link Router / Mesh network appliance stack');
+    basis.push('Router / Mesh Access Point management stack');
   } else if (isMobileHint) {
     osName = 'Google Android (Mobile OS)';
     osFamily = 'Android';
@@ -2461,15 +2458,7 @@ async function scanLan(options = { sweep: true }) {
       isRandomized
     });
 
-    let displayHostname = friendlyName || entry.ip;
-    if (!friendlyName) {
-      if (vendor.includes('Zaptec')) displayHostname = 'Zaptec Go (EV Charger)';
-      else if (vendor.includes('Solar')) displayHostname = 'Solar Panels / Inverter';
-      else if (vendor.includes('Deco Mesh Node')) displayHostname = 'TP-Link Deco Mesh Node';
-      else if (vendor.includes('Samsung (Smart Oven')) displayHostname = 'Samsung Smart Oven';
-      else if (vendor.includes('Printer')) displayHostname = 'Network Printer';
-      else if (vendor.includes('Surface')) displayHostname = 'Microsoft Surface PC';
-    }
+    const displayHostname = friendlyName || entry.ip;
 
     clientDevices.push({
       id: `dev-${entry.ip.replace(/\./g, '-')}`,
@@ -2542,7 +2531,7 @@ async function scanLan(options = { sweep: true }) {
         if (nbRes && nbRes.name) {
           dev.netbiosName = nbRes.name;
           dev.workgroup = nbRes.workgroup;
-          if (!dev.friendlyName || dev.hostname === dev.ip || dev.hostname === 'Microsoft Surface PC') {
+          if (!dev.friendlyName || dev.hostname === dev.ip) {
             dev.hostname = nbRes.name;
           }
         }
