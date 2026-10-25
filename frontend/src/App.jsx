@@ -117,6 +117,7 @@ function App() {
   const [radarLoading, setRadarLoading] = useState(false);
   const [radarAutoRefresh, setRadarAutoRefresh] = useState(true);
   const [selectedRadarConn, setSelectedRadarConn] = useState(null);
+  const [focusedRadarProcess, setFocusedRadarProcess] = useState(null);
   const [hideSelfConnections, setHideSelfConnections] = useState(() => localStorage.getItem('vni_radar_hide_self') !== 'false');
 
   // LAN Scanner State (ARP)
@@ -511,6 +512,8 @@ function App() {
                  setRadarAutoRefresh={setRadarAutoRefresh}
                  selectedRadarConn={selectedRadarConn}
                  setSelectedRadarConn={setSelectedRadarConn}
+                 focusedRadarProcess={focusedRadarProcess}
+                 setFocusedRadarProcess={setFocusedRadarProcess}
                  hideSelfConnections={hideSelfConnections}
                  onToggleHideSelf={toggleHideSelfConnections}
                  lanData={lanData}
@@ -555,6 +558,8 @@ function App() {
                     radarData={displayRadarData}
                     selectedRadarConn={selectedRadarConn}
                     setSelectedRadarConn={setSelectedRadarConn}
+                    focusedRadarProcess={focusedRadarProcess}
+                    setFocusedRadarProcess={setFocusedRadarProcess}
                   />
                 </React.Suspense>
               ) : (
@@ -568,6 +573,8 @@ function App() {
                   radarData={displayRadarData}
                   selectedRadarConn={selectedRadarConn}
                   setSelectedRadarConn={setSelectedRadarConn}
+                  focusedRadarProcess={focusedRadarProcess}
+                  setFocusedRadarProcess={setFocusedRadarProcess}
                 />
               )}
             </ErrorBoundary>

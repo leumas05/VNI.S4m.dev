@@ -115,7 +115,9 @@ export default function GlobeView({
   activeMode = 'traceroute',
   radarData,
   selectedRadarConn,
-  setSelectedRadarConn
+  setSelectedRadarConn,
+  focusedRadarProcess,
+  setFocusedRadarProcess
 }) {
   const globeRef = useRef();
   const containerRef = useRef();
@@ -144,6 +146,7 @@ export default function GlobeView({
     if (activeMode !== 'radar') return [];
     const valid = (radarData?.connections || []).filter(c => {
       if (!c || !c.geo) return false;
+      if (focusedRadarProcess && c.process !== focusedRadarProcess) return false;
       const lat = Number(c.geo.lat);
       const lon = Number(c.geo.lon);
       return !isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0;
@@ -177,7 +180,7 @@ export default function GlobeView({
       }
       return copy;
     });
-  }, [activeMode, radarData]);
+  }, [activeMode, radarData, focusedRadarProcess]);
 
   // Filter valid hops and de-cluster co-located hops (so Stockholm hops don't overlap into a blob!)
   const processedHops = useMemo(() => {
@@ -741,12 +744,31 @@ export default function GlobeView({
             </div>
             <span className="text-gray-500 font-bold">➔</span>
             <span className="text-emerald-300 px-1.5 py-0.5 bg-emerald-950/80 border border-emerald-500/30 rounded text-[11px] font-bold">
-              {radarData?.internetCount || 0} active connections
+              {radarConnections.length} active connections
             </span>
             <span className="text-gray-400 text-[11px] hidden sm:inline">
               ({Object.keys(radarData?.countryCounts || {}).length} countries)
             </span>
           </div>
+
+          {focusedRadarProcess && (
+            <div className="flex items-center justify-between gap-2 bg-gray-950/90 border border-purple-500/60 rounded-lg px-3 py-1.5 backdrop-blur-md shadow-xl text-xs font-mono pointer-events-auto">
+              <div className="flex items-center gap-2 truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
+                <span className="font-bold text-purple-300">App Spotlight:</span>
+                <span className="text-white font-bold">{focusedRadarProcess}</span>
+                <span className="text-gray-400">({radarConnections.length} sockets)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFocusedRadarProcess && setFocusedRadarProcess(null)}
+                className="text-gray-400 hover:text-white p-0.5 ml-2 cursor-pointer"
+                title="Show all apps on globe"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {selectedRadarConn && (
             <div className="flex items-center justify-between gap-2 bg-gray-950/90 border border-amber-500/60 rounded-lg px-3 py-1.5 backdrop-blur-md shadow-xl text-xs font-mono pointer-events-auto">

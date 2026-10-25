@@ -29,6 +29,8 @@ export default function Sidebar({
   setRadarAutoRefresh,
   selectedRadarConn,
   setSelectedRadarConn,
+  focusedRadarProcess,
+  setFocusedRadarProcess,
   hideSelfConnections,
   onToggleHideSelf,
   lanData,
@@ -238,6 +240,8 @@ export default function Sidebar({
           setAutoRefresh={setRadarAutoRefresh}
           selectedConn={selectedRadarConn}
           onSelectConn={setSelectedRadarConn}
+          focusedProcess={focusedRadarProcess}
+          onSelectProcess={setFocusedRadarProcess}
           onPing={onPing}
           onDig={onDig}
           onTrace={(targetHost) => {
