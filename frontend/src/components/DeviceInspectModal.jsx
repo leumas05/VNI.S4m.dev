@@ -22,16 +22,74 @@ import {
   Info,
   ExternalLink,
   Sliders,
-  HardDrive
+  HardDrive,
+  Power,
+  Lock,
+  AlertTriangle,
+  Search
 } from 'lucide-react';
 import { formatConfidence, formatOsName, formatBasis } from '../utils/formatters';
 
 export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = '' }) {
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'os' | 'ports' | 'hardware' | 'raw'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'os' | 'ports' | 'security' | 'hardware' | 'raw'
   const [loading, setLoading] = useState(false);
   const [inspectData, setInspectData] = useState(null);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
+
+  // Wake-on-LAN state
+  const [wolState, setWolState] = useState(null); // null | 'sending' | 'sent' | 'error'
+
+  // Custom / Deep Port Scanner state
+  const [deepPortLoading, setDeepPortLoading] = useState(false);
+  const [deepPortScanResult, setDeepPortScanResult] = useState(null);
+  const [portRangeStart, setPortRangeStart] = useState(1);
+  const [portRangeEnd, setPortRangeEnd] = useState(1024);
+
+  const handleWakeOnLan = async () => {
+    if (!device?.mac || device.mac === 'Unknown' || device.mac === 'Internal') return;
+    setWolState('sending');
+    try {
+      const res = await fetch(`${apiBase}/api/wol`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mac: device.mac, ip: device.ip })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setWolState('sent');
+        setTimeout(() => setWolState(null), 3000);
+      } else {
+        setWolState('error');
+        setTimeout(() => setWolState(null), 3000);
+      }
+    } catch (e) {
+      setWolState('error');
+      setTimeout(() => setWolState(null), 3000);
+    }
+  };
+
+  const handleDeepPortScan = async (preset = 'top100') => {
+    if (!device?.ip) return;
+    setDeepPortLoading(true);
+    try {
+      const q = new URLSearchParams({
+        ip: device.ip,
+        preset,
+        startPort: String(portRangeStart || 1),
+        endPort: String(portRangeEnd || 1024)
+      });
+      const res = await fetch(`${apiBase}/api/port-scan?${q.toString()}`);
+      const data = await res.json();
+      if (data.ok) {
+        setDeepPortScanResult(data);
+      }
+    } catch (e) {
+      // Non-fatal
+    } finally {
+      setDeepPortLoading(false);
+    }
+  };
 
   const getCustomNickname = () => {
     if (!device) return '';
@@ -72,9 +130,12 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
   useEffect(() => {
     if (isOpen && device?.ip) {
       setActiveTab('overview');
+      setDeepPortScanResult(null);
+      setWolState(null);
       fetchInspection();
     } else {
       setInspectData(null);
+      setDeepPortScanResult(null);
       setError(null);
     }
   }, [isOpen, device?.ip]);
@@ -86,18 +147,41 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
   const os = data.osFingerprint || device.osFingerprint || {};
   const ping = data.ping || { alive: device.isAlive, latency: device.latency, ttl: device.ttl };
   const ports = data.ports || { all: [], open: [], openCount: 0 };
+  const devSpec = data.deviceSpecific || {};
+  const securityAudit = data.securityAudit || device.securityAudit || { score: 95, grade: 'A', status: 'Secure', findings: [] };
+  const tlsCert = data.tlsCertificate || devSpec?.tls || null;
   const names = data.names || {
     mdns: device.mdns?.name,
     netbios: device.netbiosName,
     workgroup: device.workgroup,
+    llmnr: device.llmnr?.hostname,
+    dhcp: device.dhcp?.hostname,
+    wsd: device.wsd?.name,
     hostname: device.hostname
   };
   const resolvedVendor = (data.vendor && data.vendor !== 'Generic Device') ? data.vendor : (device.vendor || 'Generic Device');
   const uptime = data.uptime || null;
   const banners = data.banners || {};
-  const devSpec = data.deviceSpecific || {};
   const capabilities = data.networkCapabilities || (device.networkCapabilities ? device.networkCapabilities.map(c => ({ id: c.toLowerCase(), label: c })) : []);
   const portalUrl = data.webPortal || device.webPortal || (device.isGateway ? `http://${device.ip}` : null);
+
+  // Merge standard 20 diagnostic ports with any deep port scan results
+  const mergedPortsList = (() => {
+    const map = new Map();
+    for (const p of (ports.all || [])) {
+      map.set(p.port, p);
+    }
+    if (deepPortScanResult?.allPorts) {
+      for (const p of deepPortScanResult.allPorts) {
+        const prev = map.get(p.port);
+        if (!prev || p.open) {
+          map.set(p.port, { ...prev, ...p });
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => (b.open === a.open ? a.port - b.port : (b.open ? 1 : -1)));
+  })();
+  const totalOpenCount = mergedPortsList.filter(p => p.open).length;
 
   const handleCopyJson = () => {
     navigator.clipboard.writeText(JSON.stringify(inspectData || device, null, 2));
@@ -139,6 +223,20 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                     Active ({ping.latency != null ? (ping.latency === 1 ? '<1 ms' : `${ping.latency} ms`) : 'Online'})
                   </span>
                 )}
+                {securityAudit?.grade && (
+                  <span
+                    className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded-full border ${
+                      securityAudit.score >= 85
+                        ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                        : securityAudit.score >= 70
+                        ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                        : 'bg-rose-500/10 text-rose-300 border-rose-500/30'
+                    }`}
+                    title={`Security Score: ${securityAudit.score}/100 (${securityAudit.status})`}
+                  >
+                    Security: {securityAudit.grade} ({securityAudit.score})
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400 truncate mt-0.5">
                 {resolvedVendor} • MAC: <span className="font-mono text-slate-300">{device.mac}</span>
@@ -146,7 +244,24 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            {device.mac && device.mac !== 'Unknown' && device.mac !== 'Internal' && !device.isThisDevice && (
+              <button
+                onClick={handleWakeOnLan}
+                disabled={wolState === 'sending'}
+                title={`Send Wake-on-LAN Magic Packet (UDP 9) to ${device.mac}`}
+                className={`px-2.5 py-1.5 rounded-lg border transition flex items-center gap-1.5 text-xs font-semibold cursor-pointer shadow-sm ${
+                  wolState === 'sent'
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-300'
+                    : wolState === 'error'
+                    ? 'bg-rose-500/20 border-rose-400 text-rose-300'
+                    : 'bg-amber-950/70 hover:bg-amber-900 border-amber-500/40 hover:border-amber-400 text-amber-300 hover:text-amber-100'
+                }`}
+              >
+                <Power className="w-3.5 h-3.5 text-amber-400" />
+                <span>{wolState === 'sending' ? 'Sending...' : wolState === 'sent' ? 'WoL Sent!' : wolState === 'error' ? 'WoL Failed' : 'Wake (WoL)'}</span>
+              </button>
+            )}
             {portalUrl && (
               <a
                 href={portalUrl}
@@ -218,7 +333,18 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            Open Ports ({ports.openCount || ports.open?.length || 0})
+            Open Ports ({totalOpenCount})
+          </button>
+          <button
+            onClick={() => setActiveTab('security')}
+            className={`py-3 px-3.5 border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'security'
+                ? 'border-cyan-400 text-cyan-300 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Lock className="w-3.5 h-3.5" />
+            Security & TLS ({securityAudit.grade || 'A'})
           </button>
           <button
             onClick={() => setActiveTab('hardware')}
@@ -257,7 +383,7 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                 Running deep inspection on {device.ip}...
               </p>
               <p className="text-xs text-slate-400">
-                Querying SNMP, NetBIOS, mDNS, ICMP TTL, banner grabbing, and scanning open ports
+                Querying SNMP, NetBIOS, WSD, LLMNR, mDNS, TLS X.509 certificates, and scanning open ports
               </p>
             </div>
           )}
@@ -333,10 +459,10 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                     <Layers className="w-4 h-4 text-purple-400" />
                   </div>
                   <div className="text-base font-bold text-purple-300">
-                    {ports.openCount || ports.open?.length || 0} active
+                    {totalOpenCount} active
                   </div>
                   <div className="text-[11px] text-slate-400 mt-1 truncate">
-                    {ports.open?.slice(0, 3).map(p => p.port).join(', ') || 'No open ports'}
+                    {mergedPortsList.filter(p => p.open).slice(0, 4).map(p => p.port).join(', ') || 'No open ports'}
                   </div>
                 </div>
               </div>
@@ -383,12 +509,12 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                 </div>
               )}
 
-              {/* Network Capabilities (DNS-SD / Zeroconf) */}
+              {/* Network Capabilities (DNS-SD / Zeroconf / WSD / TLS) */}
               <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
                 <div className="flex items-center gap-2 mb-3">
                   <Radio className="w-4 h-4 text-cyan-400" />
                   <h3 className="text-xs uppercase font-bold text-slate-300 tracking-wider">
-                    Discovered Network Features & Protocols (mDNS / Zeroconf)
+                    Discovered Network Features & Protocols (mDNS / WSD / UPnP / TLS)
                   </h3>
                 </div>
                 {capabilities.length > 0 ? (
@@ -405,14 +531,14 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                   </div>
                 ) : (
                   <p className="text-xs text-slate-400 italic">
-                    No mDNS Zeroconf services (AirPlay/Cast/Spotify) actively advertised during scan.
+                    No mDNS / WSD Zeroconf services actively advertised during scan.
                   </p>
                 )}
               </div>
 
               {/* Hostname & Network Identity */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2.5 text-xs">
+                <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2 text-xs">
                   <div className="flex items-center gap-2 mb-2">
                     <Globe className="w-4 h-4 text-cyan-400" />
                     <span className="font-bold text-slate-200 uppercase tracking-wider text-[11px]">
@@ -431,6 +557,14 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                     <span className="text-slate-400">mDNS Bonjour Name:</span>
                     <span className="text-slate-200">{names.mdns || '–'}</span>
                   </div>
+                  <div className="flex justify-between py-1 border-b border-slate-800/60">
+                    <span className="text-slate-400">WS-Discovery / LLMNR:</span>
+                    <span className="font-mono text-slate-200">{names.wsd || names.llmnr || names.dhcp || '–'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-slate-800/60">
+                    <span className="text-slate-400">TLS Certificate CN:</span>
+                    <span className="font-mono text-emerald-300 truncate max-w-[200px]">{names.tlsCn || tlsCert?.subjectCN || '–'}</span>
+                  </div>
                   <div className="flex justify-between py-1">
                     <span className="text-slate-400">Web Page Title:</span>
                     <span className="text-slate-200 truncate max-w-[200px]" title={names.webTitle}>
@@ -439,11 +573,11 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2.5 text-xs">
+                <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2 text-xs">
                   <div className="flex items-center gap-2 mb-2">
                     <HardDrive className="w-4 h-4 text-cyan-400" />
                     <span className="font-bold text-slate-200 uppercase tracking-wider text-[11px]">
-                      Hardware Identity
+                      Hardware & Security Identity
                     </span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/60">
@@ -455,13 +589,19 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                     <span className="text-slate-200 font-semibold">{resolvedVendor}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-800/60">
-                    <span className="text-slate-400">Serial Number (SNMP):</span>
-                    <span className="font-mono text-cyan-300">{devSpec.snmp?.serialNumber || banners.serialNumber || '–'}</span>
+                    <span className="text-slate-400">Serial Number (SNMP/TLS):</span>
+                    <span className="font-mono text-cyan-300">{devSpec.snmp?.serialNumber || banners.serialNumber || tlsCert?.serialNumber || '–'}</span>
                   </div>
-                  <div className="flex justify-between py-1">
+                  <div className="flex justify-between py-1 border-b border-slate-800/60">
                     <span className="text-slate-400">Web Server (Banner):</span>
                     <span className="font-mono text-slate-300 truncate max-w-[200px]" title={banners.httpServer}>
                       {banners.httpServer || '–'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1">
+                    <span className="text-slate-400">Active Local Sockets:</span>
+                    <span className="font-mono text-emerald-400 font-bold">
+                      {device.activeConnectionsCount ? `${device.activeConnectionsCount} active (netstat)` : '0 active'}
                     </span>
                   </div>
                 </div>
@@ -532,10 +672,70 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
 
           {!loading && activeTab === 'ports' && (
             <div className="space-y-4">
+              {/* Interactive Deep Port Scanner Toolbar */}
+              <div className="p-4 rounded-xl bg-slate-900/80 border border-cyan-500/30 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
+                      <Search className="w-3.5 h-3.5 text-cyan-400" />
+                      Deep TCP Port Scanner & Banner Grabber
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Scan Top 100 common enterprise/IoT ports or specify a custom port range (max 500 ports per batch).
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={deepPortLoading}
+                    onClick={() => handleDeepPortScan('top100')}
+                    className="px-3 py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 border border-cyan-400/50 text-cyan-200 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>{deepPortLoading ? 'Scanning Ports...' : 'Scan Top 100 Ports'}</span>
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80 text-xs">
+                  <span className="text-slate-400 font-medium">Custom Range:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={portRangeStart}
+                    onChange={(e) => setPortRangeStart(e.target.value)}
+                    className="w-20 px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-100 font-mono text-xs"
+                    placeholder="Start"
+                  />
+                  <span className="text-slate-500">to</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={portRangeEnd}
+                    onChange={(e) => setPortRangeEnd(e.target.value)}
+                    className="w-20 px-2 py-1 rounded bg-slate-950 border border-slate-700 text-slate-100 font-mono text-xs"
+                    placeholder="End"
+                  />
+                  <button
+                    type="button"
+                    disabled={deepPortLoading}
+                    onClick={() => handleDeepPortScan('range')}
+                    className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 font-semibold transition cursor-pointer disabled:opacity-50"
+                  >
+                    {deepPortLoading ? 'Scanning...' : 'Scan Range'}
+                  </button>
+                  {deepPortScanResult && (
+                    <span className="text-[11px] text-emerald-400 font-mono ml-auto">
+                      ✓ Scanned {deepPortScanResult.scannedCount} ports in {deepPortScanResult.durationMs}ms ({deepPortScanResult.openCount} open)
+                    </span>
+                  )}
+                </div>
+              </div>
+
               <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>Scanned Diagnostic Ports ({ports.all?.length || 0} total)</span>
+                <span>Scanned Ports ({mergedPortsList.length} total)</span>
                 <span className="font-semibold text-cyan-400">
-                  {ports.openCount || ports.open?.length || 0} open ports identified
+                  {totalOpenCount} open ports identified
                 </span>
               </div>
 
@@ -544,19 +744,24 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                   <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 text-[11px] uppercase tracking-wider font-semibold">
                     <tr>
                       <th className="py-2.5 px-4">Port</th>
-                      <th className="py-2.5 px-4">Service</th>
+                      <th className="py-2.5 px-4">Service & Banner</th>
                       <th className="py-2.5 px-4">Category</th>
                       <th className="py-2.5 px-4 text-right">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-mono">
-                    {ports.all?.map((p, i) => (
+                    {mergedPortsList.map((p, i) => (
                       <tr key={i} className={p.open ? 'bg-cyan-500/5' : 'opacity-60'}>
                         <td className="py-2.5 px-4 font-bold text-slate-200">
                           {p.port}
                         </td>
                         <td className="py-2.5 px-4 font-sans text-slate-300 font-medium">
-                          {p.service}
+                          <div>{p.service}</div>
+                          {p.banner && (
+                            <div className="text-[10px] font-mono text-cyan-400 mt-0.5 truncate max-w-xs">
+                              Banner: {p.banner}
+                            </div>
+                          )}
                         </td>
                         <td className="py-2.5 px-4 font-sans text-slate-400">
                           {p.category}
@@ -568,9 +773,9 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                                 Open
                               </span>
-                              {[80, 443, 8080, 8443].includes(p.port) && (
+                              {[80, 81, 443, 3000, 5000, 5001, 8000, 8006, 8008, 8080, 8081, 8096, 8123, 8443, 8888, 9000, 9090, 9443, 10000].includes(p.port) && (
                                 <a
-                                  href={`${p.port === 443 || p.port === 8443 ? 'https' : 'http'}://${device.ip}${p.port !== 80 && p.port !== 443 ? `:${p.port}` : ''}`}
+                                  href={`${[443, 5001, 8006, 8443, 9443].includes(p.port) ? 'https' : 'http'}://${device.ip}${p.port !== 80 && p.port !== 443 ? `:${p.port}` : ''}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/30 hover:border-emerald-400 text-emerald-300 hover:text-emerald-100 transition cursor-pointer"
@@ -591,6 +796,107 @@ export default function DeviceInspectModal({ isOpen, onClose, device, apiBase = 
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {!loading && activeTab === 'security' && (
+            <div className="space-y-5">
+              {/* Security Audit Summary Banner */}
+              <div className="p-5 rounded-xl bg-slate-900/80 border border-cyan-500/30 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <span className="text-xs text-cyan-400 font-mono uppercase tracking-wider">
+                    Automated Device Security Audit
+                  </span>
+                  <h3 className="text-xl font-bold text-slate-100 mt-1 flex items-center gap-2">
+                    <span>Security Posture: {securityAudit.status}</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Evaluated exposed services, unencrypted management protocols, SMB/RDP surface, and TLS encryption.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <div className="text-xs text-slate-400">Security Score</div>
+                    <div className="text-2xl font-bold font-mono text-emerald-400">{securityAudit.score}/100</div>
+                  </div>
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center text-2xl font-extrabold text-emerald-300 font-mono">
+                    {securityAudit.grade}
+                  </div>
+                </div>
+              </div>
+
+              {/* Security Findings List */}
+              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                  Audit Findings & Recommendations
+                </h4>
+                <div className="space-y-2">
+                  {(securityAudit.findings || []).map((f, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-3 rounded-lg border text-xs ${
+                        f.severity === 'high'
+                          ? 'bg-rose-950/30 border-rose-500/40 text-rose-200'
+                          : f.severity === 'medium'
+                          ? 'bg-amber-950/30 border-amber-500/40 text-amber-200'
+                          : 'bg-slate-950/60 border-slate-800 text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-semibold mb-1">
+                        <span>{f.title}</span>
+                        <span className="uppercase text-[10px] font-mono px-2 py-0.5 rounded bg-black/30">
+                          {f.severity}
+                        </span>
+                      </div>
+                      <p className="text-slate-400 text-[11px]">{f.recommendation}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* X.509 SSL/TLS Certificate Card */}
+              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-200 uppercase tracking-wider text-[11px] flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-emerald-400" />
+                    X.509 SSL/TLS Certificate Inspection
+                  </h4>
+                  {tlsCert && (
+                    <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-mono text-[10px]">
+                      Port {tlsCert.port} • {tlsCert.protocol}
+                    </span>
+                  )}
+                </div>
+                {tlsCert ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div className="p-2.5 rounded bg-slate-950/70 border border-slate-800">
+                      <span className="text-slate-500 block text-[10px]">Subject Common Name (CN):</span>
+                      <span className="font-mono font-bold text-cyan-300 break-all">{tlsCert.subjectCN || '–'}</span>
+                    </div>
+                    <div className="p-2.5 rounded bg-slate-950/70 border border-slate-800">
+                      <span className="text-slate-500 block text-[10px]">Issuer / Authority:</span>
+                      <span className="font-mono text-slate-200 break-all">{tlsCert.issuerCN || tlsCert.issuerOrg || '–'}</span>
+                    </div>
+                    <div className="p-2.5 rounded bg-slate-950/70 border border-slate-800">
+                      <span className="text-slate-500 block text-[10px]">Validity Period:</span>
+                      <span className="font-mono text-slate-300">{tlsCert.validFrom || '–'} → {tlsCert.validTo || '–'}</span>
+                    </div>
+                    <div className="p-2.5 rounded bg-slate-950/70 border border-slate-800">
+                      <span className="text-slate-500 block text-[10px]">Subject Alternative Names (SAN):</span>
+                      <span className="font-mono text-slate-300 break-all">{tlsCert.subjectAltName || '–'}</span>
+                    </div>
+                    <div className="p-2.5 rounded bg-slate-950/70 border border-slate-800 sm:col-span-2">
+                      <span className="text-slate-500 block text-[10px]">SHA-256 Fingerprint:</span>
+                      <span className="font-mono text-[11px] text-slate-400 break-all">{tlsCert.fingerprint256 || '–'}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-slate-400 italic">
+                    No active TLS/SSL X.509 certificate detected on ports 443, 8443, or 8009.
+                  </p>
+                )}
               </div>
             </div>
           )}

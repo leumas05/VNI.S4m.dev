@@ -23,7 +23,9 @@ import {
   Zap,
   Sun,
   Gamepad2,
-  Globe
+  Globe,
+  Power,
+  ShieldAlert
 } from 'lucide-react';
 import XmlViewerModal from './XmlViewerModal';
 import MdnsViewerModal from './MdnsViewerModal';
@@ -111,9 +113,25 @@ export default function LanTopologyView({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [copiedId, setCopiedId] = useState(null);
+  const [wolState, setWolState] = useState(null);
   const [xmlModalDevice, setXmlModalDevice] = useState(null);
   const [mdnsModalDevice, setMdnsModalDevice] = useState(null);
   const [inspectModalDevice, setInspectModalDevice] = useState(null);
+
+  const triggerWakeOnLan = async (dev) => {
+    if (!dev?.mac || dev.mac === 'Unknown' || dev.mac === 'Internal') return;
+    setWolState(dev.id || dev.ip);
+    try {
+      await fetch(`${apiBase || ''}/api/wol`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mac: dev.mac, ip: dev.ip })
+      });
+      setTimeout(() => setWolState(null), 2500);
+    } catch (e) {
+      setTimeout(() => setWolState(null), 2500);
+    }
+  };
   const [nicknames, setNicknames] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('vni_lan_nicknames')) || {};
@@ -202,7 +220,7 @@ export default function LanTopologyView({
 
     if (layoutMode === 'tree') {
       // 1. WAN Cloud (Root Top)
-      const wanY = 70;
+      const wanY = 65;
       nodes.push({
         id: 'wan-cloud',
         x: centerX,
@@ -215,7 +233,7 @@ export default function LanTopologyView({
       });
 
       // 2. Router / Gateway (Tier 1)
-      const routerY = 175;
+      const routerY = 170;
       nodes.push({
         ...gateway,
         x: centerX,
@@ -225,31 +243,66 @@ export default function LanTopologyView({
 
       // Link: WAN -> Router
       links.push({
-        from: { x: centerX, y: wanY + 25 },
-        to: { x: centerX, y: routerY - 30 },
+        from: { x: centerX, y: wanY + 26, devId: 'wan-cloud' },
+        to: { x: centerX, y: routerY - 46, devId: gateway.id },
         color: '#6366f1',
         isMainTrunk: true,
-        isAlive: true
+        isAlive: true,
+        activeTraffic: true
       });
 
-      // 3. All client devices connected directly to Router
+      // Separate Mesh Nodes (Tier 2) from Endpoint Client Devices (Tier 3)
       const allClients = [];
       if (thisDevice) allClients.push(thisDevice);
       clientDevices.forEach(d => allClients.push(d));
 
-      const total = allClients.length;
+      const isMeshDevice = (d) =>
+        !d.isThisDevice &&
+        !d.isGateway &&
+        (d.deviceType === 'mesh_node' ||
+          (d.vendor && d.vendor.toLowerCase().includes('mesh')) ||
+          (d.hostname && d.hostname.toLowerCase().includes('mesh')));
+
+      const meshNodes = allClients.filter(isMeshDevice);
+      const endpointClients = allClients.filter(d => !isMeshDevice(d));
+
+      const CARD_WIDTH = 216;
+      const MIN_GAP_X = 22;
+      const positionedMesh = [];
+
+      if (meshNodes.length > 0) {
+        const meshY = 305;
+        const meshSpacing = Math.max(CARD_WIDTH + 30, Math.min(280, (width - 80) / meshNodes.length));
+        const meshStartX = centerX - ((meshNodes.length - 1) * meshSpacing) / 2;
+
+        meshNodes.forEach((mDev, mIdx) => {
+          const mx = meshStartX + mIdx * meshSpacing;
+          const mNode = { ...mDev, x: mx, y: meshY, isMeshTier: true };
+          nodes.push(mNode);
+          positionedMesh.push(mNode);
+
+          links.push({
+            from: { x: centerX, y: routerY + 46, devId: gateway.id },
+            to: { x: mx, y: meshY - 46, devId: mDev.id },
+            color: '#14b8a6',
+            isMainTrunk: true,
+            isAlive: mDev.isAlive !== false,
+            activeTraffic: (mDev.activeConnectionsCount || 0) > 0
+          });
+        });
+      }
+
+      const total = endpointClients.length;
       if (total > 0) {
-        const CARD_WIDTH = 216;
-        const MIN_GAP_X = 22;
         const maxColsByWidth = Math.max(2, Math.min(5, Math.floor((width - 48) / (CARD_WIDTH + MIN_GAP_X))));
         const cols = Math.min(total, maxColsByWidth);
         const rows = Math.ceil(total / cols);
 
         const colSpacing = Math.max(CARD_WIDTH + MIN_GAP_X, Math.min(256, (width - 64) / (cols || 1)));
-        const startY = 315;
+        const startY = positionedMesh.length > 0 ? 445 : 315;
         const rowSpacing = 132;
 
-        allClients.forEach((dev, idx) => {
+        endpointClients.forEach((dev, idx) => {
           const row = Math.floor(idx / cols);
           const colInRow = idx % cols;
           const itemsInThisRow = (row === rows - 1 && total % cols !== 0) ? (total % cols) : cols;
@@ -263,13 +316,20 @@ export default function LanTopologyView({
             y: nodeY
           });
 
-          // Link: Router -> Client
+          // Connect THIS PC (wired Ethernet) directly to Router; distribute wireless/other clients across nearest Mesh Node or Router
+          let parentHub = { x: centerX, y: routerY + 46, id: gateway.id };
+          if (!dev.isThisDevice && positionedMesh.length > 0) {
+            const hubs = [{ x: centerX, y: routerY + 46, id: gateway.id }, ...positionedMesh.map(m => ({ x: m.x, y: m.y + 46, id: m.id }))];
+            parentHub = hubs.reduce((best, h) => (Math.abs(h.x - nodeX) < Math.abs(best.x - nodeX) ? h : best), hubs[0]);
+          }
+
           links.push({
-            from: { x: centerX, y: routerY + 46 },
-            to: { x: nodeX, y: nodeY - 46 },
+            from: { x: parentHub.x, y: parentHub.y, devId: parentHub.id },
+            to: { x: nodeX, y: nodeY - 46, devId: dev.id },
             color: getDeviceColor(dev.deviceType, dev.isThisDevice, dev.isGateway),
             isThisDevice: dev.isThisDevice,
-            isAlive: dev.isAlive
+            isAlive: dev.isAlive,
+            activeTraffic: dev.isThisDevice || (dev.activeConnectionsCount || 0) > 0
           });
         });
       }
@@ -299,11 +359,12 @@ export default function LanTopologyView({
       });
 
       links.push({
-        from: { x: centerX, y: centerY - 35 },
-        to: { x: centerX, y: centerY - wanDist + 25 },
+        from: { x: centerX, y: centerY - 35, devId: gateway.id },
+        to: { x: centerX, y: centerY - wanDist + 25, devId: 'wan-cloud' },
         color: '#6366f1',
         isMainTrunk: true,
-        isAlive: true
+        isAlive: true,
+        activeTraffic: true
       });
 
       const allClients = [];
@@ -330,11 +391,12 @@ export default function LanTopologyView({
         });
 
         links.push({
-          from: { x: centerX, y: centerY },
-          to: { x: nodeX, y: nodeY },
+          from: { x: centerX, y: centerY, devId: gateway.id },
+          to: { x: nodeX, y: nodeY, devId: dev.id },
           color: getDeviceColor(dev.deviceType, dev.isThisDevice, dev.isGateway),
           isThisDevice: dev.isThisDevice,
-          isAlive: dev.isAlive
+          isAlive: dev.isAlive,
+          activeTraffic: dev.isThisDevice || (dev.activeConnectionsCount || 0) > 0
         });
       });
     }
@@ -423,6 +485,16 @@ export default function LanTopologyView({
                   strokeOpacity={isSelected ? 0.95 : (link.isAlive ? 0.75 : 0.35)}
                   strokeDasharray={link.isAlive ? 'none' : '4, 4'}
                 />
+                {/* Animated Live Traffic Particles (when active sockets or main trunk) */}
+                {(link.activeTraffic || isSelected) && link.isAlive !== false && (
+                  <circle r={link.isMainTrunk ? 3 : 2.5} fill={isSelected ? '#fbbf24' : '#38bdf8'}>
+                    <animateMotion
+                      dur={link.isMainTrunk ? '1.8s' : '2.4s'}
+                      repeatCount="indefinite"
+                      path={pathD}
+                    />
+                  </circle>
+                )}
               </g>
             );
           })}
@@ -609,12 +681,28 @@ export default function LanTopologyView({
                       </text>
                     )}
 
-                    {/* Top-Right Badge: ROUTER */}
+                    {/* Top-Right Badge: ROUTER / MESH / NEW */}
                     {node.isGateway && (
                       <g transform={`translate(${cardWidth / 2 - 8}, ${-cardHeight / 2 + 15})`}>
                         <rect x={-48} y={-8} width={48} height={15} rx={4} fill="#064e3b" stroke="#10b981" strokeWidth={0.8} />
                         <text x={-24} y={3} textAnchor="middle" fill="#34d399" fontSize={7.5} fontWeight="700" fontFamily="system-ui">
                           ROUTER
+                        </text>
+                      </g>
+                    )}
+                    {!node.isGateway && node.isMeshTier && (
+                      <g transform={`translate(${cardWidth / 2 - 18}, ${-cardHeight / 2 + 15})`}>
+                        <rect x={-40} y={-8} width={40} height={15} rx={4} fill="#042f2e" stroke="#14b8a6" strokeWidth={0.8} />
+                        <text x={-20} y={3} textAnchor="middle" fill="#2dd4bf" fontSize={7.5} fontWeight="700" fontFamily="system-ui">
+                          MESH
+                        </text>
+                      </g>
+                    )}
+                    {!node.isGateway && !node.isMeshTier && node.isNew && (
+                      <g transform={`translate(${cardWidth / 2 - 18}, ${-cardHeight / 2 + 15})`}>
+                        <rect x={-34} y={-8} width={34} height={15} rx={4} fill="#451a03" stroke="#f59e0b" strokeWidth={0.8} />
+                        <text x={-17} y={3} textAnchor="middle" fill="#fbbf24" fontSize={7.5} fontWeight="700" fontFamily="system-ui">
+                          NEW
                         </text>
                       </g>
                     )}
@@ -629,7 +717,9 @@ export default function LanTopologyView({
                       fontWeight="700"
                       fontFamily="ui-monospace, monospace"
                     >
-                      {node.latency !== null ? `${node.latency}ms` : 'silent'}
+                      {node.activeConnectionsCount > 0
+                        ? `⚡${node.activeConnectionsCount} • ${node.latency !== null ? `${node.latency}ms` : 'active'}`
+                        : (node.latency !== null ? `${node.latency}ms` : 'silent')}
                     </text>
 
                     {/* Alive status dot on top right (for non-gateway) */}
@@ -669,6 +759,21 @@ export default function LanTopologyView({
             (Gateway: {lanData?.gateway?.ip || '192.168.1.1'})
           </span>
         </div>
+
+        {/* ARP Spoofing / Security Alerts Banner */}
+        {lanData?.securityAlerts?.length > 0 && (
+          <div className="flex flex-col gap-1 bg-rose-950/95 border border-rose-500/70 rounded-xl px-3.5 py-2 backdrop-blur-md shadow-2xl text-xs font-mono pointer-events-auto max-w-xl">
+            {lanData.securityAlerts.map((al, aIdx) => (
+              <div key={aIdx} className="flex items-center gap-2 text-rose-200">
+                <ShieldAlert size={14} className="text-rose-400 shrink-0" />
+                <div>
+                  <span className="font-bold text-rose-300">{al.title}: </span>
+                  <span className="text-[11px] text-rose-200/90">{al.description}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Selected Device Floating Card */}
         {selectedDevice && (
@@ -815,6 +920,17 @@ export default function LanTopologyView({
                 >
                   <Activity size={12} />
                   <span>Ping</span>
+                </button>
+              )}
+              {selectedDevice.mac && selectedDevice.mac !== 'Unknown' && selectedDevice.mac !== 'Internal' && !selectedDevice.isThisDevice && (
+                <button
+                  type="button"
+                  onClick={() => triggerWakeOnLan(selectedDevice)}
+                  className="px-2 py-0.5 rounded bg-amber-950/70 hover:bg-amber-900 border border-amber-500/30 text-amber-300 hover:text-amber-100 transition text-[11px] font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                  title={`Send Wake-on-LAN Magic Packet to ${selectedDevice.mac}`}
+                >
+                  <Power size={11} className="text-amber-400" />
+                  <span>{wolState === (selectedDevice.id || selectedDevice.ip) ? 'WoL Sent!' : 'Wake'}</span>
                 </button>
               )}
             </div>

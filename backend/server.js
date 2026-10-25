@@ -5,7 +5,7 @@ const { runTraceroute } = require('./traceroute');
 const { performDig } = require('./dns');
 const { checkSsl } = require('./ssl');
 const { getLiveConnections } = require('./netstat');
-const { scanLan, fetchDeviceXml, inspectDevice, startPermanentBackgroundListeners } = require('./arp');
+const { scanLan, fetchDeviceXml, inspectDevice, startPermanentBackgroundListeners, sendWakeOnLan, scanCustomPorts } = require('./arp');
 
 const path = require('path');
 const readline = require('readline');
@@ -15,6 +15,7 @@ const qrcode = require('qrcode-terminal');
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
@@ -231,6 +232,39 @@ app.get('/api/device-inspect', async (req, res) => {
         res.json({ ok: true, inspection });
     } catch (err) {
         res.status(500).json({ ok: false, error: err.message || 'Failed to inspect device' });
+    }
+});
+
+app.all('/api/wol', async (req, res) => {
+    const mac = (req.body && req.body.mac) || req.query.mac;
+    const ip = (req.body && req.body.ip) || req.query.ip || '';
+    if (!mac) {
+        return res.status(400).json({ ok: false, error: 'MAC address is required for Wake-on-LAN' });
+    }
+    const subnetPrefix = ip && /^\d+\.\d+\.\d+\.\d+$/.test(ip)
+        ? ip.split('.').slice(0, 3).join('.')
+        : null;
+    try {
+        const result = await sendWakeOnLan(mac, subnetPrefix);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message || 'Failed to send Wake-on-LAN Magic Packet' });
+    }
+});
+
+app.get('/api/port-scan', async (req, res) => {
+    const ip = req.query.ip;
+    if (!ip || !/^[0-9\.]+$/.test(ip)) {
+        return res.status(400).json({ ok: false, error: 'Valid target IP is required' });
+    }
+    const preset = req.query.preset || 'top100';
+    const startPort = req.query.startPort || 1;
+    const endPort = req.query.endPort || 1024;
+    try {
+        const result = await scanCustomPorts(ip, { preset, startPort, endPort });
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message || 'Failed to run port scan' });
     }
 });
 

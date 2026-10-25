@@ -2,6 +2,11 @@ const { exec, spawn } = require('child_process');
 const os = require('os');
 const dgram = require('dgram');
 const net = require('net');
+const tls = require('tls');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { getLiveConnections } = require('./netstat');
 
 // Comprehensive MAC OUI database for instant offline vendor & device recognition
 // Format: 6-char hex prefix without delimiters (lowercase)
@@ -144,8 +149,33 @@ const OUI_DATABASE = {
   '009ee8': 'Xiaomi', '185936': 'Xiaomi', '286c07': 'Xiaomi', '34ce00': 'Xiaomi', '508f4c': 'Xiaomi',
   '64cc2e': 'Xiaomi', '742344': 'Xiaomi', '8cbebe': 'Xiaomi', 'a43d78': 'Xiaomi', 'd8b28e': 'Xiaomi',
 
-  // Realtek
-  '000732': 'Realtek', '000ee8': 'Realtek', '00e04c': 'Realtek', '525400': 'QEMU / KVM Virtual'
+  // Dell / HP / Lenovo / Acer
+  '00065b': 'Dell', '000874': 'Dell', '000bdb': 'Dell', '000d56': 'Dell', '00123f': 'Dell',
+  '001422': 'Dell', '0015c5': 'Dell', '00188b': 'Dell', '001aa0': 'Dell', '00219b': 'Dell',
+  '14feb5': 'Dell', '180373': 'Dell', '24b6fd': 'Dell', '5cf9dd': 'Dell', 'd4bed9': 'Dell',
+  '0001e6': 'HP', '000802': 'HP', '000bcd': 'HP', '000e7f': 'HP', '001185': 'HP',
+  '0014c2': 'HP', '0017a4': 'HP', '001b78': 'HP', '001e0b': 'HP', '00215a': 'HP (Printer / PC)',
+  '101f74': 'HP', '2c4138': 'HP', '3c4a92': 'HP', '68b599': 'HP', 'a0d3c1': 'HP',
+  '00092d': 'Lenovo', '0012fe': 'Lenovo', '0021cc': 'Lenovo', '28d244': 'Lenovo', '507b9d': 'Lenovo',
+  '60d9c7': 'Lenovo', '8c1645': 'Lenovo', '98fa9b': 'Lenovo', 'c85b76': 'Lenovo', 'e82aea': 'Lenovo',
+
+  // Brother / Canon / Epson (Printers)
+  '001b19': 'Brother (Printer)', '008077': 'Brother (Printer)', '30055c': 'Brother (Printer)',
+  '000085': 'Canon (Printer)', '001e8f': 'Canon (Printer)', '180c77': 'Canon (Printer)',
+  '000048': 'Epson (Printer)', '0026ab': 'Epson (Printer)', '64eb8c': 'Epson (Printer)',
+
+  // LG / Nintendo / Roku / Cameras / IoT
+  '001c62': 'LG Electronics (Smart TV)', '001e75': 'LG Electronics', '10683f': 'LG Electronics',
+  '388c50': 'LG Electronics (Smart TV)', '64bc0c': 'LG Electronics', 'a823fe': 'LG Electronics (Smart TV)',
+  '0009bf': 'Nintendo', '0017ab': 'Nintendo', '001f32': 'Nintendo', '582f40': 'Nintendo (Switch)',
+  '98b6e9': 'Nintendo (Switch)', 'd86bf7': 'Nintendo (Switch)',
+  '000d4b': 'Roku', 'b0a737': 'Roku', 'd83134': 'Roku',
+  '1012fb': 'Shelly (Smart Home IoT)', '382b78': 'Shelly (Smart Home IoT)', 'c45bbe': 'Tuya (Smart Home IoT)',
+  '2857be': 'Hikvision (IP Camera)', '4419b6': 'Hikvision (IP Camera)', 'c056e3': 'Hikvision (IP Camera)',
+
+  // Realtek & Virtualization
+  '000732': 'Realtek', '000ee8': 'Realtek', '00e04c': 'Realtek', '00e04d': 'Realtek',
+  '525400': 'QEMU / KVM Virtual', '000c29': 'VMware Virtual', '005056': 'VMware Virtual', '080027': 'VirtualBox'
 };
 
 // Format MAC address clearly in uppercase hyphen notation (e.g. 6C-4C-BC-0B-7A-AC)
@@ -396,8 +426,14 @@ function getArpTable() {
 // ==========================================
 const persistentMdnsCache = {};
 const persistentSsdpCache = {};
+const persistentWsdCache = {};
+const persistentLlmnrCache = {};
+const persistentDhcpCache = {};
 let bgMdnsSocket = null;
 let bgSsdpSocket = null;
+let bgWsdSocket = null;
+let bgLlmnrSocket = null;
+let bgDhcpSocket = null;
 let bgKeepAliveTimer = null;
 let bgListenersStarted = false;
 
@@ -703,7 +739,142 @@ function sendSsdpQueryBurst(socket) {
   }
 }
 
-// Start permanent background listeners for continuous mDNS & SSDP observation
+// Parse incoming WS-Discovery (WSD UDP 3702) SOAP XML messages (Windows PCs, Printers, ONVIF Cameras)
+function parseWsdMessage(msg, ip) {
+  if (!ip || !msg) return;
+  const xml = msg.toString('utf8');
+  if (!xml.includes('ProbeMatches') && !xml.includes('Hello') && !xml.includes('ResolveMatches')) return;
+
+  const typesMatch = xml.match(/<(?:[\w]+:)?Types[^>]*>([^<]+)<\/(?:[\w]+:)?Types>/i);
+  const xaddrsMatch = xml.match(/<(?:[\w]+:)?XAddrs[^>]*>([^<]+)<\/(?:[\w]+:)?XAddrs>/i);
+  const scopesMatch = xml.match(/<(?:[\w]+:)?Scopes[^>]*>([^<]+)<\/(?:[\w]+:)?Scopes>/i);
+
+  const rawTypes = typesMatch ? typesMatch[1].trim() : '';
+  const rawXAddrs = xaddrsMatch ? xaddrsMatch[1].trim() : '';
+  const rawScopes = scopesMatch ? scopesMatch[1].trim() : '';
+
+  const categories = [];
+  if (/computer|pub:Computer/i.test(rawTypes)) categories.push('Windows WSD Computer');
+  if (/print|PrintDevice/i.test(rawTypes)) categories.push('WSD Network Printer');
+  if (/scan|Scanner/i.test(rawTypes)) categories.push('WSD Network Scanner');
+  if (/NetworkVideoTransmitter|onvif/i.test(rawTypes + ' ' + rawScopes)) categories.push('ONVIF IP Camera');
+  if (/Device/i.test(rawTypes) && categories.length === 0) categories.push('WS-Discovery Device');
+
+  let extractedName = null;
+  const onvifName = rawScopes.match(/onvif:\/\/www\.onvif\.org\/name\/([^\s/]+)/i);
+  const onvifHw = rawScopes.match(/onvif:\/\/www\.onvif\.org\/hardware\/([^\s/]+)/i);
+  if (onvifName) extractedName = decodeURIComponent(onvifName[1]);
+  else if (onvifHw) extractedName = decodeURIComponent(onvifHw[1]);
+
+  persistentWsdCache[ip] = {
+    types: rawTypes,
+    categories,
+    xaddrs: rawXAddrs.split(/\s+/).filter(Boolean),
+    scopes: rawScopes.split(/\s+/).filter(Boolean),
+    name: extractedName || persistentWsdCache[ip]?.name || null,
+    updatedAt: Date.now()
+  };
+}
+
+// Broadcast WS-Discovery SOAP Probe burst to 239.255.255.250:3702
+function sendWsdProbeBurst(socket) {
+  if (!socket) return;
+  const msgId = crypto.randomUUID ? crypto.randomUUID() : `urn:uuid:${Date.now()}-vni-probe`;
+  const soapProbe =
+    '<?xml version="1.0" encoding="utf-8"?>' +
+    '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" ' +
+    'xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing" ' +
+    'xmlns:wsd="http://schemas.xmlsoap.org/ws/2005/04/discovery" ' +
+    'xmlns:wsdp="http://schemas.xmlsoap.org/ws/2006/02/devprof">' +
+    '<soap:Header>' +
+    '<wsa:To>urn:schemas-xmlsoap-org:ws:2005:04:discovery</wsa:To>' +
+    '<wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</wsa:Action>' +
+    `<wsa:MessageID>urn:uuid:${msgId}</wsa:MessageID>` +
+    '</soap:Header>' +
+    '<soap:Body><wsd:Probe/></soap:Body>' +
+    '</soap:Envelope>';
+  try {
+    socket.send(Buffer.from(soapProbe, 'utf8'), 3702, '239.255.255.250');
+  } catch (e) {}
+}
+
+// Parse LLMNR (UDP 5355) packets to extract local Windows/Linux single-label hostnames
+function parseLlmnrMessage(msg, ip) {
+  if (!ip || !msg || msg.length < 16) return;
+  const isResponse = (msg[2] & 0x80) !== 0;
+  if (!isResponse) return;
+  let pos = 12;
+  const labels = [];
+  while (pos < msg.length && pos < 128) {
+    const len = msg[pos];
+    if (len === 0) break;
+    if ((len & 0xc0) === 0xc0) break;
+    if (pos + 1 + len <= msg.length) {
+      labels.push(msg.slice(pos + 1, pos + 1 + len).toString('utf8'));
+      pos += 1 + len;
+    } else {
+      break;
+    }
+  }
+  const hostname = labels.join('.').trim();
+  if (hostname && /^[a-zA-Z0-9\-_]{2,63}$/.test(hostname) && !hostname.startsWith('_')) {
+    persistentLlmnrCache[ip] = {
+      hostname,
+      updatedAt: Date.now()
+    };
+  }
+}
+
+// Parse passive DHCP (UDP 67/68) broadcast packets for Option 12 (Host Name) & Option 60 (Vendor Class)
+function parseDhcpPacket(msg) {
+  if (!msg || msg.length < 240) return;
+  // Verify DHCP magic cookie 0x63825363 at offset 236
+  if (msg[236] !== 0x63 || msg[237] !== 0x82 || msg[238] !== 0x53 || msg[239] !== 0x63) return;
+
+  const hlen = msg[2];
+  if (hlen !== 6) return;
+  const macBytes = [];
+  for (let i = 0; i < 6; i++) {
+    macBytes.push(msg[28 + i].toString(16).padStart(2, '0').toUpperCase());
+  }
+  const mac = macBytes.join('-');
+  const ciaddr = `${msg[12]}.${msg[13]}.${msg[14]}.${msg[15]}`;
+
+  let hostname = null;
+  let vendorClass = null;
+  let requestedIp = ciaddr !== '0.0.0.0' ? ciaddr : null;
+  let paramFinger = [];
+
+  let offset = 240;
+  while (offset < msg.length) {
+    const opt = msg[offset++];
+    if (opt === 255) break;
+    if (opt === 0) continue;
+    const len = msg[offset++];
+    if (offset + len > msg.length) break;
+    const val = msg.slice(offset, offset + len);
+    if (opt === 12) hostname = val.toString('utf8').replace(/\0/g, '').trim();
+    else if (opt === 60) vendorClass = val.toString('utf8').replace(/\0/g, '').trim();
+    else if (opt === 50 && len === 4) requestedIp = `${val[0]}.${val[1]}.${val[2]}.${val[3]}`;
+    else if (opt === 55) paramFinger = Array.from(val);
+    offset += len;
+  }
+
+  if (mac && mac !== '00-00-00-00-00-00') {
+    const entry = {
+      mac,
+      ip: requestedIp,
+      hostname,
+      vendorClass,
+      paramFinger: paramFinger.join(','),
+      updatedAt: Date.now()
+    };
+    persistentDhcpCache[mac] = entry;
+    if (requestedIp) persistentDhcpCache[requestedIp] = entry;
+  }
+}
+
+// Start permanent background listeners for continuous mDNS, SSDP, WSD, LLMNR & DHCP observation
 function startPermanentBackgroundListeners(localIp = null) {
   if (bgListenersStarted) return;
   bgListenersStarted = true;
@@ -714,9 +885,7 @@ function startPermanentBackgroundListeners(localIp = null) {
     bgMdnsSocket.on('message', (msg, rinfo) => {
       parseMdnsMessage(msg, rinfo.address, persistentMdnsCache);
     });
-    bgMdnsSocket.on('error', () => {
-      // Non-fatal
-    });
+    bgMdnsSocket.on('error', () => {});
     bgMdnsSocket.bind(5353, () => {
       try {
         if (localIp) {
@@ -740,9 +909,7 @@ function startPermanentBackgroundListeners(localIp = null) {
         handleSsdpLocation(rinfo.address, locMatch[1].trim());
       }
     });
-    bgSsdpSocket.on('error', () => {
-      // Non-fatal
-    });
+    bgSsdpSocket.on('error', () => {});
     bgSsdpSocket.bind(1900, () => {
       try {
         if (localIp) {
@@ -756,11 +923,63 @@ function startPermanentBackgroundListeners(localIp = null) {
     });
   } catch (e) {}
 
-  // 3. Periodic low-rate heartbeat refresh every 60 seconds
+  // 3. Permanent WS-Discovery (WSD) listener on UDP port 3702
+  try {
+    bgWsdSocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    bgWsdSocket.on('message', (msg, rinfo) => {
+      parseWsdMessage(msg, rinfo.address);
+    });
+    bgWsdSocket.on('error', () => {});
+    bgWsdSocket.bind(3702, () => {
+      try {
+        if (localIp) {
+          bgWsdSocket.setMulticastInterface(localIp);
+          bgWsdSocket.addMembership('239.255.255.250', localIp);
+        } else {
+          bgWsdSocket.addMembership('239.255.255.250');
+        }
+      } catch (e) {}
+      sendWsdProbeBurst(bgWsdSocket);
+    });
+  } catch (e) {}
+
+  // 4. Permanent LLMNR listener on UDP port 5355
+  try {
+    bgLlmnrSocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    bgLlmnrSocket.on('message', (msg, rinfo) => {
+      parseLlmnrMessage(msg, rinfo.address);
+    });
+    bgLlmnrSocket.on('error', () => {});
+    bgLlmnrSocket.bind(5355, () => {
+      try {
+        if (localIp) {
+          bgLlmnrSocket.setMulticastInterface(localIp);
+          bgLlmnrSocket.addMembership('224.0.0.252', localIp);
+        } else {
+          bgLlmnrSocket.addMembership('224.0.0.252');
+        }
+      } catch (e) {}
+    });
+  } catch (e) {}
+
+  // 5. Best-effort passive DHCP listener on UDP port 67 (or 68)
+  try {
+    bgDhcpSocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    bgDhcpSocket.on('message', (msg) => {
+      parseDhcpPacket(msg);
+    });
+    bgDhcpSocket.on('error', () => {});
+    bgDhcpSocket.bind(67, () => {
+      try { bgDhcpSocket.setBroadcast(true); } catch (e) {}
+    });
+  } catch (e) {}
+
+  // 6. Periodic low-rate heartbeat refresh every 60 seconds
   if (!bgKeepAliveTimer) {
     bgKeepAliveTimer = setInterval(() => {
       if (bgMdnsSocket) sendMdnsQueryBurst(bgMdnsSocket);
       if (bgSsdpSocket) sendSsdpQueryBurst(bgSsdpSocket);
+      if (bgWsdSocket) sendWsdProbeBurst(bgWsdSocket);
     }, 60000);
     if (bgKeepAliveTimer.unref) bgKeepAliveTimer.unref();
   }
@@ -1437,6 +1656,409 @@ function guessOsFingerprint({
   };
 }
 
+// 5b. Local TLS/SSL X.509 Certificate Inspector (ports 443, 8443, 8009)
+async function inspectTlsCertificate(ip, candidatePorts = [443, 8443, 8009], timeoutMs = 850) {
+  const portsToTry = candidatePorts.filter(p => [443, 8443, 8009].includes(p));
+  if (portsToTry.length === 0) return null;
+
+  const probePortTls = (port) => new Promise((resolve) => {
+    let settled = false;
+    const finish = (val) => {
+      if (!settled) {
+        settled = true;
+        resolve(val);
+      }
+    };
+
+    try {
+      const socket = tls.connect(
+        {
+          host: ip,
+          port,
+          rejectUnauthorized: false,
+          servername: ip,
+          timeout: timeoutMs
+        },
+        () => {
+          try {
+            const cert = socket.getPeerCertificate(false);
+            const protocol = socket.getProtocol ? socket.getProtocol() : 'TLS';
+            const cipher = socket.getCipher ? socket.getCipher() : null;
+            socket.destroy();
+            if (cert && Object.keys(cert).length > 0) {
+              const subjectCN = Array.isArray(cert.subject?.CN) ? cert.subject.CN[0] : (cert.subject?.CN || null);
+              const subjectO = Array.isArray(cert.subject?.O) ? cert.subject.O[0] : (cert.subject?.O || null);
+              const issuerCN = Array.isArray(cert.issuer?.CN) ? cert.issuer.CN[0] : (cert.issuer?.CN || null);
+              const issuerO = Array.isArray(cert.issuer?.O) ? cert.issuer.O[0] : (cert.issuer?.O || null);
+              finish({
+                port,
+                protocol,
+                cipher: cipher?.name || null,
+                subjectCN,
+                subjectOrg: subjectO,
+                issuerCN,
+                issuerOrg: issuerO,
+                subjectAltName: cert.subjectaltname || null,
+                validFrom: cert.valid_from || null,
+                validTo: cert.valid_to || null,
+                serialNumber: cert.serialNumber || null,
+                fingerprint256: cert.fingerprint256 || null,
+                isSelfSigned: Boolean(subjectCN && issuerCN && subjectCN === issuerCN)
+              });
+            } else {
+              finish(null);
+            }
+          } catch (e) {
+            try { socket.destroy(); } catch (_) {}
+            finish(null);
+          }
+        }
+      );
+
+      socket.on('error', () => {
+        try { socket.destroy(); } catch (_) {}
+        finish(null);
+      });
+      socket.on('timeout', () => {
+        try { socket.destroy(); } catch (_) {}
+        finish(null);
+      });
+    } catch (e) {
+      finish(null);
+    }
+  });
+
+  const results = await Promise.all(portsToTry.map(p => probePortTls(p)));
+  return results.find(Boolean) || null;
+}
+
+// 5c. Automated Device Security Audit & Risk Scoring
+function evaluateDeviceSecurity({ openPorts = [], tlsCert = null, isRandomized = false }) {
+  const openNums = openPorts.map(p => (typeof p === 'object' ? p.port : p));
+  let score = 100;
+  const findings = [];
+
+  if (openNums.includes(23)) {
+    score -= 35;
+    findings.push({
+      severity: 'high',
+      port: 23,
+      title: 'Unencrypted Telnet Shell Exposed (Port 23)',
+      recommendation: 'Disable Telnet immediately and use SSH (Port 22) for remote administration.'
+    });
+  }
+  if (openNums.includes(21)) {
+    score -= 20;
+    findings.push({
+      severity: 'medium',
+      port: 21,
+      title: 'Cleartext FTP Service Exposed (Port 21)',
+      recommendation: 'Prefer SFTP or SMBv3 over unencrypted FTP.'
+    });
+  }
+  if (openNums.includes(3389)) {
+    score -= 15;
+    findings.push({
+      severity: 'medium',
+      port: 3389,
+      title: 'Remote Desktop Protocol (RDP Port 3389) Active',
+      recommendation: 'Ensure Network Level Authentication (NLA) and strong credentials are enabled.'
+    });
+  }
+  if (openNums.includes(445) || openNums.includes(139)) {
+    score -= 10;
+    findings.push({
+      severity: 'low',
+      port: 445,
+      title: 'SMB Network File Sharing Active (Port 445)',
+      recommendation: 'Verify SMBv1 is disabled and guest shares are restricted.'
+    });
+  }
+  if (openNums.includes(80) && !openNums.includes(443)) {
+    score -= 10;
+    findings.push({
+      severity: 'low',
+      port: 80,
+      title: 'Unencrypted HTTP Web Interface (Port 80 Only)',
+      recommendation: 'Enable HTTPS (TLS) on the device management portal if supported.'
+    });
+  }
+  if (openNums.includes(554)) {
+    score -= 12;
+    findings.push({
+      severity: 'medium',
+      port: 554,
+      title: 'RTSP Media/Camera Stream Port Open (Port 554)',
+      recommendation: 'Ensure RTSP stream authentication is enabled.'
+    });
+  }
+  if (openNums.includes(9100)) {
+    score -= 5;
+    findings.push({
+      severity: 'info',
+      port: 9100,
+      title: 'RAW JetDirect Print Port Open (Port 9100)',
+      recommendation: 'Standard LAN printing port; restrict to trusted local VLAN.'
+    });
+  }
+  if (tlsCert) {
+    if (tlsCert.isSelfSigned) {
+      findings.push({
+        severity: 'info',
+        port: tlsCert.port,
+        title: `Self-Signed TLS Certificate (${tlsCert.subjectCN || 'Local Appliance'})`,
+        recommendation: 'Common for LAN appliances; verify fingerprint on first login.'
+      });
+    } else {
+      findings.push({
+        severity: 'info',
+        port: tlsCert.port,
+        title: `Verified TLS Certificate (${tlsCert.issuerOrg || tlsCert.issuerCN || tlsCert.protocol})`,
+        recommendation: 'Encrypted HTTPS/TLS transport active.'
+      });
+    }
+  }
+  if (openNums.length === 0) {
+    findings.push({
+      severity: 'info',
+      port: null,
+      title: 'Zero Exposed TCP Server Ports',
+      recommendation: 'Device firewall blocks incoming connections (hardened client profile).'
+    });
+  }
+
+  score = Math.max(10, Math.min(100, score));
+  let grade = 'A+';
+  let status = 'Secure';
+  if (score < 60) {
+    grade = 'D';
+    status = 'At Risk';
+  } else if (score < 75) {
+    grade = 'C';
+    status = 'Warning';
+  } else if (score < 88) {
+    grade = 'B';
+    status = 'Advisory';
+  } else if (score < 96) {
+    grade = 'A';
+    status = 'Secure';
+  }
+
+  return {
+    score,
+    grade,
+    status,
+    isRandomizedMac: Boolean(isRandomized),
+    findings
+  };
+}
+
+// 5d. Persistent Known-Device History & ARP Spoofing Detector
+const LAN_HISTORY_FILE = path.join(os.tmpdir(), 'vni_lan_device_history.json');
+let inMemoryLanHistory = null;
+
+function loadLanHistory() {
+  if (inMemoryLanHistory) return inMemoryLanHistory;
+  try {
+    if (fs.existsSync(LAN_HISTORY_FILE)) {
+      const raw = fs.readFileSync(LAN_HISTORY_FILE, 'utf8');
+      inMemoryLanHistory = JSON.parse(raw);
+      return inMemoryLanHistory;
+    }
+  } catch (e) {}
+  inMemoryLanHistory = { gatewayMac: null, devices: {} };
+  return inMemoryLanHistory;
+}
+
+function saveLanHistory(history) {
+  inMemoryLanHistory = history;
+  try {
+    fs.writeFileSync(LAN_HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8');
+  } catch (e) {}
+}
+
+// 5e. Wake-on-LAN (WoL) IEEE 802.3 Magic Packet Sender
+function sendWakeOnLan(mac, subnetPrefix = null) {
+  return new Promise((resolve, reject) => {
+    if (!mac) return reject(new Error('MAC address is required for Wake-on-LAN'));
+    const clean = mac.replace(/[^0-9a-fA-F]/g, '');
+    if (clean.length !== 12) {
+      return reject(new Error(`Invalid MAC address format: ${mac}`));
+    }
+
+    const macBytes = Buffer.alloc(6);
+    for (let i = 0; i < 6; i++) {
+      macBytes[i] = parseInt(clean.substring(i * 2, i * 2 + 2), 16);
+    }
+
+    // Magic packet: 6 bytes of 0xFF followed by 16 repetitions of the 6-byte target MAC (102 bytes)
+    const magicPacket = Buffer.alloc(102);
+    for (let i = 0; i < 6; i++) magicPacket[i] = 0xff;
+    for (let rep = 0; rep < 16; rep++) {
+      macBytes.copy(magicPacket, 6 + rep * 6);
+    }
+
+    const targets = ['255.255.255.255'];
+    if (subnetPrefix && /^\d+\.\d+\.\d+$/.test(subnetPrefix)) {
+      targets.push(`${subnetPrefix}.255`);
+    }
+
+    const socket = dgram.createSocket('udp4');
+    socket.on('error', (err) => {
+      try { socket.close(); } catch (e) {}
+      reject(err);
+    });
+
+    socket.bind(0, () => {
+      try {
+        socket.setBroadcast(true);
+      } catch (e) {}
+
+      let pending = targets.length * 2;
+      const done = () => {
+        pending--;
+        if (pending <= 0) {
+          try { socket.close(); } catch (e) {}
+          resolve({
+            ok: true,
+            mac: formatMac(clean),
+            broadcastTargets: targets,
+            ports: [9, 7],
+            bytesSent: magicPacket.length
+          });
+        }
+      };
+
+      for (const addr of targets) {
+        socket.send(magicPacket, 0, magicPacket.length, 9, addr, done);
+        socket.send(magicPacket, 0, magicPacket.length, 7, addr, done);
+      }
+    });
+  });
+}
+
+// 5f. Deep / Custom Port Scanner (Top 100 or Custom Port Range with Banner Grabbing)
+const TOP_100_PORTS = [
+  21, 22, 23, 25, 53, 80, 81, 88, 110, 111, 123, 135, 137, 139, 143, 161, 389, 443, 445, 465,
+  500, 515, 548, 554, 587, 631, 636, 873, 902, 993, 995, 1080, 1194, 1433, 1521, 1723, 1883, 1900, 2049, 2082,
+  2083, 2181, 2375, 2376, 3000, 3128, 32400, 3306, 3389, 3478, 3689, 4000, 4443, 4500, 5000, 5001, 5060, 5222, 5353, 5357,
+  5432, 5555, 5672, 5900, 5901, 5984, 5985, 5986, 6379, 6443, 6667, 7000, 7001, 7443, 8000, 8006, 8008, 8009, 8080, 8081,
+  8086, 8088, 8096, 8123, 8200, 8443, 8554, 8883, 8888, 9000, 9090, 9091, 9100, 9200, 9443, 10000, 27015, 27017, 51820, 62078
+];
+
+const EXTRA_PORT_LABELS = {
+  81: { service: 'HTTP Alternate (Camera / Router)', category: 'Web' },
+  88: { service: 'Kerberos Auth', category: 'Auth' },
+  111: { service: 'RPCBind / Portmapper', category: 'System' },
+  389: { service: 'LDAP Directory', category: 'Auth' },
+  515: { service: 'LPD Line Printer Daemon', category: 'Printing' },
+  587: { service: 'SMTP Submission', category: 'Mail' },
+  636: { service: 'LDAPS Secure Directory', category: 'Auth' },
+  873: { service: 'Rsync File Sync', category: 'Storage' },
+  1433: { service: 'Microsoft SQL Server', category: 'Database' },
+  2049: { service: 'NFS Network File System', category: 'Storage' },
+  2375: { service: 'Docker Daemon API', category: 'Containers' },
+  3000: { service: 'Web Dev / Grafana / Node', category: 'Web' },
+  32400: { service: 'Plex Media Server', category: 'Media' },
+  3689: { service: 'DAAP / iTunes Media Share', category: 'Media' },
+  5001: { service: 'Synology DSM HTTPS / API', category: 'Web' },
+  5357: { service: 'WSDAPI (Windows Web Services)', category: 'System' },
+  5555: { service: 'Android ADB Wireless Debug', category: 'Remote' },
+  5985: { service: 'WinRM HTTP Management', category: 'Remote' },
+  5986: { service: 'WinRM HTTPS Management', category: 'Remote' },
+  6379: { service: 'Redis Key-Value Store', category: 'Database' },
+  6443: { service: 'Kubernetes API Server', category: 'Containers' },
+  7000: { service: 'AirPlay Receiver / RTSP', category: 'Media' },
+  8006: { service: 'Proxmox VE Web Console', category: 'Web' },
+  8081: { service: 'HTTP Alt / Smart Home Proxy', category: 'Web' },
+  8086: { service: 'InfluxDB Time-Series API', category: 'Database' },
+  8096: { service: 'Jellyfin / Emby Media Server', category: 'Media' },
+  8123: { service: 'Home Assistant Core', category: 'IoT' },
+  8883: { service: 'MQTT over TLS (IoT Broker)', category: 'IoT' },
+  8888: { service: 'HTTP Alt / Web Console', category: 'Web' },
+  9000: { service: 'Portainer / SonarQube / Web', category: 'Web' },
+  9090: { service: 'Prometheus / Cockpit Web', category: 'Web' },
+  9091: { service: 'Transmission BitTorrent Web', category: 'Media' },
+  9443: { service: 'HTTPS Management Console', category: 'Web' },
+  10000: { service: 'Webmin / Network Appliance', category: 'Web' },
+  27017: { service: 'MongoDB Database', category: 'Database' }
+};
+
+async function scanCustomPorts(ip, { preset = 'top100', startPort = 1, endPort = 1024 } = {}) {
+  const startTime = Date.now();
+  let portList = [];
+  if (preset === 'range') {
+    const s = Math.max(1, Math.min(65535, parseInt(startPort, 10) || 1));
+    const e = Math.max(s, Math.min(65535, Math.min(s + 500, parseInt(endPort, 10) || 1024)));
+    for (let p = s; p <= e; p++) portList.push(p);
+  } else {
+    portList = [...TOP_100_PORTS];
+  }
+
+  const allKnownMeta = {};
+  for (const item of DIAGNOSTIC_PORTS) {
+    allKnownMeta[item.port] = { service: item.service, category: item.category };
+  }
+  Object.assign(allKnownMeta, EXTRA_PORT_LABELS);
+
+  const results = [];
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < portList.length; i += BATCH_SIZE) {
+    const chunk = portList.slice(i, i + BATCH_SIZE);
+    const chunkRes = await Promise.all(
+      chunk.map((port) => new Promise((resolve) => {
+        const socket = new net.Socket();
+        let settled = false;
+        let banner = null;
+        socket.setTimeout(380);
+
+        const done = (isOpen) => {
+          if (!settled) {
+            settled = true;
+            socket.destroy();
+            const meta = allKnownMeta[port] || { service: `TCP Port ${port}`, category: 'Custom' };
+            resolve({
+              port,
+              service: meta.service,
+              category: meta.category,
+              open: isOpen,
+              banner
+            });
+          }
+        };
+
+        socket.on('connect', () => {
+          // Wait briefly for any spontaneous server greeting banner (SSH, FTP, SMTP, etc.)
+          socket.once('data', (chunkData) => {
+            banner = chunkData.toString('utf8').split(/[\r\n]/)[0].slice(0, 80).trim();
+            done(true);
+          });
+          setTimeout(() => done(true), 90);
+        });
+        socket.on('timeout', () => done(false));
+        socket.on('error', () => done(false));
+        try {
+          socket.connect(port, ip);
+        } catch (e) {
+          done(false);
+        }
+      }))
+    );
+    results.push(...chunkRes);
+  }
+
+  const openPorts = results.filter(r => r.open);
+  return {
+    ip,
+    preset,
+    scannedCount: portList.length,
+    openCount: openPorts.length,
+    openPorts,
+    allPorts: results,
+    durationMs: Date.now() - startTime
+  };
+}
+
 // 6. Complete Single-Device Inspection
 async function inspectDevice(ip, mac = null, vendor = null, hostname = null) {
   const startTime = Date.now();
@@ -1452,6 +2074,14 @@ async function inspectDevice(ip, mac = null, vendor = null, hostname = null) {
     querySnmp(ip, 700),
     discoverMdns(null, 650),
     fetchDeviceXml(ip)
+  ]);
+
+  const openAllPorts = portResults.filter(p => p.open);
+  const openPortNums = openAllPorts.map(p => p.port);
+
+  const [bannerInfo, tlsCert] = await Promise.all([
+    inspectHttpBannersAndStatus(ip, portResults, resolvedVendor || ''),
+    inspectTlsCertificate(ip, openPortNums.filter(p => [443, 8443, 8009].includes(p)), 850)
   ]);
 
   const mdnsInfo = (mdnsMapResult && mdnsMapResult[ip]) ? mdnsMapResult[ip] : (persistentMdnsCache[ip] ? {
@@ -1480,15 +2110,31 @@ async function inspectDevice(ip, mac = null, vendor = null, hostname = null) {
     ssdpInfo = persistentSsdpCache[ip];
   }
 
-  const bannerInfo = await inspectHttpBannersAndStatus(ip, portResults, resolvedVendor || '');
-  const effectiveHostname = netbiosRes?.name || mdnsInfo?.name || ssdpInfo?.name || hostname || '';
+  const wsdInfo = persistentWsdCache[ip] || null;
+  const llmnrInfo = persistentLlmnrCache[ip] || null;
+  const dhcpInfo = (mac && persistentDhcpCache[mac]) || persistentDhcpCache[ip] || null;
+
+  const tlsCnName = (tlsCert?.subjectCN && !/^\d+\.\d+\.\d+\.\d+$/.test(tlsCert.subjectCN) && !tlsCert.subjectCN.includes('*'))
+    ? tlsCert.subjectCN
+    : null;
+
+  const effectiveHostname =
+    netbiosRes?.name ||
+    llmnrInfo?.hostname ||
+    dhcpInfo?.hostname ||
+    mdnsInfo?.name ||
+    ssdpInfo?.name ||
+    wsdInfo?.name ||
+    tlsCnName ||
+    hostname ||
+    '';
 
   const osFingerprint = guessOsFingerprint({
     ttl: pingRes.ttl,
     vendor: resolvedVendor,
     mdns: mdnsInfo,
     ssdp: ssdpInfo,
-    openPorts: portResults.filter(p => p.open),
+    openPorts: openAllPorts,
     netbios: netbiosRes,
     hostname: effectiveHostname,
     isRandomized
@@ -1518,25 +2164,27 @@ async function inspectDevice(ip, mac = null, vendor = null, hostname = null) {
   if (mdnsTypes.some(t => t.includes('airplay') || t.includes('raop'))) {
     networkCapabilities.push({ id: 'airplay', label: 'Apple AirPlay', icon: 'Radio' });
   }
-  if (mdnsTypes.some(t => t.includes('googlecast')) || portResults.some(p => p.port === 8008 && p.open)) {
+  if (mdnsTypes.some(t => t.includes('googlecast')) || openPortNums.includes(8008)) {
     networkCapabilities.push({ id: 'cast', label: 'Google Cast', icon: 'Tv' });
   }
   if (mdnsTypes.some(t => t.includes('spotify-connect'))) {
     networkCapabilities.push({ id: 'spotify', label: 'Spotify Connect', icon: 'Music' });
   }
-  if (mdnsTypes.some(t => t.includes('ipp') || t.includes('printer')) || portResults.some(p => (p.port === 631 || p.port === 9100) && p.open)) {
+  if (mdnsTypes.some(t => t.includes('ipp') || t.includes('printer')) || openPortNums.includes(631) || openPortNums.includes(9100)) {
     networkCapabilities.push({ id: 'print', label: 'IPP / AirPrint Printing', icon: 'Printer' });
   }
-  if (portResults.some(p => p.port === 445 && p.open)) {
+  if (openPortNums.includes(445)) {
     networkCapabilities.push({ id: 'smb', label: 'SMB File Sharing (Windows / Samba)', icon: 'Folder' });
   }
-  if (portResults.some(p => p.port === 22 && p.open)) {
+  if (openPortNums.includes(22)) {
     networkCapabilities.push({ id: 'ssh', label: 'SSH Shell', icon: 'Terminal' });
   }
-  if (portResults.some(p => (p.port === 80 || p.port === 443 || p.port === 8080) && p.open)) {
-    networkCapabilities.push({ id: 'web', label: 'Web Management (HTTP/S)', icon: 'Globe' });
+  if (wsdInfo && wsdInfo.categories?.length) {
+    networkCapabilities.push({ id: 'wsd', label: wsdInfo.categories[0], icon: 'Layers' });
   }
-
+  if (tlsCert) {
+    networkCapabilities.push({ id: 'tls', label: `TLS X.509 (${tlsCert.protocol})`, icon: 'ShieldCheck' });
+  }
 
   const deviceSpecific = {
     printer: bannerInfo.consumableStatus ? {
@@ -1556,10 +2204,13 @@ async function inspectDevice(ip, mac = null, vendor = null, hostname = null) {
       location: ssdpInfo.location,
       rawXml: ssdpInfo.rawXml
     } : null,
-    cast: bannerInfo.castInfo || null
+    cast: bannerInfo.castInfo || null,
+    wsd: wsdInfo,
+    tls: tlsCert,
+    dhcp: dhcpInfo
   };
 
-  const openWebPorts = portResults.filter(p => p.open && [80, 443, 8080, 8443].includes(p.port)).map(p => p.port);
+  const openWebPorts = openPortNums.filter(p => [80, 443, 8080, 8443].includes(p));
   let webPortal = mdnsInfo?.adminUrl || null;
   if (!webPortal) {
     if (openWebPorts.includes(443)) webPortal = `https://${ip}`;
@@ -1571,11 +2222,16 @@ async function inspectDevice(ip, mac = null, vendor = null, hostname = null) {
     networkCapabilities.push({ id: 'web', label: 'Web Management Portal', icon: 'Globe', url: webPortal });
   }
 
-  const serialNumber = snmpRes?.serialNumber || null;
-  const firmware = snmpRes?.firmware || bannerInfo.firmwareVersion || null;
-  const modelName = snmpRes?.model || bannerInfo.title || mdnsInfo?.model || ssdpInfo?.model || null;
+  const securityAudit = evaluateDeviceSecurity({
+    openPorts: openAllPorts,
+    tlsCert,
+    isRandomized
+  });
 
-  const openAllPorts = portResults.filter(p => p.open);
+  const serialNumber = snmpRes?.serialNumber || tlsCert?.serialNumber || null;
+  const firmware = snmpRes?.firmware || bannerInfo.firmwareVersion || null;
+  const modelName = snmpRes?.model || bannerInfo.title || mdnsInfo?.model || ssdpInfo?.model || tlsCnName || null;
+
   const isResponding = Boolean(pingRes.alive || (netbiosRes && netbiosRes.name) || openAllPorts.length > 0);
 
   return {
@@ -1593,10 +2249,16 @@ async function inspectDevice(ip, mac = null, vendor = null, hostname = null) {
       mdns: mdnsInfo?.name || null,
       netbios: netbiosRes?.name || null,
       workgroup: netbiosRes?.workgroup || null,
-      hostname: mdnsInfo?.hostname || hostname || null,
+      llmnr: llmnrInfo?.hostname || null,
+      dhcp: dhcpInfo?.hostname || null,
+      wsd: wsdInfo?.name || (wsdInfo?.categories?.[0] || null),
+      tlsCn: tlsCnName,
+      hostname: mdnsInfo?.hostname || effectiveHostname || null,
       webTitle: bannerInfo.title || null
     },
     osFingerprint,
+    securityAudit,
+    tlsCertificate: tlsCert,
     ports: {
       all: portResults,
       openCount: openAllPorts.length,
@@ -1613,6 +2275,7 @@ async function inspectDevice(ip, mac = null, vendor = null, hostname = null) {
     deviceSpecific,
     mdns: mdnsInfo,
     ssdp: ssdpInfo,
+    wsd: wsdInfo,
     inspectedAt: new Date().toISOString(),
     durationMs: Date.now() - startTime
   };
@@ -1643,10 +2306,32 @@ async function scanLan(options = { sweep: true }) {
   }
 
   startPermanentBackgroundListeners(localIp !== '127.0.0.1' ? localIp : null);
+  if (bgWsdSocket) sendWsdProbeBurst(bgWsdSocket);
 
-  // 2. Detect default gateway
-  const gwInfo = await getDefaultGateway();
+  // 2. Detect default gateway & active local connections (netstat) in parallel
+  const [gwInfo, liveNetstat] = await Promise.all([
+    getDefaultGateway(),
+    getLiveConnections().catch(() => null)
+  ]);
   const gatewayIp = gwInfo?.gatewayIp || (localIp !== '127.0.0.1' ? `${localIp.split('.').slice(0, 3).join('.')}.1` : '192.168.1.1');
+
+  // Map active local sockets to LAN IPs
+  const activeSocketsByIp = {};
+  if (liveNetstat && Array.isArray(liveNetstat.connections)) {
+    for (const conn of liveNetstat.connections) {
+      const remIp = conn.remoteAddress;
+      if (remIp && remIp !== localIp && remIp !== '127.0.0.1') {
+        if (!activeSocketsByIp[remIp]) activeSocketsByIp[remIp] = [];
+        activeSocketsByIp[remIp].push({
+          protocol: conn.protocol || 'TCP',
+          localPort: conn.localPort,
+          remotePort: conn.remotePort,
+          state: conn.state || 'ESTABLISHED',
+          process: conn.processName || null
+        });
+      }
+    }
+  }
 
   // 3. Sweep subnet, discover SSDP and mDNS in parallel (or use persistent caches on quick scan)
   let ssdpMap = { ...persistentSsdpCache };
@@ -1696,7 +2381,6 @@ async function scanLan(options = { sweep: true }) {
   const rawArp = await getArpTable();
 
   // 5. Build device list
-  // Identify Gateway device
   let gatewayMac = '';
   const gwEntry = rawArp.find(e => e.ip === gatewayIp);
   if (gwEntry) {
@@ -1715,8 +2399,11 @@ async function scanLan(options = { sweep: true }) {
     isThisDevice: false,
     latency: null,
     type: 'dynamic',
+    activeConnections: activeSocketsByIp[gatewayIp] || [],
+    activeConnectionsCount: (activeSocketsByIp[gatewayIp] || []).length,
     ssdp: ssdpMap[gatewayIp] || null,
-    mdns: mdnsMap[gatewayIp] || null
+    mdns: mdnsMap[gatewayIp] || null,
+    wsd: persistentWsdCache[gatewayIp] || null
   };
 
   // Identify "This Device" (host PC running VNI)
@@ -1733,6 +2420,8 @@ async function scanLan(options = { sweep: true }) {
     isAlive: true,
     latency: 0,
     type: 'local',
+    activeConnections: [],
+    activeConnectionsCount: Object.values(activeSocketsByIp).reduce((acc, arr) => acc + arr.length, 0),
     osFingerprint: {
       osName: os.platform() === 'win32' ? 'Microsoft Windows (10 / 11)' : (os.platform() === 'darwin' ? 'Apple macOS' : 'Linux Desktop'),
       osFamily: os.platform() === 'win32' ? 'Windows' : (os.platform() === 'darwin' ? 'Apple Darwin' : 'Linux'),
@@ -1755,8 +2444,11 @@ async function scanLan(options = { sweep: true }) {
     const { vendor, isRandomized } = lookupVendor(entry.mac);
     const ssdpInfo = ssdpMap[entry.ip];
     const mdnsInfo = mdnsMap[entry.ip];
+    const wsdInfo = persistentWsdCache[entry.ip];
+    const llmnrInfo = persistentLlmnrCache[entry.ip];
+    const dhcpInfo = persistentDhcpCache[entry.mac] || persistentDhcpCache[entry.ip];
 
-    const friendlyName = mdnsInfo?.name || ssdpInfo?.name || null;
+    const friendlyName = mdnsInfo?.name || ssdpInfo?.name || wsdInfo?.name || llmnrInfo?.hostname || dhcpInfo?.hostname || null;
     const modelName = mdnsInfo?.model || ssdpInfo?.model || null;
     const mdnsServices = mdnsInfo?.services || [];
 
@@ -1769,10 +2461,6 @@ async function scanLan(options = { sweep: true }) {
       isRandomized
     });
 
-    // Derive display hostname:
-    // 1. mDNS / SSDP friendly name if discovered
-    // 2. Specific vendor / appliance defaults
-    // 3. Raw IP
     let displayHostname = friendlyName || entry.ip;
     if (!friendlyName) {
       if (vendor.includes('Zaptec')) displayHostname = 'Zaptec Go (EV Charger)';
@@ -1797,6 +2485,11 @@ async function scanLan(options = { sweep: true }) {
       isRandomized,
       latency: null,
       type: entry.type,
+      activeConnections: activeSocketsByIp[entry.ip] || [],
+      activeConnectionsCount: (activeSocketsByIp[entry.ip] || []).length,
+      wsd: wsdInfo || null,
+      llmnr: llmnrInfo || null,
+      dhcp: dhcpInfo || null,
       ssdp: ssdpInfo ? {
         name: ssdpInfo.name,
         model: ssdpInfo.model,
@@ -1884,19 +2577,30 @@ async function scanLan(options = { sweep: true }) {
           isRandomized: dev.isRandomized
         });
 
-        // Re-evaluate deviceType with enriched NetBIOS, open ports, and OS family
+        // Quick Security Score
+        dev.securityAudit = evaluateDeviceSecurity({
+          openPorts: openPortObjs,
+          tlsCert: null,
+          isRandomized: dev.isRandomized
+        });
+
+        // Re-evaluate deviceType with enriched NetBIOS, open ports, WSD, and OS family
         if (!dev.isGateway && !dev.isThisDevice) {
-          dev.deviceType = guessDeviceType({
-            vendor: dev.vendor,
-            isGateway: false,
-            isThisDevice: false,
-            hostname: dev.hostname,
-            mdnsServices: dev.mdns?.services || [],
-            openPorts: openPortObjs,
-            netbios: nbRes,
-            osFamily: dev.osFingerprint?.osFamily || '',
-            isRandomized: dev.isRandomized
-          });
+          if (dev.wsd?.categories?.some(c => c.includes('Computer')) && dev.deviceType === 'device') {
+            dev.deviceType = 'desktop';
+          } else {
+            dev.deviceType = guessDeviceType({
+              vendor: dev.vendor,
+              isGateway: false,
+              isThisDevice: false,
+              hostname: dev.hostname,
+              mdnsServices: dev.mdns?.services || [],
+              openPorts: openPortObjs,
+              netbios: nbRes,
+              osFamily: dev.osFingerprint?.osFamily || '',
+              isRandomized: dev.isRandomized
+            });
+          }
         }
 
         // Quick network capabilities tags
@@ -1907,6 +2611,7 @@ async function scanLan(options = { sweep: true }) {
         if (mdnsTypes.some(t => t.includes('spotify-connect'))) caps.push('Spotify');
         if (mdnsTypes.some(t => t.includes('ipp') || t.includes('printer')) || openPortNums.includes(631) || openPortNums.includes(9100)) caps.push('Print');
         if (openPortNums.includes(445)) caps.push('SMB');
+        if (dev.wsd) caps.push('WSD');
         if (dev.ssdp) caps.push('UPnP');
         if (dev.webPortal) caps.push('Web');
         dev.networkCapabilities = caps;
@@ -1919,12 +2624,131 @@ async function scanLan(options = { sweep: true }) {
     })
   );
 
+  // 7. ARP Spoofing / MITM Detection & Persistent Device History Update
+  const history = loadLanHistory();
+  const isInitialHistorySeed = Object.keys(history.devices || {}).length === 0;
+  const nowIso = new Date().toISOString();
+  const nowMs = Date.now();
+  const securityAlerts = [];
+
+  // Check if Gateway MAC changed compared to historical baseline
+  if (gatewayMac && gatewayMac !== 'Unknown') {
+    if (history.gatewayMac && history.gatewayMac !== gatewayMac) {
+      securityAlerts.push({
+        id: 'gw-mac-changed',
+        severity: 'high',
+        type: 'GATEWAY_MAC_CHANGED',
+        title: 'Gateway MAC Address Changed (Possible ARP Spoofing / Router Swap)',
+        description: `Gateway ${gatewayIp} previously had MAC ${history.gatewayMac}, now reporting ${gatewayMac}.`
+      });
+    }
+    history.gatewayMac = gatewayMac;
+  }
+
+  // Check for duplicate MAC addresses across different IPs in current ARP table
+  const macToIps = {};
+  for (const entry of rawArp) {
+    if (!entry.mac || entry.mac === 'FF-FF-FF-FF-FF-FF') continue;
+    if (!macToIps[entry.mac]) macToIps[entry.mac] = [];
+    if (!macToIps[entry.mac].includes(entry.ip)) macToIps[entry.mac].push(entry.ip);
+  }
+  for (const [macAddr, ips] of Object.entries(macToIps)) {
+    if (ips.length > 1) {
+      securityAlerts.push({
+        id: `dup-mac-${macAddr}`,
+        severity: 'high',
+        type: 'DUPLICATE_MAC',
+        title: 'Duplicate MAC Address Detected on Multiple IPs',
+        description: `MAC ${macAddr} is claimed by multiple IP addresses: ${ips.join(', ')}.`
+      });
+    }
+  }
+
+  // Update persistent device history & mark NEW devices
+  const currentMacSet = new Set();
+  for (const dev of [gatewayDevice, thisDevice, ...clientDevices]) {
+    const key = (dev.mac && dev.mac !== 'Unknown' && dev.mac !== 'Internal') ? dev.mac : dev.ip;
+    currentMacSet.add(key);
+
+    const existing = history.devices[key];
+    if (!existing) {
+      const firstSeen = nowIso;
+      dev.firstSeen = firstSeen;
+      dev.lastSeen = nowIso;
+      // Only badge as NEW after initial baseline scan so the very first run doesn't mark all 17 devices as NEW
+      dev.isNew = !isInitialHistorySeed;
+      history.devices[key] = {
+        key,
+        mac: dev.mac,
+        ip: dev.ip,
+        vendor: dev.vendor,
+        hostname: dev.hostname,
+        friendlyName: dev.friendlyName || null,
+        modelName: dev.modelName || null,
+        deviceType: dev.deviceType,
+        osFingerprint: dev.osFingerprint || null,
+        webPortal: dev.webPortal || null,
+        firstSeen,
+        lastSeen: nowIso,
+        isBaseline: isInitialHistorySeed
+      };
+    } else {
+      dev.firstSeen = existing.firstSeen || nowIso;
+      dev.lastSeen = nowIso;
+      const ageMs = nowMs - new Date(existing.firstSeen).getTime();
+      dev.isNew = !existing.isBaseline && ageMs < 15 * 60 * 1000;
+      history.devices[key] = {
+        ...existing,
+        ip: dev.ip,
+        vendor: (dev.vendor && dev.vendor !== 'Generic Device') ? dev.vendor : existing.vendor,
+        hostname: (dev.hostname && dev.hostname !== dev.ip) ? dev.hostname : existing.hostname,
+        friendlyName: dev.friendlyName || existing.friendlyName || null,
+        modelName: dev.modelName || existing.modelName || null,
+        deviceType: dev.deviceType !== 'device' ? dev.deviceType : (existing.deviceType || 'device'),
+        osFingerprint: dev.osFingerprint || existing.osFingerprint || null,
+        webPortal: dev.webPortal || existing.webPortal || null,
+        lastSeen: nowIso
+      };
+    }
+  }
+
+  // Build list of known offline historical devices (not in current ARP scan)
+  const offlineDevices = [];
+  for (const [key, histDev] of Object.entries(history.devices)) {
+    if (!currentMacSet.has(key) && !seenIps.has(histDev.ip)) {
+      offlineDevices.push({
+        id: `offline-${key.replace(/[^a-zA-Z0-9]/g, '-')}`,
+        ip: histDev.ip,
+        mac: histDev.mac,
+        vendor: histDev.vendor || 'Known Offline Device',
+        hostname: histDev.hostname || histDev.ip,
+        friendlyName: histDev.friendlyName || null,
+        modelName: histDev.modelName || null,
+        deviceType: histDev.deviceType || 'device',
+        osFingerprint: histDev.osFingerprint || null,
+        webPortal: null,
+        isGateway: false,
+        isThisDevice: false,
+        isAlive: false,
+        isOfflineHistory: true,
+        latency: null,
+        firstSeen: histDev.firstSeen,
+        lastSeen: histDev.lastSeen,
+        type: 'offline'
+      });
+    }
+  }
+
+  saveLanHistory(history);
+
   const durationMs = Date.now() - startTime;
 
   return {
     gateway: gatewayDevice,
     thisDevice,
     devices: clientDevices,
+    offlineDevices,
+    securityAlerts,
     totalDevices: clientDevices.length + 2,
     network: {
       interface: localIface || 'LAN',
@@ -1948,6 +2772,9 @@ module.exports = {
   querySnmp,
   probeTcpPorts,
   guessOsFingerprint,
-  startPermanentBackgroundListeners
+  startPermanentBackgroundListeners,
+  sendWakeOnLan,
+  scanCustomPorts,
+  inspectTlsCertificate
 };
 

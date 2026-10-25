@@ -21,7 +21,14 @@ import {
   FileCode,
   Printer,
   Sun,
-  Gamepad2
+  Gamepad2,
+  Power,
+  ShieldAlert,
+  ShieldCheck,
+  Lock,
+  Clock,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import XmlViewerModal from './XmlViewerModal';
 import MdnsViewerModal from './MdnsViewerModal';
@@ -144,6 +151,9 @@ export default function LanScannerPanel({
   const [xmlModalDevice, setXmlModalDevice] = useState(null);
   const [mdnsModalDevice, setMdnsModalDevice] = useState(null);
   const [inspectModalDevice, setInspectModalDevice] = useState(null);
+  const [wolStatus, setWolStatus] = useState({});
+  const [showOffline, setShowOffline] = useState(false);
+  const latencyHistoryRef = React.useRef({});
 
   // Sync nicknames across components
   React.useEffect(() => {
@@ -155,6 +165,49 @@ export default function LanScannerPanel({
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
+
+  // Track rolling latency history across scans for sparkline & jitter calculation
+  React.useEffect(() => {
+    if (!lanData) return;
+    const allDevs = [
+      ...(lanData.gateway ? [lanData.gateway] : []),
+      ...(lanData.devices || [])
+    ];
+    allDevs.forEach(d => {
+      if (!d?.ip || d.latency === null || d.latency === undefined) return;
+      const prev = latencyHistoryRef.current[d.ip] || [];
+      const next = [...prev, Number(d.latency)].slice(-12);
+      latencyHistoryRef.current[d.ip] = next;
+    });
+  }, [lanData]);
+
+  const getLatencyStats = (ip) => {
+    const hist = latencyHistoryRef.current[ip] || [];
+    if (hist.length < 2) return null;
+    let diffSum = 0;
+    for (let i = 1; i < hist.length; i++) {
+      diffSum += Math.abs(hist[i] - hist[i - 1]);
+    }
+    const jitter = Math.round(diffSum / (hist.length - 1));
+    return { history: hist, jitter };
+  };
+
+  const sendWol = async (dev, e) => {
+    if (e) e.stopPropagation();
+    if (!dev?.mac) return;
+    const key = dev.mac;
+    setWolStatus(prev => ({ ...prev, [key]: 'sending' }));
+    try {
+      const baseUrl = apiBase || 'http://localhost:3001';
+      await fetch(`${baseUrl}/api/wol?mac=${encodeURIComponent(dev.mac)}&ip=${encodeURIComponent(dev.ip || '')}`);
+      setWolStatus(prev => ({ ...prev, [key]: 'sent' }));
+    } catch (err) {
+      setWolStatus(prev => ({ ...prev, [key]: 'error' }));
+    }
+    setTimeout(() => {
+      setWolStatus(prev => ({ ...prev, [key]: null }));
+    }, 2800);
+  };
 
   const saveNickname = (key, val) => {
     const trimmed = (val || '').trim();
@@ -353,6 +406,21 @@ export default function LanScannerPanel({
 
       {/* Device List (Scrollable) */}
       <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+        {/* ARP Spoofing / Security Alerts Banner */}
+        {lanData?.securityAlerts?.length > 0 && (
+          <div className="p-2.5 rounded-xl bg-red-950/80 border border-red-500/60 text-red-200 space-y-1 shadow-lg">
+            {lanData.securityAlerts.map((alert, aIdx) => (
+              <div key={aIdx} className="flex items-start gap-2 text-[11px]">
+                <ShieldAlert size={14} className="text-red-400 shrink-0 mt-0.5 animate-pulse" />
+                <div>
+                  <span className="font-bold text-red-300 uppercase tracking-wide mr-1.5">{alert.type}:</span>
+                  <span>{alert.message}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Gateway Device (Always Pinned) */}
         {gateway && (
           <div
@@ -627,8 +695,18 @@ export default function LanScannerPanel({
                       <IconComponent size={15} />
                     </div>
                     <div className="truncate">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-bold text-xs text-white font-mono">{dev.ip}</span>
+                        {dev.isNew && (
+                          <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-amber-950 border border-amber-400/50 text-amber-300" title="First time seen on this LAN">
+                            NEW
+                          </span>
+                        )}
+                        {dev.deviceType === 'mesh_node' && (
+                          <span className="px-1 py-0.2 rounded text-[8px] font-bold bg-teal-950 border border-teal-500/40 text-teal-300" title="Wi-Fi Mesh Satellite / Access Point">
+                            MESH
+                          </span>
+                        )}
                         {dev.isRandomized && (
                           <span className="px-1 py-0.2 rounded text-[8px] bg-purple-950/80 border border-purple-500/40 text-purple-300" title="Private MAC (Apple / Android privacy feature)">
                             PRIVATE MAC
@@ -637,6 +715,25 @@ export default function LanScannerPanel({
                         {customName && (
                           <span className="px-1 py-0.2 rounded text-[8px] bg-amber-950/80 border border-amber-500/40 text-amber-300">
                             NICKNAME
+                          </span>
+                        )}
+                        {dev.securityAudit?.grade && (
+                          <span
+                            className={`px-1 py-0.2 rounded text-[8px] font-bold border ${
+                              dev.securityAudit.score >= 85
+                                ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300'
+                                : dev.securityAudit.score >= 65
+                                  ? 'bg-amber-950/80 border-amber-500/40 text-amber-300'
+                                  : 'bg-red-950/80 border-red-500/50 text-red-300'
+                            }`}
+                            title={`Security Score: ${dev.securityAudit.score}/100 (${dev.securityAudit.status})`}
+                          >
+                            SEC {dev.securityAudit.grade}
+                          </span>
+                        )}
+                        {dev.activeConnectionsCount > 0 && (
+                          <span className="px-1 py-0.2 rounded text-[8px] font-mono font-bold bg-emerald-950/80 border border-emerald-500/40 text-emerald-300" title={`${dev.activeConnectionsCount} active local socket(s) with this PC`}>
+                            ⚡{dev.activeConnectionsCount}
                           </span>
                         )}
                       </div>
@@ -698,10 +795,16 @@ export default function LanScannerPanel({
                         </div>
                       )}
 
-                      {/* Model & mDNS Services */}
+                      {/* Model & TLS Certificate CN */}
                       {dev.modelName && dev.modelName !== devTitle && (
                         <div className="text-[10px] text-gray-400 truncate mt-0.5">
                           Model: {dev.modelName}
+                        </div>
+                      )}
+                      {dev.tlsCertificate?.commonName && (
+                        <div className="text-[10px] text-indigo-300/90 truncate mt-0.5 flex items-center gap-1" title={`TLS Certificate Issuer: ${dev.tlsCertificate.issuerName || 'Self-Signed'}`}>
+                          <Lock size={9} className="text-indigo-400 shrink-0" />
+                          <span>TLS: {dev.tlsCertificate.commonName}</span>
                         </div>
                       )}
 
@@ -737,13 +840,43 @@ export default function LanScannerPanel({
                   </div>
 
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                      dev.latency !== null
-                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'
-                        : 'bg-gray-800 text-gray-500'
-                    }`}>
-                      {dev.latency !== null ? (dev.latency === 1 ? '<1 ms' : `${dev.latency} ms`) : (dev.isAlive ? 'online' : 'silent')}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {/* Rolling Latency Sparkline & Jitter */}
+                      {(() => {
+                        const stats = getLatencyStats(dev.ip);
+                        if (!stats) return null;
+                        const maxVal = Math.max(...stats.history, 10);
+                        const minVal = Math.min(...stats.history, 0);
+                        const range = Math.max(maxVal - minVal, 1);
+                        const points = stats.history.map((v, i) => {
+                          const x = (i / (stats.history.length - 1)) * 36;
+                          const y = 12 - ((v - minVal) / range) * 10;
+                          return `${x.toFixed(1)},${y.toFixed(1)}`;
+                        }).join(' ');
+                        return (
+                          <div className="flex items-center gap-1 bg-gray-950/80 border border-gray-800 px-1.5 py-0.5 rounded" title={`Jitter: ±${stats.jitter}ms (${stats.history.length} samples)`}>
+                            <svg width="36" height="14" className="overflow-visible">
+                              <polyline
+                                fill="none"
+                                stroke="#10b981"
+                                strokeWidth="1.4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                points={points}
+                              />
+                            </svg>
+                            <span className="text-[8px] font-mono text-gray-400">±{stats.jitter}ms</span>
+                          </div>
+                        );
+                      })()}
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                        dev.latency !== null
+                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-gray-800 text-gray-500'
+                      }`}>
+                        {dev.latency !== null ? (dev.latency === 1 ? '<1 ms' : `${dev.latency} ms`) : (dev.isAlive ? 'online' : 'silent')}
+                      </span>
+                    </div>
                     <div className="flex items-center gap-1 font-mono text-[10px] bg-gray-950/90 border border-gray-700/80 px-2 py-0.5 rounded text-gray-200">
                       <span className="text-[9px] text-gray-400 font-bold">MAC:</span>
                       <span className="font-bold tracking-wider text-amber-300/90">{dev.mac}</span>
@@ -764,11 +897,28 @@ export default function LanScannerPanel({
                         setInspectModalDevice(dev);
                       }}
                       className="px-1.5 py-0.5 rounded bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/30 hover:border-cyan-400/50 text-cyan-300 hover:text-cyan-100 transition flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
-                      title="Run deep device inspection & fingerprinting (12/12 features: OS, SNMP, Uptime, Ports, etc.)"
+                      title="Run deep device inspection & fingerprinting (OS, SNMP, Uptime, Ports, Security, TLS)"
                     >
                       <Cpu size={11} className="text-cyan-400" />
                       <span className="text-[10px] font-semibold">Inspect</span>
                     </button>
+                    {dev.mac && dev.mac !== '00-00-00-00-00-00' && (
+                      <button
+                        type="button"
+                        onClick={(e) => sendWol(dev, e)}
+                        className={`px-1.5 py-0.5 rounded border transition flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0 ${
+                          wolStatus[dev.mac] === 'sent'
+                            ? 'bg-emerald-950 border-emerald-500/50 text-emerald-300'
+                            : 'bg-amber-950/60 hover:bg-amber-900/70 border-amber-500/30 hover:border-amber-400/60 text-amber-300'
+                        }`}
+                        title="Send Wake-on-LAN (WoL) Magic Packet"
+                      >
+                        <Power size={10} />
+                        <span className="text-[10px] font-semibold">
+                          {wolStatus[dev.mac] === 'sent' ? 'WoL Sent!' : 'Wake'}
+                        </span>
+                      </button>
+                    )}
                     {dev.mdns && (
                       <button
                         type="button"
@@ -868,6 +1018,63 @@ export default function LanScannerPanel({
               </div>
             );
           })
+        )}
+
+        {/* Offline Known Devices Section (from persistent history) */}
+        {lanData?.offlineDevices?.length > 0 && (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={() => setShowOffline(!showOffline)}
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-gray-900/70 hover:bg-gray-900 border border-gray-800 text-[10px] font-bold text-gray-400 hover:text-gray-200 transition cursor-pointer"
+            >
+              <div className="flex items-center gap-1.5 uppercase tracking-wider">
+                <Clock size={12} className="text-gray-500" />
+                <span>Offline Known Devices ({lanData.offlineDevices.length})</span>
+              </div>
+              {showOffline ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+
+            {showOffline && (
+              <div className="mt-2 space-y-1.5">
+                {lanData.offlineDevices.map(offDev => {
+                  const customName = nicknames[offDev.mac] || nicknames[offDev.ip];
+                  const title = customName || offDev.hostname || offDev.vendor || offDev.ip;
+                  const lastSeenStr = offDev.lastSeen ? new Date(offDev.lastSeen).toLocaleString() : 'Previously seen';
+                  return (
+                    <div
+                      key={offDev.id}
+                      className="p-2 rounded-xl bg-gray-950/60 border border-gray-800/70 opacity-75 hover:opacity-100 transition flex items-center justify-between gap-2"
+                    >
+                      <div className="truncate">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono font-bold text-gray-400">{offDev.ip}</span>
+                          <span className="px-1 py-0.2 rounded text-[8px] font-mono bg-gray-900 border border-gray-700 text-gray-500">
+                            OFFLINE
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-gray-300 truncate">{title}</div>
+                        <div className="text-[9px] text-gray-500 font-mono">
+                          MAC: {offDev.mac} • Last seen: {lastSeenStr}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => sendWol(offDev, e)}
+                          className="px-2 py-1 rounded bg-amber-950/70 hover:bg-amber-900 border border-amber-500/40 text-amber-300 text-[10px] font-semibold flex items-center gap-1 cursor-pointer"
+                          title="Wake sleeping/offline device via Wake-on-LAN (Magic Packet)"
+                        >
+                          <Power size={10} />
+                          <span>{wolStatus[offDev.mac] === 'sent' ? 'WoL Sent!' : 'Wake (WoL)'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
