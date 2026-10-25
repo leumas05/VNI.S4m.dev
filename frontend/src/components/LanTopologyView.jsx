@@ -298,8 +298,8 @@ export default function LanTopologyView({
         const rows = Math.ceil(total / cols);
 
         const colSpacing = Math.max(CARD_WIDTH + MIN_GAP_X, Math.min(256, (width - 64) / (cols || 1)));
-        const busY = lowestBottomY + 86;
-        const startY = busY + 78;
+        const busY = lowestBottomY + 82;
+        const startY = busY + 104;
         const rowSpacing = 128;
 
         const busHalfWidth = Math.max(220, ((cols - 1) * colSpacing) / 2 + CARD_WIDTH / 2);
@@ -335,6 +335,8 @@ export default function LanTopologyView({
                 color: '#10b981',
                 isAlive: true,
                 activeTraffic: true,
+                labelX: nodeX,
+                labelY: nodeY - 62,
                 linkLabel: `⚡${dev.activeConnectionsCount} SOCKET${dev.activeConnectionsCount > 1 ? 'S' : ''}`
               });
             }
@@ -344,7 +346,7 @@ export default function LanTopologyView({
 
       return { nodes, links, subnetBus };
     } else {
-      // Radial Hub-and-Spoke Layout
+      // Radial Hub-and-Spoke Layout (Zero-Collision Dynamic Rings)
       const centerY = height / 2;
 
       // Router in center
@@ -355,8 +357,8 @@ export default function LanTopologyView({
         isGateway: true
       });
 
-      // WAN Cloud placed above
-      const wanDist = 180;
+      // WAN Cloud placed directly above Router on inner dedicated clearance
+      const wanDist = 175;
       nodes.push({
         id: 'wan-cloud',
         x: centerX,
@@ -369,8 +371,8 @@ export default function LanTopologyView({
       });
 
       links.push({
-        from: { x: centerX, y: centerY - 35, devId: gateway.id },
-        to: { x: centerX, y: centerY - wanDist + 25, devId: 'wan-cloud' },
+        from: { x: centerX, y: centerY - 46, devId: gateway.id },
+        to: { x: centerX, y: centerY - wanDist + 26, devId: 'wan-cloud' },
         color: '#6366f1',
         isMainTrunk: true,
         isAlive: true,
@@ -382,33 +384,92 @@ export default function LanTopologyView({
       clientDevices.forEach(d => allClients.push(d));
 
       const total = allClients.length;
-      const useDualOrbit = total > 8;
-      const baseRadius = Math.max(260, Math.min(340, width * 0.28));
+      if (total > 0) {
+        // Leave an angular gap around the top (-PI/2) so client cards never collide with the WAN Cloud node
+        const topGapRad = 0.56; // ~32 deg clearance on each side of top vertical axis
+        const usableArc = 2 * Math.PI - topGapRad * 2;
+        const startArc = -Math.PI / 2 + topGapRad;
 
-      allClients.forEach((dev, idx) => {
-        const isOuter = useDualOrbit && (idx % 2 === 1);
-        const radiusX = isOuter ? baseRadius + 160 : baseRadius;
-        const radiusY = isOuter ? (baseRadius + 160) * 0.76 : baseRadius * 0.76;
+        // Place up to 8 cards on Ring 1, and remaining cards on Ring 2 (or Ring 3 for huge networks)
+        const ring1Max = 8;
+        const ring1Items = allClients.slice(0, ring1Max);
+        const ring2Items = allClients.slice(ring1Max);
 
-        const angle = (idx / (total || 1)) * (2 * Math.PI) - Math.PI / 2 + 0.25;
-        const nodeX = centerX + Math.cos(angle) * radiusX;
-        const nodeY = centerY + Math.sin(angle) * radiusY;
+        const placeRing = (items, ringIndex) => {
+          const count = items.length;
+          if (count === 0) return;
 
-        nodes.push({
-          ...dev,
-          x: nodeX,
-          y: nodeY
+          // Ensure circumference is wide enough so 216x92 cards never overlap horizontally or vertically
+          const minRadiusByCount = (count * 195) / usableArc;
+          const baseR = ringIndex === 0 ? Math.max(330, minRadiusByCount) : Math.max(580, minRadiusByCount);
+          const radiusX = baseR * 1.12;
+          const radiusY = baseR * 0.88;
+
+          items.forEach((dev, idx) => {
+            const frac = count === 1 ? 0.5 : idx / (count - 1);
+            const angle = startArc + frac * usableArc;
+            const nodeX = centerX + Math.cos(angle) * radiusX;
+            const nodeY = centerY + Math.sin(angle) * radiusY;
+
+            nodes.push({
+              ...dev,
+              x: nodeX,
+              y: nodeY
+            });
+
+            links.push({
+              from: { x: centerX, y: centerY, devId: gateway.id },
+              to: { x: nodeX, y: nodeY, devId: dev.id },
+              color: getDeviceColor(dev.deviceType, dev.isThisDevice, dev.isGateway),
+              isThisDevice: dev.isThisDevice,
+              isAlive: dev.isAlive,
+              activeTraffic: dev.isThisDevice || (dev.activeConnectionsCount || 0) > 0
+            });
+          });
+        };
+
+        placeRing(ring1Items, 0);
+        placeRing(ring2Items, 1);
+
+        // Final iterative bounding-box relaxation pass to guarantee zero card overlap in radial mode
+        const CARD_W = 232; // 216 + 16px margin
+        const CARD_H = 108; // 92 + 16px margin
+        for (let iter = 0; iter < 12; iter++) {
+          for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+              const a = nodes[i];
+              const b = nodes[j];
+              const dx = b.x - a.x;
+              const dy = b.y - a.y;
+              const overlapX = CARD_W - Math.abs(dx);
+              const overlapY = CARD_H - Math.abs(dy);
+              if (overlapX > 0 && overlapY > 0) {
+                const pushX = (overlapX / 2 + 2) * (dx >= 0 ? 1 : -1);
+                const pushY = (overlapY / 2 + 2) * (dy >= 0 ? 1 : -1);
+                // Keep router and wan-cloud anchored, push client nodes outward
+                const aFixed = a.isGateway || a.type === 'cloud';
+                const bFixed = b.isGateway || b.type === 'cloud';
+                if (overlapX < overlapY) {
+                  if (!aFixed) a.x -= pushX;
+                  if (!bFixed) b.x += pushX;
+                } else {
+                  if (!aFixed) a.y -= pushY;
+                  if (!bFixed) b.y += pushY;
+                }
+              }
+            }
+          }
+        }
+
+        // Sync radial link endpoints with relaxed node positions
+        links.forEach(l => {
+          const targetNode = nodes.find(n => n.id === l.to.devId);
+          if (targetNode && targetNode.type !== 'cloud') {
+            l.to.x = targetNode.x;
+            l.to.y = targetNode.y;
+          }
         });
-
-        links.push({
-          from: { x: centerX, y: centerY, devId: gateway.id },
-          to: { x: nodeX, y: nodeY, devId: dev.id },
-          color: getDeviceColor(dev.deviceType, dev.isThisDevice, dev.isGateway),
-          isThisDevice: dev.isThisDevice,
-          isAlive: dev.isAlive,
-          activeTraffic: dev.isThisDevice || (dev.activeConnectionsCount || 0) > 0
-        });
-      });
+      }
     }
 
     return { nodes, links };
@@ -505,24 +566,30 @@ export default function LanTopologyView({
                     />
                   </circle>
                 )}
-                {/* Optional Link Label Pill (e.g. BEST PING for THIS PC) */}
+                {/* Optional Link Label Pill (e.g. BEST PING for THIS PC, or SOCKET badge above target card) */}
                 {link.linkLabel && (
-                  <g transform={`translate(${(link.from.x + link.to.x) / 2}, ${(link.from.y + link.to.y) / 2})`}>
+                  <g
+                    transform={`translate(${
+                      link.labelX !== undefined ? link.labelX : (link.from.x + link.to.x) / 2
+                    }, ${
+                      link.labelY !== undefined ? link.labelY : (link.from.y + link.to.y) / 2
+                    })`}
+                  >
                     <rect
                       x={-54}
                       y={-9}
                       width={108}
                       height={18}
                       rx={9}
-                      fill="#082f49"
-                      stroke="#38bdf8"
+                      fill={link.labelX !== undefined ? '#064e3b' : '#082f49'}
+                      stroke={link.labelX !== undefined ? '#10b981' : '#38bdf8'}
                       strokeWidth={1}
                     />
                     <text
                       x={0}
                       y={3}
                       textAnchor="middle"
-                      fill="#7dd3fc"
+                      fill={link.labelX !== undefined ? '#6ee7b7' : '#7dd3fc'}
                       fontSize="8.5"
                       fontWeight="bold"
                       fontFamily="monospace"
@@ -768,17 +835,17 @@ export default function LanTopologyView({
                       </g>
                     )}
                     {!node.isGateway && node.isMeshTier && (
-                      <g transform={`translate(${cardWidth / 2 - 18}, ${-cardHeight / 2 + 15})`}>
-                        <rect x={-40} y={-8} width={40} height={15} rx={4} fill="#042f2e" stroke="#14b8a6" strokeWidth={0.8} />
-                        <text x={-20} y={3} textAnchor="middle" fill="#2dd4bf" fontSize={7.5} fontWeight="700" fontFamily="system-ui">
+                      <g transform={`translate(${cardWidth / 2 - 20}, ${-cardHeight / 2 + 15})`}>
+                        <rect x={-38} y={-8} width={38} height={15} rx={4} fill="#042f2e" stroke="#14b8a6" strokeWidth={0.8} />
+                        <text x={-19} y={3} textAnchor="middle" fill="#2dd4bf" fontSize={7.5} fontWeight="700" fontFamily="system-ui">
                           MESH
                         </text>
                       </g>
                     )}
                     {!node.isGateway && !node.isMeshTier && node.isNew && (
-                      <g transform={`translate(${cardWidth / 2 - 18}, ${-cardHeight / 2 + 15})`}>
-                        <rect x={-34} y={-8} width={34} height={15} rx={4} fill="#451a03" stroke="#f59e0b" strokeWidth={0.8} />
-                        <text x={-17} y={3} textAnchor="middle" fill="#fbbf24" fontSize={7.5} fontWeight="700" fontFamily="system-ui">
+                      <g transform={`translate(${cardWidth / 2 - 20}, ${-cardHeight / 2 + 15})`}>
+                        <rect x={-32} y={-8} width={32} height={15} rx={4} fill="#451a03" stroke="#f59e0b" strokeWidth={0.8} />
+                        <text x={-16} y={3} textAnchor="middle" fill="#fbbf24" fontSize={7.5} fontWeight="700" fontFamily="system-ui">
                           NEW
                         </text>
                       </g>
