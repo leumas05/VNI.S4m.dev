@@ -28,11 +28,13 @@ import {
   Lock,
   Clock,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  HelpCircle
 } from 'lucide-react';
 import XmlViewerModal from './XmlViewerModal';
 import MdnsViewerModal from './MdnsViewerModal';
 import DeviceInspectModal from './DeviceInspectModal';
+import LanGuideModal from './LanGuideModal';
 import { formatOsName } from '../utils/formatters';
 
 function getDeviceIcon(type) {
@@ -153,6 +155,7 @@ export default function LanScannerPanel({
   const [inspectModalDevice, setInspectModalDevice] = useState(null);
   const [wolStatus, setWolStatus] = useState({});
   const [showOffline, setShowOffline] = useState(false);
+  const [guideModalTab, setGuideModalTab] = useState(null);
   const latencyHistoryRef = React.useRef({});
 
   // Sync nicknames across components
@@ -336,6 +339,15 @@ export default function LanScannerPanel({
             >
               <Radio size={13} className={autoRefresh ? 'animate-pulse text-emerald-400' : ''} />
             </button>
+
+            <button
+              type="button"
+              onClick={() => setGuideModalTab('discovery')}
+              className="p-1.5 rounded-lg border bg-gray-800/80 hover:bg-emerald-950/60 border-gray-700 hover:border-emerald-500/50 text-gray-400 hover:text-emerald-300 text-xs transition cursor-pointer flex items-center gap-1"
+              title="Open LAN Intelligence Guide & Feature Manual"
+            >
+              <HelpCircle size={13} />
+            </button>
           </div>
         </div>
 
@@ -352,6 +364,37 @@ export default function LanScannerPanel({
           <div className="bg-gray-950/80 border border-gray-800/80 rounded-lg p-1.5">
             <span className="text-gray-500 block text-[9px] uppercase tracking-wider">Duration</span>
             <span className="text-sm font-bold text-sky-400">{lanData?.durationMs || 0}ms</span>
+          </div>
+        </div>
+
+        {/* Interactive Feature Guide Strip */}
+        <div className="mt-2 pt-2 border-t border-gray-800/70 flex items-center justify-between gap-1 text-[10px]">
+          <span className="text-gray-500 flex items-center gap-1 truncate">
+            <HelpCircle size={11} className="text-emerald-400 shrink-0" />
+            <span>How does it work?</span>
+          </span>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => setGuideModalTab('discovery')}
+              className="px-1.5 py-0.5 rounded bg-gray-800/80 hover:bg-emerald-950/80 border border-gray-700/80 hover:border-emerald-500/40 text-gray-300 hover:text-emerald-300 transition cursor-pointer"
+            >
+              Scanning
+            </button>
+            <button
+              type="button"
+              onClick={() => setGuideModalTab('actions')}
+              className="px-1.5 py-0.5 rounded bg-gray-800/80 hover:bg-cyan-950/80 border border-gray-700/80 hover:border-cyan-500/40 text-gray-300 hover:text-cyan-300 transition cursor-pointer"
+            >
+              Buttons
+            </button>
+            <button
+              type="button"
+              onClick={() => setGuideModalTab('badges')}
+              className="px-1.5 py-0.5 rounded bg-gray-800/80 hover:bg-amber-950/80 border border-gray-700/80 hover:border-amber-500/40 text-gray-300 hover:text-amber-300 transition cursor-pointer"
+            >
+              Badges
+            </button>
           </div>
         </div>
       </div>
@@ -1099,6 +1142,13 @@ export default function LanScannerPanel({
         onClose={() => setInspectModalDevice(null)}
         device={inspectModalDevice}
         apiBase={apiBase}
+      />
+
+      {/* LAN Guide & Reference Modal */}
+      <LanGuideModal
+        isOpen={!!guideModalTab}
+        initialTab={guideModalTab || 'discovery'}
+        onClose={() => setGuideModalTab(null)}
       />
     </div>
   );
