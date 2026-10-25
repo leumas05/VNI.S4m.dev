@@ -36,92 +36,13 @@ import MdnsViewerModal from './MdnsViewerModal';
 import DeviceInspectModal from './DeviceInspectModal';
 import LanGuideModal from './LanGuideModal';
 import { formatOsName } from '../utils/formatters';
-
-function getDeviceIcon(type) {
-  switch (type) {
-    case 'router':
-      return Router;
-    case 'desktop':
-    case 'computer':
-      return Laptop;
-    case 'mobile':
-      return Smartphone;
-    case 'printer':
-      return Printer;
-    case 'ev_charger':
-      return Zap;
-    case 'solar':
-      return Sun;
-    case 'tv':
-      return Tv;
-    case 'console':
-      return Gamepad2;
-    case 'server':
-    case 'nas':
-      return Server;
-    case 'mesh_node':
-    case 'network':
-      return Wifi;
-    case 'iot':
-    case 'smart_home':
-      return Cpu;
-    default:
-      return Wifi;
-  }
-}
-
-function getDeviceColor(type, isThisDevice, isGateway) {
-  if (isGateway) return '#10b981'; // Emerald
-  if (isThisDevice) return '#38bdf8'; // Sky blue
-  switch (type) {
-    case 'mobile':
-      return '#ec4899'; // Pink / Mobile
-    case 'printer':
-      return '#0ea5e9'; // Sky Blue / Printer
-    case 'ev_charger':
-      return '#eab308'; // Amber / EV Charger
-    case 'solar':
-      return '#f59e0b'; // Amber / Solar
-    case 'iot':
-    case 'smart_home':
-      return '#f59e0b'; // Amber / Smart Home
-    case 'tv':
-      return '#a855f7'; // Purple / Smart TV
-    case 'console':
-      return '#8b5cf6'; // Violet / Console
-    case 'server':
-    case 'nas':
-      return '#6366f1'; // Indigo
-    case 'computer':
-    case 'desktop':
-      return '#06b6d4'; // Cyan
-    case 'mesh_node':
-    case 'network':
-      return '#14b8a6'; // Teal
-    default:
-      return '#94a3b8'; // Slate
-  }
-}
-
-function formatDeviceType(type) {
-  const map = {
-    'router': 'Router',
-    'computer': 'PC / Laptop',
-    'desktop': 'Desktop PC',
-    'mobile': 'Mobile',
-    'printer': 'Printer',
-    'ev_charger': 'EV Charger',
-    'solar': 'Solar / Battery',
-    'iot': 'Smart Home IoT',
-    'tv': 'Smart TV',
-    'console': 'Game Console',
-    'server': 'Server / NAS',
-    'mesh_node': 'Mesh Node',
-    'network': 'Network Device',
-    'device': 'Client Device'
-  };
-  return map[type] || (type ? type.replace(/_/g, ' ') : 'Device');
-}
+import {
+  DEVICE_ICON_CATALOG,
+  getDeviceIcon,
+  getDeviceColor,
+  formatDeviceType,
+  resolveEffectiveDeviceType
+} from '../utils/deviceIcons';
 
 export default function LanScannerPanel({
   lanData,
@@ -148,6 +69,13 @@ export default function LanScannerPanel({
       return {};
     }
   });
+  const [customIcons, setCustomIcons] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('vni_lan_icons')) || {};
+    } catch (e) {
+      return {};
+    }
+  });
   const [editingKey, setEditingKey] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [xmlModalDevice, setXmlModalDevice] = useState(null);
@@ -158,11 +86,12 @@ export default function LanScannerPanel({
   const [guideModalTab, setGuideModalTab] = useState(null);
   const latencyHistoryRef = React.useRef({});
 
-  // Sync nicknames across components
+  // Sync nicknames and custom icons across components
   React.useEffect(() => {
     const handleStorage = () => {
       try {
         setNicknames(JSON.parse(localStorage.getItem('vni_lan_nicknames')) || {});
+        setCustomIcons(JSON.parse(localStorage.getItem('vni_lan_icons')) || {});
       } catch (e) {}
     };
     window.addEventListener('storage', handleStorage);
@@ -228,6 +157,20 @@ export default function LanScannerPanel({
     setEditingKey(null);
   };
 
+  const saveCustomIcon = (key, iconId) => {
+    setCustomIcons(prev => {
+      const next = { ...prev };
+      if (iconId) {
+        next[key] = iconId;
+      } else {
+        delete next[key];
+      }
+      localStorage.setItem('vni_lan_icons', JSON.stringify(next));
+      window.dispatchEvent(new Event('storage'));
+      return next;
+    });
+  };
+
   const copyToClipboard = (text, id) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
@@ -242,27 +185,27 @@ export default function LanScannerPanel({
   // Filter client devices
   const filteredDevices = useMemo(() => {
     return devices.filter(dev => {
+      const customName = nicknames[dev.mac] || nicknames[dev.ip] || '';
+      const t = resolveEffectiveDeviceType(dev, customName, customIcons);
       if (filterType !== 'all') {
-        const t = dev.deviceType || '';
-        if (filterType === 'mobile' && t !== 'mobile') return false;
-        if (filterType === 'computer' && t !== 'computer' && t !== 'desktop') return false;
-        if (filterType === 'iot' && !['iot', 'ev_charger', 'solar', 'smart_home', 'printer'].includes(t)) return false;
-        if (filterType === 'console' && !['console', 'tv'].includes(t)) return false;
-        if (filterType === 'server' && !['server', 'nas'].includes(t)) return false;
+        if (filterType === 'mobile' && !['mobile', 'tablet', 'watch'].includes(t)) return false;
+        if (filterType === 'computer' && !['computer', 'desktop', 'laptop'].includes(t)) return false;
+        if (filterType === 'iot' && !['iot', 'ev_charger', 'solar', 'smart_home', 'light', 'plug', 'appliance', 'climate', 'camera', 'printer'].includes(t)) return false;
+        if (filterType === 'console' && !['console', 'tv', 'speaker'].includes(t)) return false;
+        if (filterType === 'server' && !['server', 'nas', 'mesh_node', 'switch'].includes(t)) return false;
       }
       if (!search.trim()) return true;
       const s = search.toLowerCase();
-      const customName = nicknames[dev.mac] || nicknames[dev.ip] || '';
       return (
         customName.toLowerCase().includes(s) ||
         (dev.ip || '').toLowerCase().includes(s) ||
         (dev.mac || '').toLowerCase().includes(s) ||
         (dev.vendor || '').toLowerCase().includes(s) ||
         (dev.hostname || '').toLowerCase().includes(s) ||
-        (dev.deviceType || '').toLowerCase().includes(s)
+        t.toLowerCase().includes(s)
       );
     });
-  }, [devices, filterType, search, nicknames]);
+  }, [devices, filterType, search, nicknames, customIcons]);
 
   const activeCount = useMemo(() => {
     let count = 0;
@@ -708,12 +651,14 @@ export default function LanScannerPanel({
           </div>
         ) : (
           filteredDevices.map(dev => {
-            const IconComponent = getDeviceIcon(dev.deviceType);
-            const devColor = getDeviceColor(dev.deviceType, false, false);
-            const isSelected = selectedDevice?.id === dev.id;
             const customName = nicknames[dev.mac] || nicknames[dev.ip];
+            const effectiveType = resolveEffectiveDeviceType(dev, customName, customIcons);
+            const IconComponent = getDeviceIcon(effectiveType);
+            const devColor = getDeviceColor(effectiveType, false, false);
+            const isSelected = selectedDevice?.id === dev.id;
             const devTitle = customName || dev.hostname || dev.friendlyName || dev.vendor || dev.ip;
             const isEditing = editingKey === dev.mac || editingKey === dev.ip;
+            const currentCustomIcon = customIcons[dev.mac] || customIcons[dev.ip] || null;
 
             return (
               <div
@@ -782,35 +727,74 @@ export default function LanScannerPanel({
                       </div>
 
                       {isEditing ? (
-                        <div className="flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="text"
-                            autoFocus
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') saveNickname(dev.mac || dev.ip, editValue);
-                              if (e.key === 'Escape') setEditingKey(null);
-                            }}
-                            placeholder="Enter device nickname..."
-                            className="px-1.5 py-0.5 rounded bg-gray-950 border border-amber-500 text-xs text-white focus:outline-none w-36 font-sans"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => saveNickname(dev.mac || dev.ip, editValue)}
-                            className="p-1 rounded bg-amber-600 hover:bg-amber-500 text-white"
-                            title="Save Nickname"
-                          >
-                            <Check size={11} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingKey(null)}
-                            className="p-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-400"
-                            title="Cancel"
-                          >
-                            ✕
-                          </button>
+                        <div className="flex flex-col gap-1.5 mt-1.5 bg-gray-950/90 border border-gray-800 rounded-lg p-2" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              autoFocus
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveNickname(dev.mac || dev.ip, editValue);
+                                if (e.key === 'Escape') setEditingKey(null);
+                              }}
+                              placeholder="Enter device nickname..."
+                              className="px-2 py-0.5 rounded bg-gray-900 border border-amber-500/80 text-xs text-white focus:outline-none flex-1 font-sans"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => saveNickname(dev.mac || dev.ip, editValue)}
+                              className="p-1 rounded bg-amber-600 hover:bg-amber-500 text-white cursor-pointer"
+                              title="Save Nickname"
+                            >
+                              <Check size={11} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingKey(null)}
+                              className="p-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 cursor-pointer"
+                              title="Close"
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          {/* Custom Icon Picker */}
+                          <div className="pt-1 border-t border-gray-800/80">
+                            <div className="flex items-center justify-between text-[9px] text-gray-400 mb-1">
+                              <span>Select Device Icon ({DEVICE_ICON_CATALOG.length} types):</span>
+                              {currentCustomIcon && (
+                                <button
+                                  type="button"
+                                  onClick={() => saveCustomIcon(dev.mac || dev.ip, null)}
+                                  className="text-amber-400 hover:underline cursor-pointer"
+                                >
+                                  Reset to Auto
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-1 max-w-[230px]">
+                              {DEVICE_ICON_CATALOG.map(cat => {
+                                const CatIcon = cat.icon;
+                                const isActiveIcon = effectiveType === cat.id;
+                                return (
+                                  <button
+                                    key={cat.id}
+                                    type="button"
+                                    onClick={() => saveCustomIcon(dev.mac || dev.ip, cat.id)}
+                                    className={`p-1 rounded border transition cursor-pointer flex items-center justify-center ${
+                                      isActiveIcon
+                                        ? 'bg-amber-500/25 border-amber-400 text-amber-300 shadow-sm'
+                                        : 'bg-gray-900 hover:bg-gray-800 border-gray-800 text-gray-400 hover:text-gray-200'
+                                    }`}
+                                    title={cat.label}
+                                  >
+                                    <CatIcon size={12} style={{ color: isActiveIcon ? cat.color : undefined }} />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5 mt-0.5">
@@ -930,7 +914,7 @@ export default function LanScannerPanel({
                 {/* Bottom Action strip */}
                 <div className="mt-2.5 pt-2 border-t border-gray-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px]">
                   <span className="text-gray-500 text-[10px] whitespace-nowrap shrink-0">
-                    {formatDeviceType(dev.deviceType)} • {dev.type}
+                    {formatDeviceType(effectiveType)} • {dev.type}
                   </span>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <button

@@ -33,72 +33,11 @@ import MdnsViewerModal from './MdnsViewerModal';
 import DeviceInspectModal from './DeviceInspectModal';
 import LanGuideModal from './LanGuideModal';
 import { formatOsName } from '../utils/formatters';
-
-function getDeviceIcon(type) {
-  switch (type) {
-    case 'router':
-      return Router;
-    case 'desktop':
-    case 'computer':
-      return Laptop;
-    case 'mobile':
-      return Smartphone;
-    case 'printer':
-      return Printer;
-    case 'ev_charger':
-      return Zap;
-    case 'solar':
-      return Sun;
-    case 'tv':
-      return Tv;
-    case 'console':
-      return Gamepad2;
-    case 'server':
-    case 'nas':
-      return Server;
-    case 'mesh_node':
-    case 'network':
-      return Wifi;
-    case 'iot':
-    case 'smart_home':
-      return Cpu;
-    default:
-      return Wifi;
-  }
-}
-
-function getDeviceColor(type, isThisDevice, isGateway) {
-  if (isGateway) return '#10b981'; // Emerald
-  if (isThisDevice) return '#38bdf8'; // Sky blue
-  switch (type) {
-    case 'mobile':
-      return '#ec4899'; // Pink
-    case 'printer':
-      return '#0ea5e9'; // Sky Blue
-    case 'ev_charger':
-      return '#eab308'; // Amber / EV Charger
-    case 'solar':
-      return '#f59e0b'; // Amber / Solar
-    case 'iot':
-    case 'smart_home':
-      return '#f59e0b'; // Amber
-    case 'tv':
-      return '#a855f7'; // Purple
-    case 'console':
-      return '#8b5cf6'; // Violet
-    case 'server':
-    case 'nas':
-      return '#6366f1'; // Indigo
-    case 'computer':
-    case 'desktop':
-      return '#06b6d4'; // Cyan
-    case 'mesh_node':
-    case 'network':
-      return '#14b8a6'; // Teal
-    default:
-      return '#94a3b8'; // Slate
-  }
-}
+import {
+  getDeviceIcon,
+  getDeviceColor,
+  resolveEffectiveDeviceType
+} from '../utils/deviceIcons';
 
 export default function LanTopologyView({
   lanData,
@@ -142,12 +81,20 @@ export default function LanTopologyView({
       return {};
     }
   });
+  const [customIcons, setCustomIcons] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('vni_lan_icons')) || {};
+    } catch (e) {
+      return {};
+    }
+  });
 
-  // Listen for storage changes if nicknames are updated in sidebar panel
+  // Listen for storage changes if nicknames or custom icons are updated in sidebar panel
   useEffect(() => {
     const handleStorage = () => {
       try {
         setNicknames(JSON.parse(localStorage.getItem('vni_lan_nicknames')) || {});
+        setCustomIcons(JSON.parse(localStorage.getItem('vni_lan_icons')) || {});
       } catch (e) {}
     };
     window.addEventListener('storage', handleStorage);
@@ -632,13 +579,14 @@ export default function LanTopologyView({
           {layoutNodes.nodes.map((node) => {
             const isCloud = node.type === 'cloud';
             const isSelected = selectedDevice?.id === node.id;
-            const IconComponent = isCloud ? Cloud : getDeviceIcon(node.deviceType);
-            const devColor = isCloud ? '#6366f1' : getDeviceColor(node.deviceType, node.isThisDevice, node.isGateway);
+            const nodeNick = !isCloud ? (nicknames[node.mac] || nicknames[node.ip]) : null;
+            const effectiveType = !isCloud ? resolveEffectiveDeviceType(node, nodeNick, customIcons) : 'cloud';
+            const IconComponent = isCloud ? Cloud : getDeviceIcon(effectiveType);
+            const devColor = isCloud ? '#6366f1' : getDeviceColor(effectiveType, node.isThisDevice, node.isGateway);
 
             const cardWidth = isCloud ? 150 : 216;
             const cardHeight = isCloud ? 52 : 92;
 
-            const nodeNick = !isCloud ? (nicknames[node.mac] || nicknames[node.ip]) : null;
             const cleanHostname = (!isCloud && node.hostname && node.hostname !== node.ip && !node.hostname.includes('Default Gateway') && !node.hostname.includes('This Computer'))
               ? node.hostname
               : null;

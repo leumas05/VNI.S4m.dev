@@ -228,15 +228,33 @@ function guessDeviceType({
   const servs = (mdnsServices || []).map(s => String(s).toLowerCase()).join(' ');
   const openPortNumbers = (openPorts || []).map(p => typeof p === 'object' ? p.port : p);
 
-  if (openPortNumbers.includes(631) || openPortNumbers.includes(9100) || servs.includes('print') || servs.includes('ipp') || v.includes('printer') || h.includes('printer') || h.includes('laserjet')) return 'printer';
-  if (h.includes('charger') || h.includes('evse') || h.includes('wallbox') || h.includes('easee') || h.includes('zaptec')) return 'ev_charger';
-  if (h.includes('solar') || h.includes('inverter') || h.includes('fronius') || h.includes('sungrow')) return 'solar';
+  // 1. Printer / Scanner
+  if (openPortNumbers.includes(631) || openPortNumbers.includes(9100) || openPortNumbers.includes(515) || servs.includes('print') || servs.includes('ipp') || v.includes('printer') || v.includes('brother') || v.includes('canon') || v.includes('epson') || /(?:printer|laserjet|officejet|deskjet|pixma|skrivare)/i.test(h)) {
+    return 'printer';
+  }
 
-  // Universal Mesh Node / Wi-Fi Access Point identification:
-  // Any non-gateway device from a networking hardware vendor (TP-Link, Netgear, ASUS, Ubiquiti, Cisco, Linksys, Eero, D-Link, Zyxel, MikroTik)
-  // that exposes router/AP management or DNS ports (53, 80, 443, 8080, 8443, 22) or advertises mesh/AP keywords
+  // 2. Security / IP Camera
+  if (openPortNumbers.includes(554) || openPortNumbers.includes(8554) || v.includes('hikvision') || v.includes('axis') || v.includes('reolink') || v.includes('dahua') || /(?:camera|ipcam|cam-|doorbell|ring-|arlo|kamera)/i.test(h)) {
+    return 'camera';
+  }
+
+  // 3. EV Charger & Solar / Energy
+  if (/(?:charger|evse|wallbox|easee|zaptec|laddbox|laddare)/i.test(h)) return 'ev_charger';
+  if (/(?:solar|inverter|fronius|sungrow|solaredge|goodwe|solcell|solpanel|batteri)/i.test(h)) return 'solar';
+
+  // 4. Smart Home Subcategories (Lighting, Plugs, Appliances, Climate, Hubs)
+  if (v.includes('philips hue') || /(?:hue|nanoleaf|lifx|wled|tradfri|light|lampa)/i.test(h)) return 'light';
+  if (v.includes('shelly') || v.includes('tuya') || /(?:shelly|tasmota|sonoff|smartplug|plug|uttag|relay)/i.test(h)) return 'plug';
+  if (/(?:oven|ugn|fridge|kyl|washer|tvatt|dishwasher|diskmaskin|dryer|microwave|appliance)/i.test(h)) return 'appliance';
+  if (/(?:thermostat|nest-thermostat|ecobee|sensibo|daikin|mitsubishi|hvac|heatpump|varmepump|klimat)/i.test(h)) return 'climate';
+  if (openPortNumbers.includes(8123) || servs.includes('homekit') || servs.includes('matter') || /(?:homeassistant|homebridge|dirigera|smartthings|hubitat|zigbee)/i.test(h)) {
+    return 'smart_home';
+  }
+
+  // 5. Universal Mesh Node / Wi-Fi Access Point / Switch identification
   const isNetworkVendor = /(?:tp-link|netgear|asus|cisco|ubiquiti|linksys|eero|d-link|zyxel|mikrotik|mercusys|aruba)/i.test(v);
   const hasRouterPorts = openPortNumbers.some(p => [53, 80, 443, 8080, 8443].includes(p));
+  if (/(?:switch|procurve|edgeswitch|unifi-switch)/i.test(h)) return 'switch';
   if (
     v.includes('mesh') ||
     /(?:mesh|deco|orbi|unifi|velop|aimesh|access-point|-ap\b|extender|repeater)/i.test(h) ||
@@ -245,7 +263,15 @@ function guessDeviceType({
     return 'mesh_node';
   }
 
-  // PC / Laptop / Workstation identification (NetBIOS workstation, SMB/RPC/RDP ports, Windows OS, or PC NIC vendors)
+  // 6. NAS Storage vs Linux/Virtual Server
+  if (v.includes('synology') || v.includes('qnap') || openPortNumbers.includes(5000) || openPortNumbers.includes(5001) || openPortNumbers.includes(2049) || /(?:synology|qnap|truenas|unraid|nas\b|diskstation)/i.test(h)) {
+    return 'nas';
+  }
+  if (v.includes('raspberry') || v.includes('vmware') || v.includes('qemu') || v.includes('virtualbox') || openPortNumbers.includes(8006) || openPortNumbers.includes(2375) || openPortNumbers.includes(9000) || /(?:server|proxmox|pihole|ubuntu-server|debian|homelab|raspberrypi)/i.test(h)) {
+    return 'server';
+  }
+
+  // 7. Desktop PC vs Laptop / Notebook
   if (
     (netbios && netbios.name) ||
     openPortNumbers.includes(135) ||
@@ -258,27 +284,44 @@ function guessDeviceType({
     v.includes('msi') ||
     v.includes('dell') ||
     v.includes('lenovo') ||
-    /(?:laptop|surface|desktop|macbook|imac|thinkpad|-pc\b|workstation)/i.test(h)
+    /(?:laptop|surface|desktop|macbook|imac|mac-mini|mac-studio|thinkpad|-pc\b|workstation|dator|skola)/i.test(h)
   ) {
-    return 'computer';
+    if (v.includes('msi') || /(?:desktop|imac|mac-mini|mac-studio|workstation|tower|stationar)/i.test(h)) {
+      return 'desktop';
+    }
+    return 'laptop';
   }
 
-  // Smartphone / Tablet identification
+  // 8. Tablet & Smartwatch vs Smartphone
+  if (/(?:ipad|tablet|galaxy-tab|tab-|surfplatta)/i.test(h)) return 'tablet';
+  if (/(?:apple-watch|watch|galaxy-watch|klocka)/i.test(h)) return 'watch';
   if (
     openPortNumbers.includes(62078) ||
-    /(?:iphone|ipad|galaxy|s2[0-5]|pixel|oneplus|redmi|phone|android)/i.test(h)
+    /(?:iphone|galaxy|s2[0-5]|pixel|oneplus|redmi|phone|android|mobil)/i.test(h)
   ) {
     return 'mobile';
   }
 
-  if (openPortNumbers.includes(8008) || openPortNumbers.includes(8009) || servs.includes('google cast') || servs.includes('android tv') || v.includes('tv') || v.includes('vestel') || v.includes('roku') || h.includes('tv') || h.includes('chromecast') || h.includes('bravia')) return 'tv';
-  if (v.includes('playstation') || v.includes('xbox') || v.includes('nintendo') || h.includes('playstation') || h.includes('xbox') || h.includes('switch')) return 'console';
-  if (servs.includes('spotify') || servs.includes('airplay audio') || v.includes('sonos') || v.includes('audio')) return 'iot';
-  if (v.includes('espressif') || v.includes('texas instruments') || v.includes('philips') || v.includes('iot') || v.includes('hue') || v.includes('shelly') || v.includes('tuya') || v.includes('amazon') || h.includes('iot')) return 'iot';
+  // 9. Smart TV vs Smart Speaker / Audio vs Game Console
+  if (v.includes('sonos') || /(?:sonos|homepod|echo-dot|echo|nest-audio|nest-mini|speaker|soundbar|hogtalare)/i.test(h)) {
+    return 'speaker';
+  }
+  if (openPortNumbers.includes(8008) || openPortNumbers.includes(8009) || servs.includes('google cast') || servs.includes('android tv') || v.includes('tv') || v.includes('vestel') || v.includes('earda') || v.includes('lg electronics') || v.includes('roku') || /(?:tv\b|chromecast|apple-tv|appletv|bravia|shield|firetv)/i.test(h)) {
+    return 'tv';
+  }
+  if ((servs.includes('spotify') || servs.includes('airplay')) && !servs.includes('google cast')) {
+    return 'speaker';
+  }
+  if (v.includes('playstation') || v.includes('xbox') || v.includes('nintendo') || /(?:playstation|ps5|ps4|xbox|nintendo|switch|steamdeck)/i.test(h)) {
+    return 'console';
+  }
+
+  // 10. Generic IoT / Network / Mobile Fallbacks
+  if (v.includes('espressif') || v.includes('texas instruments') || v.includes('philips') || v.includes('iot') || v.includes('amazon') || h.includes('iot')) return 'iot';
   if (isNetworkVendor) return 'mesh_node';
-  if (v.includes('nas') || v.includes('synology') || v.includes('qnap') || openPortNumbers.includes(5000) || openPortNumbers.includes(5001) || h.includes('nas') || h.includes('server')) return 'server';
+  if (openPortNumbers.includes(22) && !isRandomized) return 'server';
   if (v.includes('apple') || v.includes('samsung') || v.includes('xiaomi') || v.includes('private mac') || isRandomized) return 'mobile';
-  if (v.includes('microsoft') || v.includes('hp')) return 'computer';
+  if (v.includes('microsoft') || v.includes('hp')) return 'laptop';
 
   return 'device';
 }
