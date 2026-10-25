@@ -1,8 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Download, Play, History as HistoryIcon, ArrowRightLeft, X, MapPin, Globe, Hash, Map, Building, Mail, AlignJustify, Briefcase, Radio, Network } from 'lucide-react';
+import { Activity, Download, Play, History as HistoryIcon, ArrowRightLeft, X, MapPin, Globe, Hash, Map, Building, Mail, AlignJustify, Briefcase, Radio, Network, Clock, Trash2, Copy, Check } from 'lucide-react';
 import HopCard from './HopCard';
 import LiveRadarPanel from './LiveRadarPanel';
 import LanScannerPanel from './LanScannerPanel';
+
+function formatDurationRange(startMs, endMs) {
+  if (!startMs) return '';
+  const diffSec = Math.max(1, Math.floor(((endMs || Date.now()) - startMs) / 1000));
+  if (diffSec < 60) return `${diffSec}s`;
+  const mins = Math.floor(diffSec / 60);
+  if (mins < 60) return `${mins}m ${diffSec % 60}s`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ${mins % 60}m`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ${hrs % 24}h`;
+}
 
 export default function Sidebar({
   startTrace,
@@ -16,6 +28,8 @@ export default function Sidebar({
   compareMode,
   compareHops,
   myLocation,
+  ipHistory = [],
+  onClearIpHistory,
   openPrivacy,
   onPing,
   onDig,
@@ -45,6 +59,7 @@ export default function Sidebar({
   const [input, setInput] = useState('');
   const [showHistory, setShowHistory] = useState(false);
   const [showMyInfo, setShowMyInfo] = useState(false);
+  const [copiedIpId, setCopiedIpId] = useState(null);
 
   const onSubmit = (e) => {
     e.preventDefault();
@@ -110,10 +125,15 @@ export default function Sidebar({
             {myLocation && (
                 <button
                    onClick={() => setShowMyInfo(!showMyInfo)}
-                   className="text-gray-400 text-xs flex items-center bg-gray-800 px-3 py-1.5 hover:text-emerald-400 hover:border-emerald-500 rounded border border-gray-700 font-mono transition-colors"
-                   title="View my IP details"
+                   className="text-gray-400 text-xs flex items-center gap-1.5 bg-gray-800 px-3 py-1.5 hover:text-emerald-400 hover:border-emerald-500 rounded border border-gray-700 font-mono transition-colors cursor-pointer"
+                   title="View my IP details & IP History"
                 >
-                   IP: {myLocation.query}
+                   <span>IP: {myLocation.query}</span>
+                   {ipHistory.length > 1 && (
+                     <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-bold" title={`${ipHistory.length} recorded public IPs in history`}>
+                       {ipHistory.length}
+                     </span>
+                   )}
                 </button>
             )}
             <button
@@ -126,10 +146,10 @@ export default function Sidebar({
       </div>
 
       {showMyInfo && myLocation && (
-          <div className="mb-4 animate-in slide-in-from-top-2 relative">
+          <div className="mb-4 animate-in slide-in-from-top-2 relative max-h-[55vh] overflow-y-auto pr-1 custom-scrollbar">
              <div className="flex justify-between items-center mb-2 px-1">
                  <h3 className="text-gray-500 uppercase text-[10px] font-bold tracking-wider">Your Connection</h3>
-                 <button onClick={() => setShowMyInfo(false)} className="text-gray-500 hover:text-gray-300 transition">
+                 <button onClick={() => setShowMyInfo(false)} className="text-gray-500 hover:text-gray-300 transition cursor-pointer">
                     <X size={14} />
                  </button>
              </div>
@@ -149,14 +169,106 @@ export default function Sidebar({
                       isp: myLocation.isp,
                       asn: myLocation.as,
                       lat: myLocation.lat,
-                      lon: myLocation.lon
+                      lon: myLocation.lon,
+                      ...(myLocation.consensus || {})
                    }
                 }}
                 isSelected={true}
                 onClick={() => {}}
                 onMouseEnter={() => {}}
                 onMouseLeave={() => {}}
+                onPing={onPing}
+                onDig={onDig}
              />
+
+             {/* User Public IP Address History Log (localStorage) */}
+             {ipHistory && ipHistory.length > 0 && (
+               <div className="mt-2.5 p-3 bg-gray-950/90 border border-gray-800 rounded-xl text-xs font-mono">
+                 <div className="flex items-center justify-between mb-2">
+                   <div className="flex items-center gap-1.5 text-emerald-400 font-semibold text-[11px] uppercase tracking-wider">
+                     <Clock size={12} />
+                     <span>Your Public IP History ({ipHistory.length})</span>
+                   </div>
+                   {ipHistory.length > 1 && onClearIpHistory && (
+                     <button
+                       type="button"
+                       onClick={onClearIpHistory}
+                       className="text-[10px] text-gray-500 hover:text-red-400 flex items-center gap-1 transition cursor-pointer"
+                       title="Clear past IP history"
+                     >
+                       <Trash2 size={11} />
+                       <span>Clear Past</span>
+                     </button>
+                   )}
+                 </div>
+
+                 <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1 custom-scrollbar">
+                   {ipHistory.map((item, idx) => {
+                     const isCurrent = idx === 0 && !item.endedAt;
+                     const startStr = item.firstSeen ? new Date(item.firstSeen).toLocaleString() : 'Unknown';
+                     const endStr = item.endedAt
+                       ? new Date(item.endedAt).toLocaleString()
+                       : 'Active Now';
+                     const durationStr = formatDurationRange(item.firstSeen, item.endedAt || Date.now());
+
+                     return (
+                       <div
+                         key={item.id || `${item.ip}-${idx}`}
+                         className={`p-2 rounded-lg border flex flex-col gap-1 transition ${
+                           isCurrent
+                             ? 'bg-emerald-950/25 border-emerald-500/40'
+                             : 'bg-gray-900/60 border-gray-800/80'
+                         }`}
+                       >
+                         <div className="flex items-center justify-between gap-2">
+                           <div className="flex items-center gap-1.5 truncate">
+                             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCurrent ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'}`}></span>
+                             <span className="font-bold text-white text-xs">{item.ip}</span>
+                             {isCurrent && (
+                               <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-950 border border-emerald-500/40 text-emerald-300 uppercase">
+                                 Current
+                               </span>
+                             )}
+                           </div>
+
+                           <div className="flex items-center gap-1.5 shrink-0">
+                             {durationStr && (
+                               <span className="text-[10px] px-1.5 py-0.2 rounded bg-gray-900 border border-gray-800 text-sky-300" title="Duration this IP was held">
+                                 ⏱ {durationStr}
+                               </span>
+                             )}
+                             <button
+                               type="button"
+                               onClick={() => {
+                                 navigator.clipboard.writeText(item.ip);
+                                 setCopiedIpId(item.id || idx);
+                                 setTimeout(() => setCopiedIpId(null), 1500);
+                               }}
+                               className="p-1 rounded bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-400 hover:text-white transition cursor-pointer"
+                               title={`Copy ${item.ip}`}
+                             >
+                               {copiedIpId === (item.id || idx) ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+                             </button>
+                           </div>
+                         </div>
+
+                         <div className="flex items-center justify-between text-[10px] text-gray-400 gap-2">
+                           <span className="truncate">
+                             {item.city ? `${item.city}, ` : ''}{item.countryCode || item.country || ''}
+                             {item.isp ? ` • ${item.isp}` : ''}
+                           </span>
+                         </div>
+
+                         <div className="text-[10px] text-gray-500 flex items-center justify-between border-t border-gray-800/60 pt-1 mt-0.5">
+                           <span>From: <span className="text-gray-300">{startStr}</span></span>
+                           <span>To: <span className={isCurrent ? 'text-emerald-400 font-semibold' : 'text-gray-300'}>{endStr}</span></span>
+                         </div>
+                       </div>
+                     );
+                   })}
+                 </div>
+               </div>
+             )}
           </div>
       )}
 

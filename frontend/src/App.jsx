@@ -104,6 +104,13 @@ function App() {
   const [compareHops, setCompareHops] = useState([]);
   const [showInfo, setShowInfo] = useState(false);
   const [myLocation, setMyLocation] = useState(null);
+  const [ipHistory, setIpHistory] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('vni_ip_history')) || [];
+    } catch {
+      return [];
+    }
+  });
   const [backendStatus, setBackendStatus] = useState('checking');
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('vni_view_mode') || '2d');
   const [pingingHop, setPingingHop] = useState(null);
@@ -334,10 +341,52 @@ function App() {
                        isp: data.as,
                        org: data.as,
                        as: data.asn ? `AS${data.asn}` : '',
-                       timezone: data.time_zone
+                       timezone: data.time_zone,
+                       consensus: data.consensus || null
                    };
 
                    setMyLocation(baseLoc);
+
+                   // Record / update User IP History in localStorage
+                   const nowMs = Date.now();
+                   setIpHistory(prev => {
+                       let list = Array.isArray(prev) ? [...prev] : [];
+                       if (list.length > 0 && list[0].ip === data.ip) {
+                           list[0] = {
+                               ...list[0],
+                               lastSeen: nowMs,
+                               city: baseLoc.city || list[0].city,
+                               country: baseLoc.country || list[0].country,
+                               countryCode: baseLoc.countryCode || list[0].countryCode,
+                               isp: baseLoc.isp || list[0].isp,
+                               asn: baseLoc.as || list[0].asn
+                           };
+                       } else {
+                           // Close out the previous IP session if there was one
+                           if (list.length > 0 && !list[0].endedAt) {
+                               list[0] = { ...list[0], endedAt: nowMs, lastSeen: nowMs };
+                           }
+                           list = [
+                               {
+                                   id: `${data.ip}-${nowMs}`,
+                                   ip: data.ip,
+                                   firstSeen: nowMs,
+                                   lastSeen: nowMs,
+                                   endedAt: null,
+                                   city: baseLoc.city || '',
+                                   country: baseLoc.country || '',
+                                   countryCode: baseLoc.countryCode || '',
+                                   isp: baseLoc.isp || '',
+                                   asn: baseLoc.as || ''
+                               },
+                               ...list
+                           ].slice(0, 50);
+                       }
+                       try {
+                           localStorage.setItem('vni_ip_history', JSON.stringify(list));
+                       } catch {}
+                       return list;
+                   });
 
                    if ("geolocation" in navigator) {
                        navigator.geolocation.getCurrentPosition(
@@ -379,8 +428,14 @@ function App() {
 
      pingBackend();
      interval = setInterval(pingBackend, 3000);
+     const ipCheckInterval = setInterval(() => {
+         if (hasFetchedLocation) fetchLocation();
+     }, 120000);
 
-     return () => clearInterval(interval);
+     return () => {
+         clearInterval(interval);
+         clearInterval(ipCheckInterval);
+     };
   }, [isMobile]);
 
   const saveToHistory = (traceTarget, traceHops) => {
@@ -505,6 +560,29 @@ function App() {
                  compareMode={compareMode}
                  compareHops={compareHops}
                  myLocation={myLocation}
+                 ipHistory={ipHistory}
+                 onClearIpHistory={() => {
+                     if (!myLocation?.query) {
+                         setIpHistory([]);
+                         localStorage.removeItem('vni_ip_history');
+                         return;
+                     }
+                     const nowMs = Date.now();
+                     const currentOnly = [{
+                         id: `${myLocation.query}-${nowMs}`,
+                         ip: myLocation.query,
+                         firstSeen: nowMs,
+                         lastSeen: nowMs,
+                         endedAt: null,
+                         city: myLocation.city || '',
+                         country: myLocation.country || '',
+                         countryCode: myLocation.countryCode || '',
+                         isp: myLocation.isp || '',
+                         asn: myLocation.as || ''
+                     }];
+                     setIpHistory(currentOnly);
+                     localStorage.setItem('vni_ip_history', JSON.stringify(currentOnly));
+                 }}
                  openPrivacy={openPrivacy}
                  onPing={handlePing}
                  onDig={setDiggingHop}
