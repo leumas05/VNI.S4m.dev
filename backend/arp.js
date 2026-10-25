@@ -2624,6 +2624,85 @@ async function scanLan(options = { sweep: true }) {
     })
   );
 
+  // 6b. High-Precision Sub-Millisecond RTT Probe to Gateway & Mesh Nodes to determine exact uplink for THIS PC
+  const meshCandidates = [
+    gatewayDevice,
+    ...clientDevices.filter(d => d.deviceType === 'mesh_node' || (d.vendor && d.vendor.toLowerCase().includes('mesh')))
+  ].filter(Boolean);
+
+  if (meshCandidates.length > 0 && thisDevice) {
+    const measureSubMsRtt = (ip, port = 80, samples = 3, timeoutMs = 300) => new Promise(async (resolve) => {
+      const rtts = [];
+      for (let s = 0; s < samples; s++) {
+        const sampleRtt = await new Promise((resSample) => {
+          const sock = new net.Socket();
+          const t0 = process.hrtime.bigint();
+          let done = false;
+          const finish = (val) => {
+            if (!done) {
+              done = true;
+              try { sock.destroy(); } catch (_) {}
+              resSample(val);
+            }
+          };
+          sock.setTimeout(timeoutMs);
+          sock.on('connect', () => {
+            const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+            finish(ms);
+          });
+          sock.on('error', (err) => {
+            if (err && (err.code === 'ECONNREFUSED' || err.code === 'ECONNRESET')) {
+              const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+              finish(ms);
+            } else {
+              finish(null);
+            }
+          });
+          sock.on('timeout', () => finish(null));
+          try {
+            sock.connect(port, ip);
+          } catch (_) {
+            finish(null);
+          }
+        });
+        if (sampleRtt !== null) rtts.push(sampleRtt);
+      }
+      if (rtts.length === 0) return resolve(null);
+      resolve(Number(Math.min(...rtts).toFixed(2)));
+    });
+
+    await Promise.all(
+      meshCandidates.map(async (node) => {
+        const precise = await measureSubMsRtt(node.ip, 80, 3, 280);
+        node.preciseLatencyMs = precise;
+      })
+    );
+
+    // Find which infrastructure node (Router or Mesh Satellite) has the lowest RTT to THIS PC
+    // Note: If a Mesh Satellite has equal or lower ICMP latency than the Gateway (or within 0.35ms precise RTT),
+    // THIS PC is physically connected to that Mesh Satellite (since traffic to Gateway traverses the satellite).
+    let bestNode = gatewayDevice;
+    let bestScore = (gatewayDevice.preciseLatencyMs ?? gatewayDevice.latency ?? 999);
+
+    for (const candidate of meshCandidates) {
+      if (candidate.isGateway) continue;
+      const candScore = (candidate.preciseLatencyMs ?? candidate.latency ?? 999);
+      const gwIcmp = gatewayDevice.latency ?? 999;
+      const candIcmp = candidate.latency ?? 999;
+
+      if (candScore < bestScore || (candIcmp <= gwIcmp && candIcmp <= 2 && candScore <= bestScore + 0.4)) {
+        bestNode = candidate;
+        bestScore = candScore;
+      }
+    }
+
+    if (bestNode) {
+      thisDevice.connectedToId = bestNode.id;
+      thisDevice.connectedToIp = bestNode.ip;
+      thisDevice.connectedToRttMs = bestNode.preciseLatencyMs ?? bestNode.latency ?? null;
+    }
+  }
+
   // 7. ARP Spoofing / MITM Detection & Persistent Device History Update
   const history = loadLanHistory();
   const isInitialHistorySeed = Object.keys(history.devices || {}).length === 0;

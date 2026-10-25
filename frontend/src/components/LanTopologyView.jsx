@@ -254,11 +254,7 @@ export default function LanTopologyView({
         activeTraffic: true
       });
 
-      // Separate Mesh Nodes (Tier 2) from Endpoint Client Devices (Tier 3)
-      const allClients = [];
-      if (thisDevice) allClients.push(thisDevice);
-      clientDevices.forEach(d => allClients.push(d));
-
+      // Separate Mesh Nodes (Tier 2), THIS PC (Verified Uplink), and Other Clients (Unverified Node Assignment)
       const isMeshDevice = (d) =>
         !d.isThisDevice &&
         !d.isGateway &&
@@ -266,12 +262,13 @@ export default function LanTopologyView({
           (d.vendor && d.vendor.toLowerCase().includes('mesh')) ||
           (d.hostname && d.hostname.toLowerCase().includes('mesh')));
 
-      const meshNodes = allClients.filter(isMeshDevice);
-      const endpointClients = allClients.filter(d => !isMeshDevice(d));
+      const meshNodes = clientDevices.filter(isMeshDevice);
+      const unassignedClients = clientDevices.filter(d => !isMeshDevice(d) && !d.isThisDevice);
 
       const CARD_WIDTH = 216;
       const MIN_GAP_X = 22;
       const positionedMesh = [];
+      const routerNode = nodes[nodes.length - 1]; // gateway node at (centerX, routerY)
 
       if (meshNodes.length > 0) {
         const meshY = 305;
@@ -295,17 +292,79 @@ export default function LanTopologyView({
         });
       }
 
-      const total = endpointClients.length;
+      // 3. Place THIS PC (YOU) connected to the exact node (Router or Mesh Satellite) with the lowest ping / RTT
+      let lowestBottomY = positionedMesh.length > 0 ? 305 : routerY;
+      if (thisDevice) {
+        const candidates = [routerNode, ...positionedMesh];
+        let bestParent = routerNode;
+
+        if (thisDevice.connectedToId || thisDevice.connectedToIp) {
+          const matched = candidates.find(
+            c => (thisDevice.connectedToId && c.id === thisDevice.connectedToId) ||
+                 (thisDevice.connectedToIp && c.ip === thisDevice.connectedToIp)
+          );
+          if (matched) bestParent = matched;
+        } else if (positionedMesh.length > 0) {
+          // Compare ping latencies: if a Mesh Satellite has the lowest ping (or ties the router at <= 2ms),
+          // THIS PC is physically connected to that Mesh Satellite (since traffic to the Router passes through it)
+          let bestScore = routerNode.preciseLatencyMs ?? routerNode.latency ?? 999;
+          const gwIcmp = routerNode.latency ?? 999;
+
+          for (const mNode of positionedMesh) {
+            const mScore = mNode.preciseLatencyMs ?? mNode.latency ?? 999;
+            const mIcmp = mNode.latency ?? 999;
+            if (mScore < bestScore || (mIcmp <= gwIcmp && mIcmp <= 2 && mScore <= bestScore + 0.4)) {
+              bestParent = mNode;
+              bestScore = mScore;
+            }
+          }
+        }
+
+        const pcX = bestParent.x;
+        const pcY = bestParent.y + 138;
+        lowestBottomY = Math.max(lowestBottomY, pcY);
+
+        nodes.push({
+          ...thisDevice,
+          x: pcX,
+          y: pcY
+        });
+
+        const rttVal = bestParent.preciseLatencyMs ?? bestParent.latency;
+        links.push({
+          from: { x: bestParent.x, y: bestParent.y + 46, devId: bestParent.id },
+          to: { x: pcX, y: pcY - 46, devId: thisDevice.id },
+          color: '#38bdf8',
+          isThisDevice: true,
+          isAlive: true,
+          activeTraffic: true,
+          linkLabel: rttVal !== null && rttVal !== undefined ? `BEST PING (${rttVal}ms)` : 'DIRECT UPLINK'
+        });
+      }
+
+      // 4. Unassigned Subnet Clients (We do NOT guess which Mesh Node they connect to)
+      let subnetBus = null;
+      const total = unassignedClients.length;
       if (total > 0) {
         const maxColsByWidth = Math.max(2, Math.min(5, Math.floor((width - 48) / (CARD_WIDTH + MIN_GAP_X))));
         const cols = Math.min(total, maxColsByWidth);
         const rows = Math.ceil(total / cols);
 
         const colSpacing = Math.max(CARD_WIDTH + MIN_GAP_X, Math.min(256, (width - 64) / (cols || 1)));
-        const startY = positionedMesh.length > 0 ? 445 : 315;
-        const rowSpacing = 132;
+        const busY = lowestBottomY + 86;
+        const startY = busY + 78;
+        const rowSpacing = 128;
 
-        endpointClients.forEach((dev, idx) => {
+        const busHalfWidth = Math.max(220, ((cols - 1) * colSpacing) / 2 + CARD_WIDTH / 2);
+        subnetBus = {
+          y: busY,
+          x1: centerX - busHalfWidth,
+          x2: centerX + busHalfWidth,
+          centerX,
+          label: `SHARED SUBNET CLIENTS (${lanData?.network?.subnetPrefix || 'LAN'} • Exact Mesh Node / AP Unknown)`
+        };
+
+        unassignedClients.forEach((dev, idx) => {
           const row = Math.floor(idx / cols);
           const colInRow = idx % cols;
           const itemsInThisRow = (row === rows - 1 && total % cols !== 0) ? (total % cols) : cols;
@@ -319,23 +378,24 @@ export default function LanTopologyView({
             y: nodeY
           });
 
-          // Connect THIS PC (wired Ethernet) directly to Router; distribute wireless/other clients across nearest Mesh Node or Router
-          let parentHub = { x: centerX, y: routerY + 46, id: gateway.id };
-          if (!dev.isThisDevice && positionedMesh.length > 0) {
-            const hubs = [{ x: centerX, y: routerY + 46, id: gateway.id }, ...positionedMesh.map(m => ({ x: m.x, y: m.y + 46, id: m.id }))];
-            parentHub = hubs.reduce((best, h) => (Math.abs(h.x - nodeX) < Math.abs(best.x - nodeX) ? h : best), hubs[0]);
+          // Only draw a live socket link if THIS PC has active TCP/UDP sockets to this specific client
+          if ((dev.activeConnectionsCount || 0) > 0 && thisDevice) {
+            const pcNode = nodes.find(n => n.isThisDevice);
+            if (pcNode) {
+              links.push({
+                from: { x: pcNode.x, y: pcNode.y + 46, devId: pcNode.id },
+                to: { x: nodeX, y: nodeY - 46, devId: dev.id },
+                color: '#10b981',
+                isAlive: true,
+                activeTraffic: true,
+                linkLabel: `⚡${dev.activeConnectionsCount} SOCKET${dev.activeConnectionsCount > 1 ? 'S' : ''}`
+              });
+            }
           }
-
-          links.push({
-            from: { x: parentHub.x, y: parentHub.y, devId: parentHub.id },
-            to: { x: nodeX, y: nodeY - 46, devId: dev.id },
-            color: getDeviceColor(dev.deviceType, dev.isThisDevice, dev.isGateway),
-            isThisDevice: dev.isThisDevice,
-            isAlive: dev.isAlive,
-            activeTraffic: dev.isThisDevice || (dev.activeConnectionsCount || 0) > 0
-          });
         });
       }
+
+      return { nodes, links, subnetBus };
     } else {
       // Radial Hub-and-Spoke Layout
       const centerY = height / 2;
@@ -498,9 +558,75 @@ export default function LanTopologyView({
                     />
                   </circle>
                 )}
+                {/* Optional Link Label Pill (e.g. BEST PING for THIS PC) */}
+                {link.linkLabel && (
+                  <g transform={`translate(${(link.from.x + link.to.x) / 2}, ${(link.from.y + link.to.y) / 2})`}>
+                    <rect
+                      x={-54}
+                      y={-9}
+                      width={108}
+                      height={18}
+                      rx={9}
+                      fill="#082f49"
+                      stroke="#38bdf8"
+                      strokeWidth={1}
+                    />
+                    <text
+                      x={0}
+                      y={3}
+                      textAnchor="middle"
+                      fill="#7dd3fc"
+                      fontSize="8.5"
+                      fontWeight="bold"
+                      fontFamily="monospace"
+                    >
+                      {link.linkLabel}
+                    </text>
+                  </g>
+                )}
               </g>
             );
           })}
+
+          {/* Shared Subnet Bus Divider (for clients whose specific Mesh Node / AP cannot be verified on Layer 2) */}
+          {layoutMode === 'tree' && layoutNodes.subnetBus && (
+            <g>
+              {/* Horizontal dashed distribution bar */}
+              <line
+                x1={layoutNodes.subnetBus.x1}
+                y1={layoutNodes.subnetBus.y}
+                x2={layoutNodes.subnetBus.x2}
+                y2={layoutNodes.subnetBus.y}
+                stroke="#334155"
+                strokeWidth="1.5"
+                strokeDasharray="6 6"
+              />
+              {/* Center Pill Header */}
+              <g transform={`translate(${layoutNodes.subnetBus.centerX}, ${layoutNodes.subnetBus.y})`}>
+                <rect
+                  x={-225}
+                  y={-13}
+                  width={450}
+                  height={26}
+                  rx={13}
+                  fill="#0f172a"
+                  stroke="#334155"
+                  strokeWidth="1.2"
+                />
+                <text
+                  x={0}
+                  y={3.5}
+                  textAnchor="middle"
+                  fill="#94a3b8"
+                  fontSize="9.5"
+                  fontWeight="bold"
+                  fontFamily="monospace"
+                >
+                  {layoutNodes.subnetBus.label}
+                </text>
+              </g>
+            </g>
+          )}
 
           {/* Node Cards */}
           {layoutNodes.nodes.map((node) => {

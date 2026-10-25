@@ -435,16 +435,16 @@ export default function LanGuideModal({ isOpen, onClose, initialTab = 'discovery
                 <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
                   <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
                     <GitFork size={15} />
-                    <span>Tree View (Multi-Tier Mesh Hierarchy)</span>
+                    <span>Tree View (Verified Hierarchy &amp; Honest Topology)</span>
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed">
-                    Organizes your network into up to <strong>4 logical tiers</strong> from top to bottom:
+                    Organizes your network without guessing or faking Layer 2 connections:
                   </p>
                   <ol className="list-decimal list-inside text-[11px] text-slate-300 space-y-1 pt-1">
-                    <li><strong className="text-indigo-300">Internet (WAN):</strong> External global uplink.</li>
-                    <li><strong className="text-emerald-300">Primary Gateway Router:</strong> Your main router / firewall (e.g. <code className="text-slate-400">.1</code>).</li>
-                    <li><strong className="text-teal-300">Mesh Nodes / Access Points:</strong> Automatically groups Wi-Fi mesh satellites (e.g. TP-Link Deco units) into an intermediate distribution layer.</li>
-                    <li><strong className="text-sky-300">Endpoint Clients:</strong> PCs, phones, TVs, and IoT devices arranged in clean multi-row grids.</li>
+                    <li><strong className="text-indigo-300">Internet (WAN) ➔ Primary Router:</strong> External uplink to your Default Gateway (<code className="text-slate-400">.1</code>).</li>
+                    <li><strong className="text-teal-300">Mesh Satellites:</strong> Wi-Fi mesh nodes (e.g. TP-Link Deco units) connected to the Primary Router.</li>
+                    <li><strong className="text-sky-300">This PC (Verified by Lowest Ping):</strong> VNI measures sub-millisecond RTT and ICMP latency to determine which exact node (Router or specific Mesh Satellite) your PC is physically connected to.</li>
+                    <li><strong className="text-slate-300">Shared Subnet Clients:</strong> Because Layer 2 Wi-Fi bridges hide which specific Mesh puck other devices use, other clients are grouped cleanly below a Shared Subnet divider (unless your PC has active sockets open to them).</li>
                   </ol>
                 </div>
 
