@@ -1,6 +1,8 @@
 # Visual Network Intelligence (VNI)
 
-![VNI Logo](frontend/public/vite.svg)
+<p align="center">
+  <img src="frontend/public/icon.png" alt="VNI Logo" width="128" />
+</p>
 
 **VNI (Visual Network Intelligence)** is a comprehensive, real-time network intelligence, traceroute, connection radar, and local area network (LAN) topology platform built with **React**, **Three.js / WebGL**, **Leaflet**, **Node.js**, and **Electron**.
 
